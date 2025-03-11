@@ -5,7 +5,7 @@ sLLM, or "slime Large Language Model," is an experimental research project that 
 
 This project explores whether meaningful patterns of communication can emerge between radically different forms of intelligence. By mapping electrical responses from a non-human living organism to a computational language model, sLLM questions our understanding of communication, intelligence, and the boundaries between biological and artificial systems.
 
-## ARTIST'S STATEMENT
+## WHAT? WHY?
 Slime molds occupy a special biological niche - despite being single-celled organisms, they exhibit surprisingly complex behaviors including problem-solving capabilities and environmental adaptation. Scientists study them for their prototypical neuron-like behaviors, drawing parallels to much more complex nervous systems.
 
 Meanwhile, Large Language Models attempt to simulate human-like reasoning and communication through computational means. Both systems represent different approaches to "intelligence" - one evolved through billions of years of biological processes, the other engineered through mathematical models and trained on human-created data.
