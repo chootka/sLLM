@@ -73,10 +73,10 @@ This isn't traditional scientific research but rather an artistic experiment tha
   - Generate natural language responses based on slime mold activity
 
 ## CURRENT ROLES
-- LLM development: @pimtournaye, @k0a1a
-- Enclosure Design & Fabrication: @k0a1a
-- Full-Stack Web Development: @chootka
-- Embedded Systems Engineering: @chootka
+- LLM development: [@pimtournaye](https://github.com/pimtournaye), [@k0a1a](https://github.com/k0a1a)
+- Enclosure Design & Fabrication: [@k0a1a](https://github.com/k0a1a)
+- Full-Stack Web Development: [@chootka](https://github.com/chootka)
+- Embedded Systems Engineering: [@chootka](https://github.com/chootka)
 - Biological Systems: TBD
 
 ### COLLABORATION OPPORTUNITIES
