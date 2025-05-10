@@ -1,0 +1,4 @@
+[
+  {"timestamp": "2024-12-16T12:00:00Z", "light_level": 85, "growth_direction": "north"},
+  {"timestamp": "2024-12-16T12:01:00Z", "light_level": 42, "growth_direction": "west"}
+]
