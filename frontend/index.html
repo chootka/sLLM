@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+k<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -296,6 +296,10 @@
                     exposureLightOn: false,
                     lastUpdateTime: 'Never',
                     
+                    // Configuration from server
+                    imageCaptureInterval: 300000,  // Default 5 minutes in ms
+                    maxExposureDuration: 30,
+                    
                     // Intervals
                     imageInterval: null,
                     fallbackInterval: null
@@ -410,13 +414,32 @@
                 },
                 
                 startImageCapture() {
-                    // Capture image every 5 minutes
-                    this.imageInterval = setInterval(() => {
+                    // Get capture interval from API config
+                    this.fetchConfig().then(() => {
+                        // Capture image at configured interval
+                        this.imageInterval = setInterval(() => {
+                            this.captureImage();
+                        }, this.imageCaptureInterval);
+                        
+                        // Initial capture
                         this.captureImage();
-                    }, 5 * 60 * 1000);
-                    
-                    // Initial capture
-                    this.captureImage();
+                    });
+                },
+                
+                async fetchConfig() {
+                    try {
+                        const response = await axios.get(`${this.apiUrl}/api/config`);
+                        const config = response.data;
+                        
+                        // Update local settings from server config
+                        this.imageCaptureInterval = config.image_capture_interval * 1000; // Convert to ms
+                        this.maxExposureDuration = config.max_exposure_duration;
+                        
+                    } catch (error) {
+                        console.warn('Could not fetch config, using defaults');
+                        this.imageCaptureInterval = 5 * 60 * 1000; // Default 5 minutes
+                        this.maxExposureDuration = 30;
+                    }
                 },
                 
                 updateChart(reading) {

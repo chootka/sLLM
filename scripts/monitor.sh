@@ -38,7 +38,7 @@ mkdir -p ~/slime_data/readings
 
 echo "Setup complete! To run the server:"
 echo "1. source ~/slime_env/bin/activate"
-echo "2. python ~/slime_api.py"
+echo "2. python ~/sllm/api && python app.py"
 echo ""
 echo "Note: DHT sensor support is installed but optional."
 echo "The system will run without it if not connected."

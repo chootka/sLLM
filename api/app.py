@@ -9,6 +9,8 @@ import time
 import json
 import threading
 import base64
+import os
+import sys
 from datetime import datetime
 from collections import deque
 from flask import Flask, jsonify, send_file, request
@@ -24,24 +26,39 @@ from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 import numpy as np
 
-# Temperature/Humidity sensor support (when available)
+# Load configuration
 try:
-    import adafruit_dht
-    DHT_AVAILABLE = True
+    import config
+    print("Loaded configuration from config.py")
 except ImportError:
-    DHT_AVAILABLE = False
-    print("DHT sensor library not installed. Temperature/humidity monitoring disabled.")
+    print("Warning: config.py not found. Using default configuration.")
+    print("Copy config_template.py to config.py and customize as needed.")
+    import config_template as config
+
+# Temperature/Humidity sensor support (when available)
+DHT_AVAILABLE = False
+if config.ENABLE_DHT_SENSOR:
+    try:
+        import adafruit_dht
+        DHT_AVAILABLE = True
+    except ImportError:
+        print("DHT sensor library not installed. Temperature/humidity monitoring disabled.")
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for web frontend
 socketio = SocketIO(app, cors_allowed_origins="*")  # Enable Socket.IO with CORS
 
-# Configuration
-RING_LIGHT_PIN = 17  # GPIO pin for ring light
-EXPOSURE_LIGHT_PIN = 27  # GPIO pin for exposure light
-DHT_PIN = 4  # GPIO pin for DHT22 sensor (when available)
-MAX_READINGS = 1000  # Keep last 1000 readings in memory
-EMIT_INTERVAL = 0.5  # How often to emit data via Socket.IO (seconds)
+# Configuration from config.py
+RING_LIGHT_PIN = config.RING_LIGHT_PIN
+EXPOSURE_LIGHT_PIN = config.EXPOSURE_LIGHT_PIN
+DHT_PIN = config.DHT_PIN
+MAX_READINGS = config.MAX_READINGS_BUFFER
+EMIT_INTERVAL = config.SOCKET_EMIT_INTERVAL
+
+# Create data directories if they don't exist
+os.makedirs(config.IMAGE_DIR, exist_ok=True)
+os.makedirs(config.LOG_DIR, exist_ok=True)
+os.makedirs(config.CSV_DIR, exist_ok=True)
 
 # Global data storage
 readings_buffer = deque(maxlen=MAX_READINGS)
@@ -58,7 +75,8 @@ GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.LOW)
 
 # Initialize ADC (ADS1115)
 i2c = busio.I2C(board.SCL, board.SDA)
-ads = ADS.ADS1115(i2c)
+ads = ADS.ADS1115(i2c, address=config.ADC_ADDRESS)
+ads.gain = config.ADC_GAIN  # Set gain from config
 # Create differential input between A0 and A1
 chan = AnalogIn(ads, ADS.P0, ADS.P1)
 
@@ -66,15 +84,17 @@ chan = AnalogIn(ads, ADS.P0, ADS.P1)
 dht_sensor = None
 if DHT_AVAILABLE:
     try:
-        dht_sensor = adafruit_dht.DHT22(board.D4)  # Using GPIO4
-        print("DHT22 sensor initialized")
+        # Map config pin number to board pin
+        dht_board_pin = getattr(board, f'D{DHT_PIN}')
+        dht_sensor = adafruit_dht.DHT22(dht_board_pin)
+        print(f"DHT22 sensor initialized on GPIO {DHT_PIN}")
     except Exception as e:
         print(f"Failed to initialize DHT sensor: {e}")
         dht_sensor = None
 
 # Initialize camera
 picam2 = Picamera2()
-camera_config = picam2.create_still_configuration(main={"size": (1920, 1080)})
+camera_config = picam2.create_still_configuration(main={"size": config.CAMERA_RESOLUTION})
 picam2.configure(camera_config)
 
 def read_electrical_data():
@@ -97,7 +117,7 @@ def read_electrical_data():
                 readings_buffer.append(reading)
                 current_reading = reading
             
-            time.sleep(0.1)  # Read at 10Hz
+            time.sleep(1.0 / config.ELECTRICAL_SAMPLE_RATE)  # Read at configured rate
             
         except Exception as e:
             print(f"Error reading ADC: {e}")
@@ -128,7 +148,7 @@ def read_environment_data():
         except Exception as e:
             print(f"Error reading DHT sensor: {e}")
         
-        time.sleep(2)  # DHT22 has a 2-second minimum read interval
+        time.sleep(config.DHT_READ_INTERVAL)  # DHT22 read interval from config
 
 def emit_realtime_data():
     """Emit real-time data via Socket.IO"""
@@ -174,6 +194,18 @@ def get_environment():
     """Get current temperature and humidity"""
     return jsonify(current_environment)
 
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """Get relevant configuration for frontend"""
+    return jsonify({
+        "image_capture_interval": config.IMAGE_CAPTURE_INTERVAL,
+        "max_exposure_duration": config.MAX_EXPOSURE_DURATION,
+        "chart_update_rate": config.CHART_UPDATE_RATE,
+        "status_check_interval": config.STATUS_CHECK_INTERVAL,
+        "websockets_enabled": config.ENABLE_WEBSOCKETS,
+        "server_port": config.SERVER_PORT
+    })
+
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""
@@ -203,20 +235,26 @@ def capture_image():
     try:
         # Turn on ring light
         GPIO.output(RING_LIGHT_PIN, GPIO.HIGH)
-        time.sleep(0.5)  # Let light stabilize
+        time.sleep(config.RING_LIGHT_DELAY)  # Let light stabilize
         
         # Start camera if not already started
         if not picam2.started:
             picam2.start()
-            time.sleep(2)  # Camera warmup
+            time.sleep(config.CAMERA_WARMUP_TIME)  # Camera warmup
         
         # Capture image
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"/tmp/slime_{timestamp}.jpg"
+        filename = os.path.join(config.IMAGE_DIR, f"slime_{timestamp}.jpg")
         picam2.capture_file(filename)
         
         # Turn off ring light
         GPIO.output(RING_LIGHT_PIN, GPIO.LOW)
+        
+        # Emit image capture event
+        socketio.emit('image_captured', {
+            "filename": os.path.basename(filename),
+            "timestamp": time.time()
+        })
         
         # Return the image file
         return send_file(filename, mimetype='image/jpeg')
@@ -232,6 +270,12 @@ def trigger_light():
         state = data.get('state', 'toggle')
         duration = data.get('duration', 0)  # Duration in seconds, 0 = permanent
         
+        # Apply safety limits from config
+        if config.AUTO_LIGHT_OFF and duration == 0:
+            duration = config.MAX_EXPOSURE_DURATION
+        elif duration > config.MAX_EXPOSURE_DURATION:
+            duration = config.MAX_EXPOSURE_DURATION
+        
         if state == 'on':
             GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.HIGH)
             if duration > 0:
@@ -241,6 +285,8 @@ def trigger_light():
         elif state == 'toggle':
             current = GPIO.input(EXPOSURE_LIGHT_PIN)
             GPIO.output(EXPOSURE_LIGHT_PIN, not current)
+            if not current and config.AUTO_LIGHT_OFF:  # Turning on
+                threading.Timer(config.MAX_EXPOSURE_DURATION, lambda: GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.LOW)).start()
         
         light_state = GPIO.input(EXPOSURE_LIGHT_PIN) == GPIO.HIGH
         
@@ -252,7 +298,8 @@ def trigger_light():
         
         return jsonify({
             "status": "success",
-            "light_state": "on" if light_state else "off"
+            "light_state": "on" if light_state else "off",
+            "auto_off_seconds": config.MAX_EXPOSURE_DURATION if light_state and config.AUTO_LIGHT_OFF else None
         })
         
     except Exception as e:
@@ -284,13 +331,14 @@ if __name__ == '__main__':
         env_thread = threading.Thread(target=read_environment_data, daemon=True)
         env_thread.start()
     
-    # Start Socket.IO emitter thread
-    emitter_thread = threading.Thread(target=emit_realtime_data, daemon=True)
-    emitter_thread.start()
+    # Start Socket.IO emitter thread if enabled
+    if config.ENABLE_WEBSOCKETS:
+        emitter_thread = threading.Thread(target=emit_realtime_data, daemon=True)
+        emitter_thread.start()
     
     # Run Flask app with Socket.IO
     try:
-        socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+        socketio.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT, debug=config.DEBUG_MODE)
     finally:
         GPIO.cleanup()
         picam2.close()
