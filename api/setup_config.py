@@ -54,7 +54,7 @@ def setup_config():
         print("\nConfiguration updated!")
     
     print("\nSetup complete! You can edit config.py directly for more options.")
-    print("Run 'python slime_api.py' to start the server.")
+    print("Run 'python app.py' to start the server.")
 
 def update_config_value(key, value):
     """Update a value in config.py"""

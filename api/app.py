@@ -175,6 +175,10 @@ def emit_realtime_data():
         
         time.sleep(EMIT_INTERVAL)
 
+@app.route('/')
+def serve_frontend():
+    return send_file('../frontend/index.html')
+
 @app.route('/api/readings', methods=['GET'])
 def get_readings():
     """Get current electrical reading"""
