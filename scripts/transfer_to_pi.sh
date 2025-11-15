@@ -3,11 +3,26 @@
 
 set -e
 
-# Configuration
-PI_USER="chootka"
-PI_IP="100.85.144.126"
-PI_DIR="/home/chootka/sllm"
-REPO_URL="git@github.com:chootka/sLLM.git"
+# Load configuration from config.sh
+CONFIG_FILE="$(dirname "$0")/config.sh"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Error: config.sh not found!"
+    echo ""
+    echo "Please create scripts/config.sh with your configuration:"
+    echo "   cp scripts/config.example.sh scripts/config.sh"
+    echo "   # Then edit scripts/config.sh with your values"
+    echo ""
+    exit 1
+fi
+
+source "$CONFIG_FILE"
+
+# Validate required variables
+if [ -z "$PI_USER" ] || [ -z "$PI_IP" ] || [ -z "$PI_DIR" ] || [ -z "$REPO_URL" ]; then
+    echo "❌ Error: Required configuration variables not set in config.sh"
+    echo "   Required: PI_USER, PI_IP, PI_DIR, REPO_URL"
+    exit 1
+fi
 
 echo "🚀 Setting up sLLM on Raspberry Pi..."
 echo "   Pi: ${PI_USER}@${PI_IP}"
