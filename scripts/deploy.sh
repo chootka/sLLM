@@ -110,6 +110,29 @@ fi
 
 # Setup Flask API service
 if [ -f "/etc/systemd/system/sllm-api.service" ]; then
+    echo "Updating Flask API service to use virtual environment..."
+    
+    # Update service file to use venv
+    cat > /tmp/sllm-api.service <<EOF
+[Unit]
+Description=sLLM Flask API Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=$API_DIR
+Environment="PATH=$API_DIR/venv/bin:/usr/bin:/usr/local/bin"
+ExecStart=$API_DIR/venv/bin/python $API_DIR/app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    cp /tmp/sllm-api.service /etc/systemd/system/
+    systemctl daemon-reload
     echo "Restarting Flask API service..."
     systemctl restart sllm-api
 else
