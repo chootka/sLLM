@@ -132,7 +132,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
+User=chootka
+Group=chootka
 WorkingDirectory=$API_DIR
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
@@ -158,7 +159,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
+User=chootka
+Group=chootka
 WorkingDirectory=$API_DIR
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
