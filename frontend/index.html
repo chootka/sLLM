@@ -15,15 +15,55 @@
             padding: 20px;
             background: #0a0a0a;
             color: #e0e0e0;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        .video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        .video-background iframe {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100vw;
+            height: 100vh;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            min-width: 100%;
+            min-height: 100%;
+        }
+        
+        @media (min-aspect-ratio: 16/9) {
+            .video-background iframe {
+                height: 56.25vw;
+                min-height: 100vh;
+            }
+        }
+        
+        @media (max-aspect-ratio: 16/9) {
+            .video-background iframe {
+                width: 177.78vh;
+                min-width: 100vw;
+            }
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
+            position: relative;
+            z-index: 1;
         }
         
         h1 {
-            color: #ecddb1;
+            color: #000000;
             margin-bottom: 30px;
         }
         
@@ -35,10 +75,11 @@
         }
         
         .panel {
-            background: #1a1a1a;
+            background: rgba(26, 26, 26, 0.85);
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
         }
         
         .panel h2 {
@@ -179,6 +220,14 @@
     </style>
 </head>
 <body>
+    <div class="video-background">
+        <iframe 
+            src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0" 
+            frameborder="0" 
+            allow="autoplay; fullscreen; picture-in-picture" 
+            allowfullscreen>
+        </iframe>
+    </div>
     <div id="app">
         <div class="container">
             <h1>🦠 Slime Mould Monitor</h1>
