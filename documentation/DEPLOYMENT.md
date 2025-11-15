@@ -6,8 +6,8 @@ This guide covers deploying sLLM to your Raspberry Pi 5 using Tailscale for secu
 
 - Raspberry Pi 5 with slime mold monitoring hardware
 - Tailscale account (free at https://tailscale.com)
-- Domain: `sllm.visceral.systems` (for public web access)
-- Let's Encrypt certificate (we'll set this up on the Pi)
+- Optional: Custom domain (e.g., `sllm.visceral.systems`) if you want to use your own domain name
+- Optional: Cloudflare account if using custom domain with Tailscale Funnel
 
 ## Step 1: Verify Tailscale Setup
 
@@ -30,62 +30,52 @@ sudo tailscale ip -4
 
 ## Step 2: Setup Public Web Access
 
-For `sllm.visceral.systems` to be publicly accessible, you have two options:
+For public web access, you have three options:
 
-### Option A: Use Tailscale Funnel (Recommended)
+### Option A: Use Tailscale Funnel (Recommended - Simplest)
 
 Tailscale Funnel makes your service publicly accessible without port forwarding:
 
 ```bash
-# Enable Funnel for port 80 (HTTP)
-sudo tailscale funnel 80
-
-# Enable Funnel for port 443 (HTTPS) 
-sudo tailscale funnel 443
+# Enable Funnel to proxy to nginx on port 80
+sudo tailscale funnel --bg http://127.0.0.1:80
 ```
 
-After running these commands, Tailscale will display a public URL. Your Funnel URL is:
+After running this command, Tailscale will display a public URL. Your Funnel URL will be something like:
 ```
 https://sllm.tailf7c7fb.ts.net
 ```
 
-**Important**: You cannot point DNS directly to your Tailscale IP (`100.85.144.126`) because that's a private IP only accessible within your Tailscale network.
+**Advantages:**
+- Works immediately - no DNS or port forwarding needed
+- SSL/HTTPS handled automatically by Tailscale
+- No router configuration required
+- Accessible from anywhere on the internet
 
-#### To Point sllm.visceral.systems to Tailscale Funnel:
+**Note**: Funnel makes your service public - ensure your security is configured properly!
 
-1. **Get your Tailscale Funnel URL** (shown after running `tailscale funnel`)
-   - It will look like: `https://raspberrypi.yourname.ts.net` or similar
+### Option B: Use Custom Domain with Cloudflare
 
-2. **In your DNS provider** (where you manage visceral.systems):
-   - Create a **CNAME record**:
-     - **Name/Host**: `sllm`
-     - **Type**: `CNAME`
-     - **Value/Target**: `sllm.tailf7c7fb.ts.net` (your Funnel URL without `https://`)
-     - **TTL**: `3600` (or default)
+If you want to use your custom domain (`sllm.visceral.systems`) with proper SSL:
 
-3. **Example DNS configuration:**
-   ```
-   sllm.visceral.systems  CNAME  sllm.tailf7c7fb.ts.net
-   ```
+1. **Set up Tailscale Funnel** (as in Option A)
+2. **Add your domain to Cloudflare**
+3. **In Cloudflare DNS**, create a CNAME record:
+   - Name: `sllm`
+   - Target: `sllm.tailf7c7fb.ts.net`
+   - Proxy status: **Proxied** (orange cloud) - this is important!
+4. Cloudflare will handle SSL for your custom domain and proxy to the Tailscale URL
 
-4. **Wait for DNS propagation** (usually 5-30 minutes)
+**Result**: `https://sllm.visceral.systems` will work with proper SSL certificates.
 
-5. **Test:**
-   ```bash
-   curl https://sllm.visceral.systems/api/status
-   ```
-
-**Note**: 
-- Funnel makes your service public - ensure your security is configured properly!
-- Your Tailscale Funnel URL: `https://sllm.tailf7c7fb.ts.net` (works immediately!)
-- Once DNS is configured, `https://sllm.visceral.systems` will also work
-
-### Option B: Use Regular DNS + Port Forwarding
+### Option C: Use Port Forwarding + Public DNS
 
 If you have a public IP and can configure port forwarding:
-1. Point `sllm.visceral.systems` DNS to your public IP
+
+1. Point `sllm.visceral.systems` DNS to your public IP (A or AAAA record for IPv6)
 2. Configure port forwarding on your router (ports 80 and 443)
-3. Use Tailscale for secure admin/SSH access only
+3. Set up SSL certificate with Let's Encrypt (see Step 5)
+4. Use Tailscale for secure admin/SSH access only
 
 ## Step 3: Deploy Frontend and API
 
@@ -143,29 +133,16 @@ sudo nano /etc/nginx/sites-available/sllm.visceral.systems
 
 Add this configuration:
 
+**If using Tailscale Funnel (Option A or B):**
+
 ```nginx
+# Nginx configuration for sllm.visceral.systems
+# HTTP-only version (SSL handled by Tailscale Funnel)
+
 server {
     listen 80;
     listen [::]:80;
     server_name sllm.visceral.systems;
-
-    # Redirect HTTP to HTTPS
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name sllm.visceral.systems;
-
-    # SSL configuration
-    ssl_certificate /etc/letsencrypt/live/sllm.visceral.systems/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/sllm.visceral.systems/privkey.pem;
-    
-    # SSL settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
 
     # Root directory for static files
     root /var/www/sllm/frontend;
@@ -219,6 +196,28 @@ server {
 }
 ```
 
+**If using Port Forwarding (Option C), add an HTTPS server block:**
+
+```nginx
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name sllm.visceral.systems;
+
+    # SSL configuration (get certificate in Step 5)
+    ssl_certificate /etc/letsencrypt/live/sllm.visceral.systems/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sllm.visceral.systems/privkey.pem;
+    
+    # SSL settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # ... (same location blocks as HTTP server above)
+}
+```
+
 ### 4.3 Enable Site
 
 ```bash
@@ -229,13 +228,13 @@ sudo systemctl reload nginx
 
 ## Step 5: Setup SSL Certificate
 
-### Option A: Use Tailscale Funnel (Automatic SSL)
+### If using Tailscale Funnel (Option A or B)
 
-If you're using Tailscale Funnel, SSL is handled automatically by Tailscale - no certificate setup needed!
+SSL is handled automatically by Tailscale - no certificate setup needed! Your site will be accessible at `https://sllm.tailf7c7fb.ts.net` (or via Cloudflare at `https://sllm.visceral.systems` if you set that up).
 
-### Option B: Get Let's Encrypt Certificate
+### If using Port Forwarding (Option C): Get Let's Encrypt Certificate
 
-If using regular DNS (Option B from Step 2), get a certificate:
+If using port forwarding, get a certificate:
 
 **Prerequisites**: 
 - DNS must be pointing to your Pi's public IP
@@ -323,7 +322,7 @@ sudo ufw status
 
 ### On Your Router (Port Forwarding):
 
-**Only needed if using Option B (Regular DNS) from Step 2:**
+**Only needed if using Option C (Port Forwarding) from Step 2:**
 
 1. Log into your router's admin panel
 2. Find "Port Forwarding" or "Virtual Server" settings
@@ -334,7 +333,7 @@ sudo ufw status
 
 **Security Note**: Consider using a non-standard port for SSH (22) and disabling it from external access if not needed.
 
-**If using Tailscale Funnel**: Skip port forwarding - it's not needed! Tailscale handles everything.
+**If using Tailscale Funnel (Option A or B)**: Skip port forwarding - it's not needed! Tailscale handles everything.
 
 ## Step 8: Test
 
@@ -350,14 +349,20 @@ sudo ufw status
    curl http://100.85.144.126/api/status
    ```
 
-3. **Test via domain (if using public DNS or Funnel):**
+3. **Test via Tailscale Funnel URL:**
+   ```bash
+   curl https://sllm.tailf7c7fb.ts.net/api/status
+   ```
+
+4. **Test via custom domain (if using Cloudflare):**
    ```bash
    curl https://sllm.visceral.systems/api/status
    ```
 
-4. **Open in browser:**
-   - Via Tailscale: `http://100.85.144.126` (or `https://` if SSL configured)
-   - Via domain: `https://sllm.visceral.systems` (if public access configured)
+5. **Open in browser:**
+   - Via Tailscale IP: `http://100.85.144.126` (from devices with Tailscale)
+   - Via Funnel URL: `https://sllm.tailf7c7fb.ts.net` (public access)
+   - Via custom domain: `https://sllm.visceral.systems` (if using Cloudflare or port forwarding)
 
 ## Troubleshooting
 
