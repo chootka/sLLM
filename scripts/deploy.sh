@@ -50,10 +50,22 @@ cp -r api/* $API_DIR/
 chown -R www-data:www-data $API_DIR
 chmod -R 755 $API_DIR
 
-# Install Python dependencies
+# Install Python dependencies in virtual environment
 echo "Installing Python dependencies..."
 cd $API_DIR
-pip3 install -r requirements.txt
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+    echo "Creating Python virtual environment..."
+    python3 -m venv venv
+fi
+
+# Activate virtual environment and install dependencies
+echo "Installing packages in virtual environment..."
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
 
 # Setup nginx configuration
 echo "Setting up nginx configuration..."
@@ -113,8 +125,8 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=$API_DIR
-Environment="PATH=/usr/bin:/usr/local/bin"
-ExecStart=/usr/bin/python3 $API_DIR/app.py
+Environment="PATH=$API_DIR/venv/bin:/usr/bin:/usr/local/bin"
+ExecStart=$API_DIR/venv/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
 
