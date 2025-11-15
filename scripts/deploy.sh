@@ -54,15 +54,18 @@ chmod -R 755 $API_DIR
 echo "Installing Python dependencies..."
 cd $API_DIR
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo "Creating Python virtual environment..."
-    python3 -m venv venv
+# Use existing virtual environment
+VENV_PATH="/home/chootka/slime_env"
+if [ ! -d "$VENV_PATH" ]; then
+    echo "⚠️  Virtual environment not found at $VENV_PATH"
+    echo "   Creating new virtual environment at $API_DIR/venv..."
+    python3 -m venv "$API_DIR/venv"
+    VENV_PATH="$API_DIR/venv"
 fi
 
 # Activate virtual environment and install dependencies
-echo "Installing packages in virtual environment..."
-source venv/bin/activate
+echo "Using virtual environment: $VENV_PATH"
+source "$VENV_PATH/bin/activate"
 pip install --upgrade pip
 pip install -r requirements.txt
 deactivate
@@ -108,6 +111,12 @@ else
     echo "   See DEPLOYMENT.md for configuration"
 fi
 
+# Determine virtual environment path
+VENV_PATH="/home/chootka/slime_env"
+if [ ! -d "$VENV_PATH" ]; then
+    VENV_PATH="$API_DIR/venv"
+fi
+
 # Setup Flask API service
 if [ -f "/etc/systemd/system/sllm-api.service" ]; then
     echo "Updating Flask API service to use virtual environment..."
@@ -122,8 +131,8 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=$API_DIR
-Environment="PATH=$API_DIR/venv/bin:/usr/bin:/usr/local/bin"
-ExecStart=$API_DIR/venv/bin/python $API_DIR/app.py
+Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
+ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
 
@@ -148,8 +157,8 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=$API_DIR
-Environment="PATH=$API_DIR/venv/bin:/usr/bin:/usr/local/bin"
-ExecStart=$API_DIR/venv/bin/python $API_DIR/app.py
+Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
+ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
 
