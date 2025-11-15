@@ -1,0 +1,24 @@
+# Core Flask dependencies
+flask==3.0.0
+flask-cors==4.0.0
+flask-socketio==5.3.5
+python-socketio==5.10.0
+
+# GPIO and Hardware interfaces
+RPi.GPIO==0.7.1
+adafruit-circuitpython-ads1x15==2.2.23
+
+# Camera support
+picamera2==0.3.16
+
+# Numerical computing
+numpy==1.26.2
+
+# Optional: Temperature/Humidity sensor
+# Uncomment if you have a DHT22 sensor
+# adafruit-circuitpython-dht==4.0.4
+
+# Additional dependencies that may be needed
+adafruit-blinka==8.29.0
+adafruit-platformdetect==3.57.0
+adafruit-pureio==1.1.11

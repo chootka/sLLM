@@ -1,4 +1,4 @@
-k<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -272,13 +272,12 @@ k<!DOCTYPE html>
             data() {
                 return {
                     // API configuration
-                    apiUrl: 'http://localhost:5000', // Update with your Pi's IP
+                    apiUrl: 'http://sllm.local:5000',
                     socket: null,
                     
                     // Electrical readings
                     currentReading: 0,
                     readingsHistory: [],
-                    chart: null,
                     
                     // Environmental data
                     temperature: null,
@@ -361,20 +360,21 @@ k<!DOCTYPE html>
                     
                     // Fallback polling for initial data
                     this.fallbackInterval = setInterval(() => {
-                        this.fetchStatus();
+                        this.checkStatus();
                     }, 5000);
                 },
                 initializeChart() {
                     const ctx = document.getElementById('readingsChart').getContext('2d');
-                    this.chart = new Chart(ctx, {
+                    // Store chart instance outside of Vue's reactive system
+                    this._chart = new Chart(ctx, {
                         type: 'line',
                         data: {
                             labels: [],
                             datasets: [{
                                 label: 'Voltage (V)',
                                 data: [],
-                                borderColor: '#ffc107',
-                                backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                                borderColor: '#a0d468',
+                                backgroundColor: 'rgba(160, 212, 104, 0.1)',
                                 borderWidth: 2,
                                 tension: 0.4,
                                 pointRadius: 0
@@ -412,7 +412,6 @@ k<!DOCTYPE html>
                         }
                     });
                 },
-                
                 startImageCapture() {
                     // Get capture interval from API config
                     this.fetchConfig().then(() => {
@@ -441,22 +440,20 @@ k<!DOCTYPE html>
                         this.maxExposureDuration = 30;
                     }
                 },
-                
                 updateChart(reading) {
                     const time = new Date(reading.datetime).toLocaleTimeString();
                     
-                    this.chart.data.labels.push(time);
-                    this.chart.data.datasets[0].data.push(reading.value);
+                    this._chart.data.labels.push(time);
+                    this._chart.data.datasets[0].data.push(reading.value);
                     
                     // Keep only last 50 points
-                    if (this.chart.data.labels.length > 50) {
-                        this.chart.data.labels.shift();
-                        this.chart.data.datasets[0].data.shift();
+                    if (this._chart.data.labels.length > 50) {
+                        this._chart.data.labels.shift();
+                        this._chart.data.datasets[0].data.shift();
                     }
                     
-                    this.chart.update('none'); // No animation for smooth updates
-                },
-                
+                    this._chart.update('none'); // No animation for smooth updates
+                },                
                 async captureImage() {
                     try {
                         const response = await axios.post(`${this.apiUrl}/api/capture-image`, {}, {
