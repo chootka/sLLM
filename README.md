@@ -140,6 +140,6 @@ The installation could be exhibited in various contexts including galleries, sci
 
 ---
 
-*Last updated: March 11, 2025*
+*Last updated: Nov 15, 2025*
 
 *Contact: com@chootka.com*
