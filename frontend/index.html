@@ -27,31 +27,36 @@
             height: 100%;
             z-index: -1;
             overflow: hidden;
+            background: #000000;
         }
         
         .video-background iframe {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 100vw;
-            height: 100vh;
             transform: translate(-50%, -50%);
             pointer-events: none;
-            min-width: 100%;
-            min-height: 100%;
+            width: 100vw;
+            height: 100vh;
+            border: none;
         }
         
+        /* Ensure video covers entire viewport - scale larger if needed to avoid black bars */
+        /* For screens wider than 16:9 (landscape), scale video width */
         @media (min-aspect-ratio: 16/9) {
             .video-background iframe {
-                height: 56.25vw;
-                min-height: 100vh;
+                width: calc(100vh * 16 / 9);
+                height: 100vh;
+                min-width: 100vw;
             }
         }
         
+        /* For screens taller than 16:9 (portrait), scale video height */
         @media (max-aspect-ratio: 16/9) {
             .video-background iframe {
-                width: 177.78vh;
-                min-width: 100vw;
+                width: 100vw;
+                height: calc(100vw * 9 / 16);
+                min-height: 100vh;
             }
         }
         
@@ -222,7 +227,7 @@
 <body>
     <div class="video-background">
         <iframe 
-            src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0" 
+            src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0&responsive=1" 
             frameborder="0" 
             allow="autoplay; fullscreen; picture-in-picture" 
             allowfullscreen>
