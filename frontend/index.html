@@ -9,54 +9,63 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
             padding: 20px;
             background: #0a0a0a;
             color: #e0e0e0;
             position: relative;
-            overflow-x: hidden;
         }
         
         .video-background {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             z-index: -1;
             overflow: hidden;
             background: #000000;
+            margin: 0;
+            padding: 0;
         }
         
         .video-background iframe {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%) scale(1.05);
             pointer-events: none;
+            border: none;
+            margin: 0;
+            padding: 0;
             width: 100vw;
             height: 100vh;
-            border: none;
         }
         
-        /* Ensure video covers entire viewport - scale larger if needed to avoid black bars */
-        /* For screens wider than 16:9 (landscape), scale video width */
+        /* For screens wider than 16:9, scale video to be wider than viewport */
         @media (min-aspect-ratio: 16/9) {
             .video-background iframe {
                 width: calc(100vh * 16 / 9);
                 height: 100vh;
-                min-width: 100vw;
+                transform: translate(-50%, -50%) scale(1.05);
             }
         }
         
-        /* For screens taller than 16:9 (portrait), scale video height */
+        /* For screens taller than 16:9, scale video to be taller than viewport */
         @media (max-aspect-ratio: 16/9) {
             .video-background iframe {
                 width: 100vw;
                 height: calc(100vw * 9 / 16);
-                min-height: 100vh;
+                transform: translate(-50%, -50%) scale(1.05);
             }
         }
         
