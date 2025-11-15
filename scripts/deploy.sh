@@ -77,11 +77,14 @@ if [ -f "$NGINX_CONF" ]; then
     cp $NGINX_CONF "${NGINX_CONF}.backup.$(date +%Y%m%d_%H%M%S)"
 fi
 
-# Check if nginx config template exists
+# Check if nginx config template exists (from project root)
+cd "$PROJECT_ROOT"
 if [ -f "etc/nginx.conf" ]; then
     cp etc/nginx.conf $NGINX_CONF
+    echo "✅ Nginx configuration copied from etc/nginx.conf"
 elif [ -f "nginx.conf" ]; then
     cp nginx.conf $NGINX_CONF
+    echo "✅ Nginx configuration copied from nginx.conf"
 else
     echo "⚠️  nginx.conf not found. Please create nginx configuration manually."
     echo "   Expected location: etc/nginx.conf"
