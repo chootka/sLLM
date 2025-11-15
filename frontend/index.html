@@ -148,7 +148,7 @@
         }
         
         .control-button:hover {
-            color: #ecddb1;
+            background: #95f33c;
             transform: translateY(-2px);
         }
         
@@ -264,13 +264,14 @@
                     <h2>Visual Timeline</h2>
                     <div class="timelapse-container">
                         <img 
-                            v-if="currentImage" 
+                            v-if="currentImage && !imageError" 
                             :src="currentImage" 
                             class="timelapse-image"
                             alt="Slime mould"
+                            @error="imageError = true"
                         >
                         <div v-else style="height: 300px; display: flex; align-items: center; justify-content: center;">
-                            <p>Waiting for first image...</p>
+                            <p style="font-size: 1.2em; color: #ecddb1;">Slimes are offline!</p>
                         </div>
                     </div>
                     <input 
@@ -352,6 +353,7 @@
                     images: [],
                     timelinePosition: 0,
                     currentImage: null,
+                    imageError: false,
                     
                     // System status
                     isOnline: false,
@@ -531,6 +533,7 @@
                         
                         this.images.push(imageData);
                         this.currentImage = imageUrl;
+                        this.imageError = false;
                         this.timelinePosition = this.images.length - 1;
                         
                         // Keep only last 100 images to prevent memory issues
@@ -540,12 +543,15 @@
                         }
                     } catch (error) {
                         console.error('Error capturing image:', error);
+                        this.imageError = true;
+                        this.currentImage = null;
                     }
                 },
                 
                 onTimelineScrub() {
                     if (this.images.length > 0 && this.timelinePosition < this.images.length) {
                         this.currentImage = this.images[this.timelinePosition].url;
+                        this.imageError = false;
                     }
                 },
                 
