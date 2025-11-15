@@ -3,7 +3,7 @@ k<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slime Mold Monitor</title>
+    <title>Slime Mould Monitor</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -23,7 +23,7 @@ k<!DOCTYPE html>
         }
         
         h1 {
-            color: #a0d468;
+            color: #ffc107;
             margin-bottom: 30px;
         }
         
@@ -43,7 +43,7 @@ k<!DOCTYPE html>
         
         .panel h2 {
             margin-top: 0;
-            color: #a0d468;
+            color: #ffc107;
             font-size: 1.2em;
         }
         
@@ -74,13 +74,13 @@ k<!DOCTYPE html>
             appearance: none;
             width: 16px;
             height: 16px;
-            background: #a0d468;
+            background: #ffc107;
             border-radius: 50%;
             cursor: pointer;
         }
         
         .control-button {
-            background: #a0d468;
+            background: #ffc107;
             color: #0a0a0a;
             border: none;
             padding: 12px 24px;
@@ -93,7 +93,7 @@ k<!DOCTYPE html>
         }
         
         .control-button:hover {
-            background: #8bc34a;
+            background: #ffb300;
             transform: translateY(-2px);
         }
         
@@ -120,7 +120,7 @@ k<!DOCTYPE html>
         }
         
         .status-indicator.online {
-            background: #2ecc71;
+            background: #ffc107;
             animation: pulse 2s infinite;
         }
         
@@ -137,7 +137,7 @@ k<!DOCTYPE html>
         .readings-display {
             font-size: 2em;
             font-weight: 300;
-            color: #a0d468;
+            color: #ffc107;
             margin: 20px 0;
         }
         
@@ -159,7 +159,7 @@ k<!DOCTYPE html>
         }
         
         .env-metric {
-            background: rgba(160, 212, 104, 0.1);
+            background: rgba(255, 193, 7, 0.1);
             padding: 15px;
             border-radius: 8px;
             text-align: center;
@@ -168,7 +168,7 @@ k<!DOCTYPE html>
         .env-metric .value {
             font-size: 2em;
             font-weight: 300;
-            color: #a0d468;
+            color: #ffc107;
         }
         
         .env-metric .label {
@@ -181,7 +181,7 @@ k<!DOCTYPE html>
 <body>
     <div id="app">
         <div class="container">
-            <h1>🦠 Slime Mold Monitor</h1>
+            <h1>🦠 Slime Mould Monitor</h1>
             
             <div class="grid">
                 <!-- Electrical Readings Panel -->
@@ -204,7 +204,7 @@ k<!DOCTYPE html>
                             v-if="currentImage" 
                             :src="currentImage" 
                             class="timelapse-image"
-                            alt="Slime mold"
+                            alt="Slime mould"
                         >
                         <div v-else style="height: 300px; display: flex; align-items: center; justify-content: center;">
                             <p>Waiting for first image...</p>
@@ -248,13 +248,13 @@ k<!DOCTYPE html>
                 <h2>Controls</h2>
                 <div style="display: flex; align-items: center; gap: 20px;">
                     <button @click="captureImage" class="control-button">
-                        📸 Capture Image
+                        Capture Image
                     </button>
                     <button 
                         @click="toggleLight" 
                         :class="['control-button', exposureLightOn ? 'danger' : '']"
                     >
-                        💡 {{ exposureLightOn ? 'Turn Off' : 'Turn On' }} Exposure Light
+                        {{ exposureLightOn ? 'Turn Off' : 'Turn On' }} Exposure Light
                     </button>
                     <div>
                         <span :class="['status-indicator', isOnline ? 'online' : 'offline']"></span>
@@ -373,8 +373,8 @@ k<!DOCTYPE html>
                             datasets: [{
                                 label: 'Voltage (V)',
                                 data: [],
-                                borderColor: '#a0d468',
-                                backgroundColor: 'rgba(160, 212, 104, 0.1)',
+                                borderColor: '#ffc107',
+                                backgroundColor: 'rgba(255, 193, 7, 0.1)',
                                 borderWidth: 2,
                                 tension: 0.4,
                                 pointRadius: 0
