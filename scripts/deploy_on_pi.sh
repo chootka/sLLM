@@ -197,7 +197,7 @@ User=chootka
 Group=chootka
 WorkingDirectory=$API_DIR
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
-ExecStart=$VENV_PATH/bin/python $API_DIR/app_minimal.py
+ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
 
@@ -224,7 +224,7 @@ User=chootka
 Group=chootka
 WorkingDirectory=$API_DIR
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
-ExecStart=$VENV_PATH/bin/python $API_DIR/app_minimal.py
+ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
 
