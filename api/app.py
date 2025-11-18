@@ -440,25 +440,46 @@ def handle_disconnect():
 def capture_image():
     """Capture an image with the USB camera"""
     try:
+        print("📸 Capture image request received")
+        
         if usb_camera is None or not usb_camera.isOpened():
-            return jsonify({"error": "USB camera not available"}), 500
+            error_msg = "USB camera not available"
+            print(f"❌ {error_msg}")
+            return jsonify({"error": error_msg}), 500
+        
+        print("✓ USB camera is available")
         
         # Turn on USB ring light
+        print("💡 Turning on ring light...")
         turn_ring_light_on()
         time.sleep(config.RING_LIGHT_DELAY)  # Let light stabilize
         
         # Capture image from USB camera
+        print("📷 Capturing image from camera...")
         ret, frame = usb_camera.read()
         if not ret:
+            print("❌ Failed to read frame from camera")
             turn_ring_light_off()
             return jsonify({"error": "Failed to capture image from USB camera"}), 500
+        
+        print(f"✓ Frame captured: {frame.shape if frame is not None else 'None'}")
         
         # Save image
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = os.path.join(config.IMAGE_DIR, f"slime_{timestamp}.jpg")
-        cv2.imwrite(filename, frame)
+        print(f"💾 Saving image to: {filename}")
+        
+        success = cv2.imwrite(filename, frame)
+        if not success:
+            print("❌ Failed to save image file")
+            turn_ring_light_off()
+            return jsonify({"error": "Failed to save image file"}), 500
+        
+        file_size = os.path.getsize(filename)
+        print(f"✓ Image saved: {file_size} bytes")
         
         # Turn off USB ring light
+        print("💡 Turning off ring light...")
         turn_ring_light_off()
         
         # Emit image capture event
@@ -468,9 +489,14 @@ def capture_image():
         })
         
         # Return the image file
+        print(f"✅ Returning image file: {filename}")
         return send_file(filename, mimetype='image/jpeg')
         
     except Exception as e:
+        error_msg = f"Error capturing image: {str(e)}"
+        print(f"❌ {error_msg}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/trigger-light', methods=['POST'])

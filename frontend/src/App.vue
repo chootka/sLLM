@@ -360,6 +360,23 @@ export default {
           throw new Error('Empty image data received')
         }
         
+        // Check if response is too small (likely an error message, not an image)
+        // JPEG images are typically at least a few KB
+        if (response.data.size < 1000) {
+          console.warn('⚠️  Response is suspiciously small for an image:', response.data.size, 'bytes')
+          // Try to read it as text to see the error message
+          const text = await response.data.text()
+          console.error('Response content (likely error):', text)
+          let errorMessage = 'Server returned invalid response'
+          try {
+            const errorJson = JSON.parse(text)
+            errorMessage = errorJson.error || text
+          } catch {
+            errorMessage = text || 'Unknown error'
+          }
+          throw new Error(errorMessage)
+        }
+        
         const imageUrl = URL.createObjectURL(response.data)
         console.log('Created image URL:', imageUrl)
         
