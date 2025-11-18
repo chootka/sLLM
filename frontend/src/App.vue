@@ -140,7 +140,8 @@ export default {
       
       // Intervals
       imageInterval: null,
-      fallbackInterval: null
+      fallbackInterval: null,
+      chartUpdateTimeout: null
     }
   },
   
@@ -157,6 +158,7 @@ export default {
     }
     if (this.imageInterval) clearInterval(this.imageInterval)
     if (this.fallbackInterval) clearInterval(this.fallbackInterval)
+    if (this.chartUpdateTimeout) clearTimeout(this.chartUpdateTimeout)
     if (this.chart) {
       this.chart.destroy()
     }
@@ -346,15 +348,19 @@ export default {
     },
     
     updateChart(reading) {
+      if (!this.chart || !this.chart.data) return
+      
       const time = new Date(reading.datetime).toLocaleTimeString()
       
       // Add voltage data
       this.chart.data.labels.push(time)
       this.chart.data.datasets[0].data.push(reading.value)
       
-      // Add null for temperature and humidity if not available yet
-      if (this.chart.data.datasets[1].data.length < this.chart.data.labels.length) {
+      // Ensure all datasets have the same length
+      while (this.chart.data.datasets[1].data.length < this.chart.data.labels.length) {
         this.chart.data.datasets[1].data.push(null)
+      }
+      while (this.chart.data.datasets[2].data.length < this.chart.data.labels.length) {
         this.chart.data.datasets[2].data.push(null)
       }
       
@@ -366,22 +372,38 @@ export default {
         this.chart.data.datasets[2].data.shift()
       }
       
-      this.chart.update('none') // No animation for smooth updates
+      // Throttle updates to prevent stack overflow
+      if (this.chartUpdateTimeout) {
+        clearTimeout(this.chartUpdateTimeout)
+      }
+      this.chartUpdateTimeout = setTimeout(() => {
+        if (this.chart) {
+          this.chart.update('none')
+        }
+      }, 100)
     },
     
     updateEnvironmentChart(envData) {
+      if (!this.chart || !this.chart.data) return
+      
       const time = new Date(envData.datetime).toLocaleTimeString()
       
-      // Find matching time label or add new one
-      let timeIndex = this.chart.data.labels.indexOf(time)
-      if (timeIndex === -1) {
-        // New time label
+      // Find matching time label or use the last one
+      let timeIndex = this.chart.data.labels.length - 1
+      if (timeIndex < 0 || this.chart.data.labels[timeIndex] !== time) {
+        // New time label - add it
         this.chart.data.labels.push(time)
         timeIndex = this.chart.data.labels.length - 1
         
-        // Add null for voltage if not available yet
-        if (this.chart.data.datasets[0].data.length < this.chart.data.labels.length) {
+        // Ensure all datasets have matching length
+        while (this.chart.data.datasets[0].data.length < this.chart.data.labels.length) {
           this.chart.data.datasets[0].data.push(null)
+        }
+        while (this.chart.data.datasets[1].data.length < this.chart.data.labels.length) {
+          this.chart.data.datasets[1].data.push(null)
+        }
+        while (this.chart.data.datasets[2].data.length < this.chart.data.labels.length) {
+          this.chart.data.datasets[2].data.push(null)
         }
       }
       
@@ -397,7 +419,15 @@ export default {
         this.chart.data.datasets[2].data.shift()
       }
       
-      this.chart.update('none') // No animation for smooth updates
+      // Throttle updates to prevent stack overflow
+      if (this.chartUpdateTimeout) {
+        clearTimeout(this.chartUpdateTimeout)
+      }
+      this.chartUpdateTimeout = setTimeout(() => {
+        if (this.chart) {
+          this.chart.update('none')
+        }
+      }, 100)
     },
     
     async captureImage() {
