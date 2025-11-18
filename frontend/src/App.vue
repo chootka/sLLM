@@ -32,31 +32,60 @@
           </div>
         </div>
         
-        <!-- Live Stream Panel -->
+        <!-- Live Stream / Timelapse Panel -->
         <div class="panel timeline-panel">
           <div class="timeline-header">
-            <h2>Live Stream</h2>
+            <h2>{{ viewMode === 'livestream' ? 'Live Stream' : 'Timelapse' }}</h2>
             <div class="status-indicator-wrapper">
               <span :class="['status-indicator', isOnline ? 'online' : 'offline']"></span>
               <span class="status-text">{{ isOnline ? 'Connected' : 'Disconnected' }}</span>
             </div>
           </div>
           <div class="timelapse-container">
+            <!-- Live Stream View -->
             <img 
+              v-if="viewMode === 'livestream'"
               :src="streamUrl" 
               class="timelapse-image"
               alt="Live slime mould stream"
               @error="imageError = true"
               @load="imageError = false"
             >
+            <!-- Timelapse View -->
+            <img 
+              v-else-if="viewMode === 'timelapse' && currentImage && !imageError" 
+              :key="imageKey"
+              :src="currentImage" 
+              class="timelapse-image"
+              alt="Slime mould timelapse"
+              @error="imageError = true"
+            >
+            <div v-else-if="viewMode === 'timelapse'" style="height: 300px; display: flex; align-items: center; justify-content: center;">
+              <p style="font-size: 1.2em; color: #ecddb1;">No images captured yet</p>
+            </div>
           </div>
+          <!-- Timeline Scrubber (only shown in timelapse mode) -->
+          <input 
+            v-if="viewMode === 'timelapse' && images.length > 0"
+            type="range" 
+            v-model.number="timelinePosition" 
+            :max="images.length - 1" 
+            min="0" 
+            class="timeline-scrubber"
+            @input="onTimelineScrub"
+          >
           <div class="timeline-footer">
             <div class="timestamp">
-              Live USB camera feed<br>
-              <small style="color: #666;">Capturing {{ imagesPerDay }} images/day ({{ estimatedStoragePerDay }})</small>
+              <span v-if="viewMode === 'livestream'">
+                Live USB camera feed<br>
+                <small style="color: #666;">Capturing {{ imagesPerDay }} images/day ({{ estimatedStoragePerDay }})</small>
+              </span>
+              <span v-else>
+                {{ images.length }} images captured
+              </span>
             </div>
-            <button @click="captureImage(true)" class="control-button capture-button">
-              Capture Image
+            <button @click="toggleViewMode" class="control-button capture-button">
+              {{ viewMode === 'livestream' ? 'View Timelapse' : 'View Livestream' }}
             </button>
           </div>
         </div>
@@ -123,6 +152,7 @@ export default {
       imageError: false,
       imageKey: 0, // Used to force img element re-render
       capturingImage: false, // Prevent concurrent captures
+      viewMode: 'livestream', // 'livestream' or 'timelapse'
       
       // System status
       isOnline: false,
@@ -466,6 +496,22 @@ export default {
         this.imageKey++
         this.currentImage = this.images[this.timelinePosition].url
         this.imageError = false
+      }
+    },
+    
+    toggleViewMode() {
+      if (this.viewMode === 'livestream') {
+        // Switch to timelapse mode
+        this.viewMode = 'timelapse'
+        // Show the current image from timeline if available
+        if (this.images.length > 0) {
+          this.timelinePosition = this.images.length - 1 // Go to latest image
+          this.currentImage = this.images[this.timelinePosition].url
+          this.imageError = false
+        }
+      } else {
+        // Switch back to livestream mode
+        this.viewMode = 'livestream'
       }
     },
     
