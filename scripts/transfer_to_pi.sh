@@ -32,17 +32,17 @@ echo ""
 
 # Check if repo exists on Pi
 echo "Checking if repository exists on Pi..."
-if ssh -o ConnectTimeout=5 ${PI_USER}@${PI_IP} "[ -d ${PI_DIR}/.git ]" 2>/dev/null; then
+if ssh -o ConnectTimeout=5 -A ${PI_USER}@${PI_IP} "[ -d ${PI_DIR}/.git ]" 2>/dev/null; then
     echo "📦 Repository exists, pulling latest changes..."
-    ssh ${PI_USER}@${PI_IP} "cd ${PI_DIR} && git pull"
+    ssh -A ${PI_USER}@${PI_IP} "cd ${PI_DIR} && git pull"
 else
     echo "📦 Cloning repository using SSH..."
-    ssh ${PI_USER}@${PI_IP} "git clone ${REPO_URL} ${PI_DIR}"
+    ssh -A ${PI_USER}@${PI_IP} "git clone ${REPO_URL} ${PI_DIR}"
 fi
 
 # Make deploy script executable on Pi
 echo "🔧 Making deploy script executable..."
-ssh ${PI_USER}@${PI_IP} "chmod +x ${PI_DIR}/scripts/deploy_on_pi.sh"
+ssh -A ${PI_USER}@${PI_IP} "chmod +x ${PI_DIR}/scripts/deploy_on_pi.sh"
 
 echo ""
 echo "✅ Setup complete!"
