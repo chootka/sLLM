@@ -96,6 +96,7 @@
 </template>
 
 <script>
+import { markRaw } from 'vue'
 import { io } from 'socket.io-client'
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
@@ -220,7 +221,7 @@ export default {
         
         if (this.chart) this.chart.destroy()
         
-        this.chart = new Chart(ctx, {
+        const chart = new Chart(ctx, {
           type: 'line',
           data: {
             labels: [],
@@ -275,6 +276,7 @@ export default {
             }
           }
         })
+        this.chart = markRaw(chart)
       })
     },
     
