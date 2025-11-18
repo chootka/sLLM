@@ -280,7 +280,7 @@ canvas + canvas {
     }
 
     .video-background-iframe {
-        transform: scale(4);
+        transform: scale(4) !important;
     }
     
     /* Keep environment display side by side even on mobile */
