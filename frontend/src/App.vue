@@ -273,16 +273,12 @@ export default {
           responsive: true,
           maintainAspectRatio: false,
           animation: false,
-          interaction: {
-            mode: 'index',
-            intersect: false
-          },
           plugins: {
             legend: {
               display: false
             },
             tooltip: {
-              enabled: true
+              enabled: false
             }
           },
           scales: {
@@ -366,19 +362,17 @@ export default {
     },
     
     updateChart(reading) {
-      if (!this.chart || !this.chart.data || this.chartUpdating) return
+      if (!this.chart || !this.chart.data) return
       
       const time = new Date(reading.datetime).toLocaleTimeString()
-      
-      // Add voltage data
       this.chart.data.labels.push(time)
       this.chart.data.datasets[0].data.push(reading.value)
       
-      // Ensure all datasets have the same length
-      while (this.chart.data.datasets[1].data.length < this.chart.data.labels.length) {
+      // Keep datasets in sync
+      if (this.chart.data.datasets[1]) {
         this.chart.data.datasets[1].data.push(null)
       }
-      while (this.chart.data.datasets[2].data.length < this.chart.data.labels.length) {
+      if (this.chart.data.datasets[2]) {
         this.chart.data.datasets[2].data.push(null)
       }
       
@@ -386,83 +380,60 @@ export default {
       if (this.chart.data.labels.length > 50) {
         this.chart.data.labels.shift()
         this.chart.data.datasets[0].data.shift()
-        this.chart.data.datasets[1].data.shift()
-        this.chart.data.datasets[2].data.shift()
+        if (this.chart.data.datasets[1]) this.chart.data.datasets[1].data.shift()
+        if (this.chart.data.datasets[2]) this.chart.data.datasets[2].data.shift()
       }
       
-      this.scheduleChartUpdate()
+      // Simple debounce - only update if not already updating
+      if (!this.chartUpdating) {
+        this.chartUpdating = true
+        this.chart.update('none')
+        setTimeout(() => { this.chartUpdating = false }, 50)
+      }
     },
     
     updateEnvironmentChart(envData) {
-      if (!this.chart || !this.chart.data || this.chartUpdating) return
+      if (!this.chart || !this.chart.data) return
       
       const time = new Date(envData.datetime).toLocaleTimeString()
+      const lastIndex = this.chart.data.labels.length - 1
       
-      // Find matching time label or use the last one
-      let timeIndex = this.chart.data.labels.length - 1
-      if (timeIndex < 0 || this.chart.data.labels[timeIndex] !== time) {
-        // New time label - add it
+      if (lastIndex >= 0 && this.chart.data.labels[lastIndex] === time) {
+        // Update existing point
+        if (this.chart.data.datasets[1]) {
+          this.chart.data.datasets[1].data[lastIndex] = envData.temperature
+        }
+        if (this.chart.data.datasets[2]) {
+          this.chart.data.datasets[2].data[lastIndex] = envData.humidity
+        }
+      } else {
+        // Add new point
         this.chart.data.labels.push(time)
-        timeIndex = this.chart.data.labels.length - 1
-        
-        // Ensure all datasets have matching length
-        while (this.chart.data.datasets[0].data.length < this.chart.data.labels.length) {
+        if (this.chart.data.datasets[0]) {
           this.chart.data.datasets[0].data.push(null)
         }
-        while (this.chart.data.datasets[1].data.length < this.chart.data.labels.length) {
-          this.chart.data.datasets[1].data.push(null)
+        if (this.chart.data.datasets[1]) {
+          this.chart.data.datasets[1].data.push(envData.temperature)
         }
-        while (this.chart.data.datasets[2].data.length < this.chart.data.labels.length) {
-          this.chart.data.datasets[2].data.push(null)
+        if (this.chart.data.datasets[2]) {
+          this.chart.data.datasets[2].data.push(envData.humidity)
         }
       }
-      
-      // Update temperature and humidity at this time index
-      this.chart.data.datasets[1].data[timeIndex] = envData.temperature
-      this.chart.data.datasets[2].data[timeIndex] = envData.humidity
       
       // Keep only last 50 points
       if (this.chart.data.labels.length > 50) {
         this.chart.data.labels.shift()
-        this.chart.data.datasets[0].data.shift()
-        this.chart.data.datasets[1].data.shift()
-        this.chart.data.datasets[2].data.shift()
+        if (this.chart.data.datasets[0]) this.chart.data.datasets[0].data.shift()
+        if (this.chart.data.datasets[1]) this.chart.data.datasets[1].data.shift()
+        if (this.chart.data.datasets[2]) this.chart.data.datasets[2].data.shift()
       }
       
-      this.scheduleChartUpdate()
-    },
-    
-    scheduleChartUpdate() {
-      // Don't schedule if already updating or chart not ready
-      if (this.chartUpdating || !this.chart || !this.chartReady) {
-        return
+      // Simple debounce - only update if not already updating
+      if (!this.chartUpdating) {
+        this.chartUpdating = true
+        this.chart.update('none')
+        setTimeout(() => { this.chartUpdating = false }, 50)
       }
-      
-      // Clear any pending update
-      if (this.chartUpdateTimeout) {
-        clearTimeout(this.chartUpdateTimeout)
-      }
-      
-      // Schedule a single update
-      this.chartUpdateTimeout = setTimeout(() => {
-        if (this.chart && !this.chartUpdating && this.chartReady) {
-          this.chartUpdating = true
-          try {
-            this.chart.update('none')
-          } catch (e) {
-            console.error('Chart update error:', e)
-            this.chartErrorCount++
-            if (this.chartErrorCount > 3) {
-              console.error('Too many chart errors, disabling updates')
-              this.chartReady = false
-            }
-          } finally {
-            setTimeout(() => {
-              this.chartUpdating = false
-            }, 50)
-          }
-        }
-      }, 300)
     },
     
     async captureImage() {
