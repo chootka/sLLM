@@ -131,15 +131,51 @@ picam2.configure(camera_config)
 
 def read_electrical_data():
     """Continuously read electrical data from Arduino via serial port"""
-    global current_reading
+    global current_reading, arduino_serial, SERIAL_PORT
     
-    if not arduino_serial:
-        print("ERROR: Arduino serial port not initialized. Cannot read electrical data.")
-        return
+    reconnect_attempts = 0
+    last_reconnect_attempt = 0
     
     while True:
+        # If no serial connection, try to find and connect to Arduino
+        if arduino_serial is None or not arduino_serial.is_open:
+            current_time = time.time()
+            # Try to reconnect every 5 seconds
+            if current_time - last_reconnect_attempt > 5:
+                last_reconnect_attempt = current_time
+                reconnect_attempts += 1
+                
+                # Close existing connection if any
+                try:
+                    if arduino_serial and arduino_serial.is_open:
+                        arduino_serial.close()
+                except:
+                    pass
+                
+                # Try to find Arduino port (in case it was just plugged in)
+                if not SERIAL_PORT or reconnect_attempts % 10 == 0:  # Re-scan every 10 attempts (50 seconds)
+                    SERIAL_PORT = find_arduino_port()
+                    if SERIAL_PORT:
+                        print(f"Found Arduino on {SERIAL_PORT}")
+                
+                # Try to connect
+                if SERIAL_PORT:
+                    try:
+                        arduino_serial = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+                        print(f"✓ Connected to Arduino on {SERIAL_PORT}")
+                        reconnect_attempts = 0  # Reset counter on success
+                    except Exception as e:
+                        print(f"✗ Failed to connect to {SERIAL_PORT}: {e}")
+                        arduino_serial = None
+                else:
+                    if reconnect_attempts == 1 or reconnect_attempts % 20 == 0:  # Print every 20 attempts (100 seconds)
+                        print("⚠ Waiting for Arduino to be connected...")
+            
+            time.sleep(1)
+            continue
+        
+        # Read data from serial port
         try:
-            # Read a line from serial port
             if arduino_serial.in_waiting > 0:
                 line = arduino_serial.readline().decode('utf-8', errors='ignore').strip()
                 
@@ -169,21 +205,14 @@ def read_electrical_data():
             
         except serial.SerialException as e:
             print(f"Serial port error: {e}")
-            time.sleep(1)
-            # Try to reconnect
-            global arduino_serial
+            # Close the connection so we can reconnect
             try:
                 if arduino_serial and arduino_serial.is_open:
                     arduino_serial.close()
             except:
                 pass
-            try:
-                if SERIAL_PORT:
-                    arduino_serial = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
-                    print(f"Reconnected to {SERIAL_PORT}")
-            except Exception as reconnect_error:
-                print(f"Failed to reconnect: {reconnect_error}")
-                arduino_serial = None
+            arduino_serial = None
+            time.sleep(1)
         except Exception as e:
             print(f"Error reading serial: {e}")
             time.sleep(1)
