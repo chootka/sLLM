@@ -262,6 +262,9 @@ export default {
                 ticks: {
                   color: '#aaa',
                   maxTicksLimit: 6
+                },
+                title: {
+                  color: '#ddd'
                 }
               },
               y: {
@@ -273,6 +276,9 @@ export default {
                 },
                 ticks: {
                   color: '#aaa'
+                },
+                title: {
+                  color: '#ddd'
                 }
               }
             }
