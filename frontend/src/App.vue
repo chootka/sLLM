@@ -143,7 +143,8 @@ export default {
       fallbackInterval: null,
       chartUpdateTimeout: null,
       chartReady: false,
-      chartUpdating: false
+      chartUpdating: false,
+      chartErrorCount: 0
     }
   },
   
@@ -278,17 +279,9 @@ export default {
           },
           plugins: {
             legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                color: '#ecddb1',
-                usePointStyle: true,
-                padding: 15
-              }
+              display: false
             },
             tooltip: {
-              mode: 'index',
-              intersect: false,
               enabled: true
             }
           },
@@ -440,29 +433,36 @@ export default {
     },
     
     scheduleChartUpdate() {
+      // Don't schedule if already updating or chart not ready
+      if (this.chartUpdating || !this.chart || !this.chartReady) {
+        return
+      }
+      
       // Clear any pending update
       if (this.chartUpdateTimeout) {
         clearTimeout(this.chartUpdateTimeout)
-        this.chartUpdateTimeout = null
       }
       
-      // Schedule a single update after a short delay
+      // Schedule a single update
       this.chartUpdateTimeout = setTimeout(() => {
-        if (this.chart && !this.chartUpdating) {
+        if (this.chart && !this.chartUpdating && this.chartReady) {
           this.chartUpdating = true
           try {
-            // Use 'none' mode to prevent animation which can cause recursion
             this.chart.update('none')
           } catch (e) {
             console.error('Chart update error:', e)
-            // If update fails, mark chart as not ready to prevent further errors
-            this.chartReady = false
+            this.chartErrorCount++
+            if (this.chartErrorCount > 3) {
+              console.error('Too many chart errors, disabling updates')
+              this.chartReady = false
+            }
           } finally {
-            this.chartUpdating = false
-            this.chartUpdateTimeout = null
+            setTimeout(() => {
+              this.chartUpdating = false
+            }, 50)
           }
         }
-      }, 150)
+      }, 300)
     },
     
     async captureImage() {
