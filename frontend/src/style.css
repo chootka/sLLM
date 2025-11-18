@@ -77,6 +77,14 @@ h1 {
     margin-bottom: 30px;
 }
 
+/* Mobile responsive: stack graph and timeline */
+@media (max-width: 768px) {
+    .grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+
 .panel {
     background: rgba(26, 26, 26, 0.85);
     border-radius: 12px;
@@ -224,5 +232,60 @@ canvas + canvas {
     font-size: 0.9em;
     color: #888;
     margin-top: 5px;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        max-width: 100%;
+    }
+    
+    h1 {
+        font-size: 1.5em;
+        margin-bottom: 20px;
+    }
+    
+    .panel {
+        padding: 15px;
+    }
+    
+    .panel h2 {
+        font-size: 1.1em;
+    }
+    
+    .readings-display {
+        font-size: 1.5em;
+    }
+    
+    .env-metric .value {
+        font-size: 1.5em;
+    }
+    
+    /* Keep environment display side by side even on mobile */
+    .environment-display {
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+    
+    .env-metric {
+        padding: 12px;
+    }
+    
+    canvas {
+        max-height: 250px;
+    }
+    
+    .timelapse-container {
+        min-height: 200px;
+    }
+    
+    .control-button {
+        font-size: 0.9em;
+        padding: 10px 15px;
+    }
 }
 
