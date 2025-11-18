@@ -4,7 +4,6 @@
 # GPIO Pin Configuration
 RING_LIGHT_PIN = 17        # GPIO pin for ring light control
 EXPOSURE_LIGHT_PIN = 27    # GPIO pin for exposure light
-DHT_PIN = 4                # GPIO pin for DHT22 sensor
 
 # Camera Settings
 CAMERA_RESOLUTION = (1920, 1080)
@@ -17,8 +16,11 @@ MAX_READINGS_BUFFER = 1000     # Maximum readings to keep in memory
 IMAGE_CAPTURE_INTERVAL = 300   # seconds (5 minutes)
 
 # Environmental Monitoring
-DHT_READ_INTERVAL = 2          # seconds (DHT22 minimum is 2 seconds)
-ENABLE_DHT_SENSOR = True       # Set to False to disable DHT sensor
+SENSOR_TYPE = 'SHT31'          # Options: 'SHT31' (recommended), 'DHT22', 'DHT11'
+SHT31_I2C_ADDRESS = 0x44       # I2C address for SHT31 (default 0x44, alternative 0x45)
+DHT_PIN = 4                    # GPIO pin for DHT22/DHT11 sensors (only used if SENSOR_TYPE is DHT22/DHT11)
+DHT_READ_INTERVAL = 2          # seconds (DHT22 minimum is 2 seconds, SHT31 can read faster)
+ENABLE_DHT_SENSOR = True       # Set to False to disable temperature/humidity sensor
 
 # Socket.IO Settings
 SOCKET_EMIT_INTERVAL = 0.5     # seconds between Socket.IO emissions

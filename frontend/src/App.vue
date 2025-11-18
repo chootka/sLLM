@@ -118,6 +118,8 @@ export default {
       // Environmental data
       temperature: null,
       humidity: null,
+      temperatureHistory: [],
+      humidityHistory: [],
       hasEnvironmentalData: false,
       environmentUpdateTime: 'No data',
       
@@ -188,6 +190,7 @@ export default {
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
         this.environmentUpdateTime = `Updated: ${new Date(data.datetime).toLocaleTimeString()}`
+        this.updateEnvironmentChart(data)
       })
       
       this.socket.on('status_update', (data) => {
@@ -210,22 +213,59 @@ export default {
         type: 'line',
         data: {
           labels: [],
-          datasets: [{
-            label: 'Voltage (V)',
-            data: [],
-            borderColor: '#a0d468',
-            backgroundColor: 'rgba(160, 212, 104, 0.1)',
-            borderWidth: 2,
-            tension: 0.4,
-            pointRadius: 0
-          }]
+          datasets: [
+            {
+              label: 'Voltage (in mV)',
+              data: [],
+              borderColor: '#a0d468',
+              backgroundColor: 'rgba(160, 212, 104, 0.1)',
+              borderWidth: 2,
+              tension: 0.4,
+              pointRadius: 0,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Temperature (°C)',
+              data: [],
+              borderColor: '#ff6b6b',
+              backgroundColor: 'rgba(255, 107, 107, 0.1)',
+              borderWidth: 2,
+              tension: 0.4,
+              pointRadius: 0,
+              yAxisID: 'y1'
+            },
+            {
+              label: 'Humidity (%)',
+              data: [],
+              borderColor: '#4ecdc4',
+              backgroundColor: 'rgba(78, 205, 196, 0.1)',
+              borderWidth: 2,
+              tension: 0.4,
+              pointRadius: 0,
+              yAxisID: 'y1'
+            }
+          ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
           plugins: {
             legend: {
-              display: false
+              display: true,
+              position: 'top',
+              labels: {
+                color: '#ecddb1',
+                usePointStyle: true,
+                padding: 15
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
             }
           },
           scales: {
@@ -240,12 +280,35 @@ export default {
               }
             },
             y: {
+              type: 'linear',
               display: true,
+              position: 'left',
+              title: {
+                display: true,
+                text: 'Voltage (V)',
+                color: '#a0d468'
+              },
               grid: {
-                color: 'rgba(255, 255, 255, 0.1)'
+                color: 'rgba(255, 255, 255, 0.05)'
               },
               ticks: {
-                color: '#666'
+                color: '#a0d468'
+              }
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              title: {
+                display: true,
+                text: 'Temp (°C) / Humidity (%)',
+                color: '#ecddb1'
+              },
+              grid: {
+                drawOnChartArea: false
+              },
+              ticks: {
+                color: '#ecddb1'
               }
             }
           }
@@ -285,13 +348,53 @@ export default {
     updateChart(reading) {
       const time = new Date(reading.datetime).toLocaleTimeString()
       
+      // Add voltage data
       this.chart.data.labels.push(time)
       this.chart.data.datasets[0].data.push(reading.value)
+      
+      // Add null for temperature and humidity if not available yet
+      if (this.chart.data.datasets[1].data.length < this.chart.data.labels.length) {
+        this.chart.data.datasets[1].data.push(null)
+        this.chart.data.datasets[2].data.push(null)
+      }
       
       // Keep only last 50 points
       if (this.chart.data.labels.length > 50) {
         this.chart.data.labels.shift()
         this.chart.data.datasets[0].data.shift()
+        this.chart.data.datasets[1].data.shift()
+        this.chart.data.datasets[2].data.shift()
+      }
+      
+      this.chart.update('none') // No animation for smooth updates
+    },
+    
+    updateEnvironmentChart(envData) {
+      const time = new Date(envData.datetime).toLocaleTimeString()
+      
+      // Find matching time label or add new one
+      let timeIndex = this.chart.data.labels.indexOf(time)
+      if (timeIndex === -1) {
+        // New time label
+        this.chart.data.labels.push(time)
+        timeIndex = this.chart.data.labels.length - 1
+        
+        // Add null for voltage if not available yet
+        if (this.chart.data.datasets[0].data.length < this.chart.data.labels.length) {
+          this.chart.data.datasets[0].data.push(null)
+        }
+      }
+      
+      // Update temperature and humidity at this time index
+      this.chart.data.datasets[1].data[timeIndex] = envData.temperature
+      this.chart.data.datasets[2].data[timeIndex] = envData.humidity
+      
+      // Keep only last 50 points
+      if (this.chart.data.labels.length > 50) {
+        this.chart.data.labels.shift()
+        this.chart.data.datasets[0].data.shift()
+        this.chart.data.datasets[1].data.shift()
+        this.chart.data.datasets[2].data.shift()
       }
       
       this.chart.update('none') // No animation for smooth updates

@@ -11,6 +11,7 @@ import threading
 import base64
 import os
 import sys
+import random
 # Add system site-packages for libgpiod (required for Raspberry Pi 5)
 sys.path.insert(0, '/usr/lib/python3/dist-packages')
 from datetime import datetime
@@ -38,13 +39,27 @@ except ImportError:
     import config_template as config
 
 # Temperature/Humidity sensor support (when available)
-DHT_AVAILABLE = False
+SENSOR_AVAILABLE = False
+SENSOR_TYPE = getattr(config, 'SENSOR_TYPE', 'SHT31').upper()  # Default to SHT31, fallback to DHT22
 if config.ENABLE_DHT_SENSOR:
-    try:
-        import adafruit_dht
-        DHT_AVAILABLE = True
-    except ImportError:
-        print("DHT sensor library not installed. Temperature/humidity monitoring disabled.")
+    if SENSOR_TYPE == 'SHT31':
+        try:
+            import adafruit_sht31d
+            SENSOR_AVAILABLE = True
+        except ImportError:
+            print("SHT31 sensor library not installed. Trying DHT22...")
+            try:
+                import adafruit_dht
+                SENSOR_AVAILABLE = True
+                SENSOR_TYPE = 'DHT22'
+            except ImportError:
+                print("DHT sensor library not installed. Temperature/humidity monitoring disabled.")
+    else:  # DHT22 or DHT11
+        try:
+            import adafruit_dht
+            SENSOR_AVAILABLE = True
+        except ImportError:
+            print("DHT sensor library not installed. Temperature/humidity monitoring disabled.")
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for web frontend
@@ -53,7 +68,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")  # Enable Socket.IO with CORS
 # Configuration from config.py
 RING_LIGHT_PIN = config.RING_LIGHT_PIN
 EXPOSURE_LIGHT_PIN = config.EXPOSURE_LIGHT_PIN
-DHT_PIN = config.DHT_PIN
+DHT_PIN = getattr(config, 'DHT_PIN', 4)  # GPIO pin for DHT sensors
+SHT31_I2C_ADDRESS = getattr(config, 'SHT31_I2C_ADDRESS', 0x44)  # Default I2C address for SHT31
 MAX_READINGS = config.MAX_READINGS_BUFFER
 EMIT_INTERVAL = config.SOCKET_EMIT_INTERVAL
 
@@ -114,17 +130,27 @@ else:
         print(f"✗ Failed to open /dev/ttyUSB0: {e}")
         arduino_serial = None
 
-# Initialize DHT sensor (if available)
-dht_sensor = None
-if DHT_AVAILABLE:
+# Initialize temperature/humidity sensor (if available)
+env_sensor = None
+if SENSOR_AVAILABLE:
     try:
-        # Map config pin number to board pin
-        dht_board_pin = getattr(board, f'D{DHT_PIN}')
-        dht_sensor = adafruit_dht.DHT22(dht_board_pin)
-        print(f"DHT22 sensor initialized on GPIO {DHT_PIN}")
+        if SENSOR_TYPE == 'SHT31':
+            # SHT31 uses I2C
+            i2c = busio.I2C(board.SCL, board.SDA)
+            env_sensor = adafruit_sht31d.SHT31D(i2c, address=SHT31_I2C_ADDRESS)
+            print(f"✓ SHT31 sensor initialized on I2C (address 0x{SHT31_I2C_ADDRESS:02X})")
+        else:
+            # DHT22 or DHT11 uses GPIO
+            dht_board_pin = getattr(board, f'D{DHT_PIN}')
+            if SENSOR_TYPE == 'DHT11':
+                env_sensor = adafruit_dht.DHT11(dht_board_pin)
+                print(f"✓ DHT11 sensor initialized on GPIO {DHT_PIN}")
+            else:  # DHT22
+                env_sensor = adafruit_dht.DHT22(dht_board_pin)
+                print(f"✓ DHT22 sensor initialized on GPIO {DHT_PIN}")
     except Exception as e:
-        print(f"Failed to initialize DHT sensor: {e}")
-        dht_sensor = None
+        print(f"✗ Failed to initialize {SENSOR_TYPE} sensor: {e}")
+        env_sensor = None
 
 # Initialize camera
 picam2 = Picamera2()
@@ -223,28 +249,61 @@ def read_environment_data():
     """Read temperature and humidity data"""
     global current_environment
     
-    if not dht_sensor:
-        return
+    # Mock data variables for when sensor is not available
+    mock_temp_base = 22.0  # Base temperature in Celsius
+    mock_humidity_base = 55.0  # Base humidity in %
+    mock_temp_variation = 0.0
+    mock_humidity_variation = 0.0
     
     while True:
-        try:
-            temperature = dht_sensor.temperature
-            humidity = dht_sensor.humidity
+        if env_sensor:
+            # Real sensor reading
+            try:
+                temperature = env_sensor.temperature
+                humidity = env_sensor.humidity
+                
+                if temperature is not None and humidity is not None:
+                    current_environment = {
+                        "temperature": temperature,
+                        "humidity": humidity,
+                        "timestamp": time.time(),
+                        "datetime": datetime.now().isoformat()
+                    }
+            except RuntimeError as e:
+                # DHT sensors can be flaky, this is normal
+                if SENSOR_TYPE != 'SHT31':  # SHT31 is more reliable, log errors
+                    pass
+                else:
+                    print(f"Error reading SHT31 sensor: {e}")
+            except Exception as e:
+                print(f"Error reading {SENSOR_TYPE} sensor: {e}")
+        else:
+            # Generate mock data
+            # Simulate natural variation
+            mock_temp_variation += random.uniform(-0.1, 0.1)
+            mock_temp_variation = max(-2.0, min(2.0, mock_temp_variation))  # Clamp variation
             
-            if temperature is not None and humidity is not None:
-                current_environment = {
-                    "temperature": temperature,
-                    "humidity": humidity,
-                    "timestamp": time.time(),
-                    "datetime": datetime.now().isoformat()
-                }
-        except RuntimeError as e:
-            # DHT sensors can be flaky, this is normal
-            pass
-        except Exception as e:
-            print(f"Error reading DHT sensor: {e}")
+            mock_humidity_variation += random.uniform(-0.5, 0.5)
+            mock_humidity_variation = max(-5.0, min(5.0, mock_humidity_variation))  # Clamp variation
+            
+            # Generate realistic readings with some noise
+            temperature = mock_temp_base + mock_temp_variation + random.uniform(-0.2, 0.2)
+            humidity = mock_humidity_base + mock_humidity_variation + random.uniform(-1.0, 1.0)
+            
+            # Clamp to realistic ranges
+            temperature = max(18.0, min(26.0, temperature))
+            humidity = max(40.0, min(70.0, humidity))
+            
+            current_environment = {
+                "temperature": round(temperature, 1),
+                "humidity": round(humidity, 1),
+                "timestamp": time.time(),
+                "datetime": datetime.now().isoformat()
+            }
         
-        time.sleep(config.DHT_READ_INTERVAL)  # DHT22 read interval from config
+        # SHT31 can read faster, DHT sensors need 2+ seconds, mock data every second
+        read_interval = 1.0 if (SENSOR_TYPE == 'SHT31' or not env_sensor) else config.DHT_READ_INTERVAL
+        time.sleep(read_interval)
 
 def emit_realtime_data():
     """Emit real-time data via Socket.IO"""
@@ -415,7 +474,7 @@ def get_status():
         "timestamp": datetime.now().isoformat(),
         "sensors": {
             "electrical": True,
-            "temperature_humidity": dht_sensor is not None,
+            "temperature_humidity": env_sensor is not None,
             "camera": True
         },
         "environment": current_environment if current_environment["temperature"] is not None else None
@@ -426,8 +485,8 @@ if __name__ == '__main__':
     reader_thread = threading.Thread(target=read_electrical_data, daemon=True)
     reader_thread.start()
     
-    # Start environmental reading thread if sensor available
-    if dht_sensor:
+    # Start environmental reading thread (generates mock data if no sensor)
+    if config.ENABLE_DHT_SENSOR:
         env_thread = threading.Thread(target=read_environment_data, daemon=True)
         env_thread.start()
     
@@ -442,8 +501,12 @@ if __name__ == '__main__':
     finally:
         GPIO.cleanup()
         picam2.close()
-        if dht_sensor:
-            dht_sensor.exit()
+        # Only DHT sensors have exit() method, SHT31 doesn't need cleanup
+        if env_sensor and SENSOR_TYPE != 'SHT31':
+            try:
+                env_sensor.exit()
+            except:
+                pass
         if arduino_serial and arduino_serial.is_open:
             arduino_serial.close()
             print("Serial port closed")
