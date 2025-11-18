@@ -260,17 +260,19 @@ export default {
                   color: 'rgba(255, 255, 255, 0.1)'
                 },
                 ticks: {
-                  color: '#666',
+                  color: '#aaa',
                   maxTicksLimit: 6
                 }
               },
               y: {
                 display: true,
+                min: 0,
+                max: 5,
                 grid: {
                   color: 'rgba(255, 255, 255, 0.1)'
                 },
                 ticks: {
-                  color: '#666'
+                  color: '#aaa'
                 }
               }
             }
