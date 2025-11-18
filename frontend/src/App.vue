@@ -343,9 +343,14 @@ export default {
       console.log('API URL:', this.apiUrl)
       
       try {
+        // Add cache-busting timestamp to ensure we get a fresh image
+        const timestamp = Date.now()
         console.log('Sending POST request to /api/capture-image...')
-        const response = await axios.post(`${this.apiUrl}/api/capture-image`, {}, {
-          responseType: 'blob'
+        const response = await axios.post(`${this.apiUrl}/api/capture-image?t=${timestamp}`, {}, {
+          responseType: 'blob',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
         })
         
         console.log('Response received:', {
@@ -375,6 +380,11 @@ export default {
             errorMessage = text || 'Unknown error'
           }
           throw new Error(errorMessage)
+        }
+        
+        // Revoke old blob URL if it exists to prevent memory leaks
+        if (this.currentImage && this.currentImage.startsWith('blob:')) {
+          URL.revokeObjectURL(this.currentImage)
         }
         
         const imageUrl = URL.createObjectURL(response.data)
