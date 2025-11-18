@@ -113,7 +113,8 @@ mkdir -p "$DATA_DIR/images"
 mkdir -p "$DATA_DIR/logs"
 mkdir -p "$DATA_DIR/readings"
 if [ "$IS_LINUX" = true ]; then
-    chown -R $WEB_USER:$WEB_GROUP "$DATA_DIR"
+    # Service runs as chootka, so data directory needs to be owned by chootka for write access
+    chown -R chootka:chootka "$DATA_DIR"
 fi
 chmod -R 755 "$DATA_DIR"
 
