@@ -93,11 +93,16 @@ current_reading = {"timestamp": 0, "value": 0}
 current_environment = {"temperature": None, "humidity": None, "timestamp": 0}
 
 # Initialize hardware
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(EXPOSURE_LIGHT_PIN, GPIO.OUT)
-GPIO.setup(RING_LIGHT_PIN, GPIO.OUT)
-GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.LOW)
-GPIO.output(RING_LIGHT_PIN, GPIO.LOW)  # Ring light off by default
+try:
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(EXPOSURE_LIGHT_PIN, GPIO.OUT)
+    GPIO.setup(RING_LIGHT_PIN, GPIO.OUT)
+    GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.LOW)
+    GPIO.output(RING_LIGHT_PIN, GPIO.LOW)  # Ring light off by default
+    print(f"✓ GPIO initialized (exposure light: GPIO {EXPOSURE_LIGHT_PIN}, ring light: GPIO {RING_LIGHT_PIN})")
+except Exception as e:
+    print(f"⚠ WARNING: GPIO initialization failed: {e}")
+    print("  Ring light control will be disabled, but image capture will still work")
 
 # Initialize Serial connection to Arduino
 SERIAL_BAUD = 1200  # Match Arduino's Serial.begin(1200)
@@ -146,7 +151,6 @@ else:
 # - Wire breakout VBUS (+5V) through relay terminals: USB power→COM, NO→Breakout VBUS
 # - Wire breakout GND directly (not through relay)
 # - When GPIO 17 goes HIGH, relay closes and ring light turns on
-print(f"✓ Ring light relay control initialized on GPIO {RING_LIGHT_PIN}")
 
 def turn_ring_light_on():
     """Turn on the ring light via GPIO-controlled relay"""
