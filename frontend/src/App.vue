@@ -52,7 +52,8 @@
           </div>
           <div class="timeline-footer">
             <div class="timestamp">
-              Live USB camera feed
+              Live USB camera feed<br>
+              <small style="color: #666;">Capturing {{ imagesPerDay }} images/day ({{ estimatedStoragePerDay }})</small>
             </div>
             <button @click="captureImage(true)" class="control-button capture-button">
               Capture Image
@@ -129,7 +130,7 @@ export default {
       lastUpdateTime: 'Never',
       
       // Configuration from server
-      imageCaptureInterval: 300000,  // Default 5 minutes in ms
+      imageCaptureInterval: 60000,  // Default 1 minute in ms (for livestream still captures)
       maxExposureDuration: 30,
       
       // Intervals
@@ -141,6 +142,22 @@ export default {
   computed: {
     streamUrl() {
       return `${this.apiUrl}/api/stream`
+    },
+    imagesPerDay() {
+      // Calculate images per day: 24 hours * 60 minutes = 1440 images/day
+      const minutesPerDay = 24 * 60
+      const intervalMinutes = this.imageCaptureInterval / 60000
+      return Math.floor(minutesPerDay / intervalMinutes)
+    },
+    estimatedStoragePerDay() {
+      // Estimate storage: assume ~500KB per image (1920x1080 JPEG)
+      const avgImageSizeKB = 500
+      const totalMB = (this.imagesPerDay * avgImageSizeKB) / 1024
+      const totalGB = totalMB / 1024
+      if (totalGB >= 1) {
+        return `${totalGB.toFixed(2)} GB/day`
+      }
+      return `${totalMB.toFixed(1)} MB/day`
     }
   },
   
@@ -319,7 +336,7 @@ export default {
         
       } catch (error) {
         console.warn('Could not fetch config, using defaults')
-        this.imageCaptureInterval = 5 * 60 * 1000 // Default 5 minutes
+        this.imageCaptureInterval = 60 * 1000 // Default 1 minute for livestream still captures
         this.maxExposureDuration = 30
       }
     },
