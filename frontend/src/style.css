@@ -278,6 +278,10 @@ canvas + canvas {
     .env-metric .value {
         font-size: 1.4em;
     }
+
+    .video-background-iframe {
+        transform: scale(4);
+    }
     
     /* Keep environment display side by side even on mobile */
     .environment-display {
