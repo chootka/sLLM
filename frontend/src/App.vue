@@ -339,12 +339,30 @@ export default {
     },
     
     async captureImage() {
+      console.log('🦠 Capture Image button clicked')
+      console.log('API URL:', this.apiUrl)
+      
       try {
+        console.log('Sending POST request to /api/capture-image...')
         const response = await axios.post(`${this.apiUrl}/api/capture-image`, {}, {
           responseType: 'blob'
         })
         
+        console.log('Response received:', {
+          status: response.status,
+          statusText: response.statusText,
+          dataType: response.data?.constructor?.name,
+          dataSize: response.data?.size
+        })
+        
+        if (!response.data || response.data.size === 0) {
+          console.error('⚠️  Received empty response data')
+          throw new Error('Empty image data received')
+        }
+        
         const imageUrl = URL.createObjectURL(response.data)
+        console.log('Created image URL:', imageUrl)
+        
         const imageData = {
           url: imageUrl,
           timestamp: new Date().toISOString()
@@ -355,13 +373,22 @@ export default {
         this.imageError = false
         this.timelinePosition = this.images.length - 1
         
+        console.log('✅ Image added to timeline. Total images:', this.images.length)
+        
         // Keep only last 100 images to prevent memory issues
         if (this.images.length > 100) {
           URL.revokeObjectURL(this.images[0].url)
           this.images.shift()
+          console.log('Removed oldest image (keeping max 100)')
         }
       } catch (error) {
-        console.error('Error capturing image:', error)
+        console.error('❌ Error capturing image:', error)
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        })
         this.imageError = true
         this.currentImage = null
       }
