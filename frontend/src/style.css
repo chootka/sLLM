@@ -41,24 +41,31 @@ body {
     border: none;
     margin: 0;
     padding: 0;
-    /* Base size - will be scaled to cover */
-    width: 177.78vh; /* 16:9 aspect ratio based on height */
+    /* Use viewport units to ensure full coverage */
+    width: 100vw;
     height: 100vh;
+    /* Scale up to ensure no black bars - video will crop but always fill */
+    min-width: 100vw;
+    min-height: 100vh;
 }
 
-/* For screens wider than 16:9, scale video to fill height (will crop sides) */
+/* For wide screens, scale based on height to fill vertically */
 @media (min-aspect-ratio: 16/9) {
     .video-background iframe {
-        width: 177.78vh; /* 16/9 * 100vh */
+        width: calc(100vh * 16 / 9);
         height: 100vh;
+        min-width: calc(100vh * 16 / 9);
+        min-height: 100vh;
     }
 }
 
-/* For screens taller than 16:9, scale video to fill width (will crop top/bottom) */
+/* For tall screens, scale based on width to fill horizontally */
 @media (max-aspect-ratio: 16/9) {
     .video-background iframe {
         width: 100vw;
-        height: 56.25vw; /* 9/16 * 100vw */
+        height: calc(100vw * 9 / 16);
+        min-width: 100vw;
+        min-height: calc(100vw * 9 / 16);
     }
 }
 
