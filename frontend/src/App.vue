@@ -32,10 +32,10 @@
           </div>
         </div>
         
-        <!-- Timelapse Viewer Panel -->
+        <!-- Live Stream Panel -->
         <div class="panel timeline-panel">
           <div class="timeline-header">
-            <h2>Visual Timeline</h2>
+            <h2>Live Stream</h2>
             <div class="status-indicator-wrapper">
               <span :class="['status-indicator', isOnline ? 'online' : 'offline']"></span>
               <span class="status-text">{{ isOnline ? 'Connected' : 'Disconnected' }}</span>
@@ -43,29 +43,16 @@
           </div>
           <div class="timelapse-container">
             <img 
-              v-if="currentImage && !imageError" 
-              :key="imageKey"
-              :src="currentImage" 
+              :src="streamUrl" 
               class="timelapse-image"
-              alt="Slime mould"
+              alt="Live slime mould stream"
               @error="imageError = true"
+              @load="imageError = false"
             >
-            <div v-else style="height: 300px; display: flex; align-items: center; justify-content: center;">
-              <p style="font-size: 1.2em; color: #ecddb1;">Slimes are offline!</p>
-            </div>
           </div>
-          <input 
-            type="range" 
-            v-model.number="timelinePosition" 
-            :max="images.length - 1" 
-            min="0" 
-            class="timeline-scrubber"
-            @input="onTimelineScrub"
-            v-if="images.length > 0"
-          >
           <div class="timeline-footer">
             <div class="timestamp">
-              {{ images.length }} images captured
+              Live USB camera feed
             </div>
             <button @click="captureImage(true)" class="control-button capture-button">
               Capture Image
@@ -148,6 +135,12 @@ export default {
       // Intervals
       imageInterval: null,
       fallbackInterval: null
+    }
+  },
+  
+  computed: {
+    streamUrl() {
+      return `${this.apiUrl}/api/stream`
     }
   },
   

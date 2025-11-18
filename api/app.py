@@ -16,7 +16,7 @@ import random
 sys.path.insert(0, '/usr/lib/python3/dist-packages')
 from datetime import datetime
 from collections import deque
-from flask import Flask, jsonify, send_file, request
+from flask import Flask, jsonify, send_file, request, Response
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import RPi.GPIO as GPIO
@@ -534,6 +534,37 @@ def capture_image():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+def generate_stream():
+    """Generate MJPEG stream from USB camera"""
+    while True:
+        if usb_camera is None or not usb_camera.isOpened():
+            break
+        
+        ret, frame = usb_camera.read()
+        if not ret:
+            break
+        
+        # Encode frame as JPEG
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ret:
+            continue
+        
+        # Yield frame in MJPEG format
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        
+        # Small delay to control frame rate (adjust as needed)
+        time.sleep(0.033)  # ~30 FPS
+
+@app.route('/api/stream')
+def video_stream():
+    """Live video stream endpoint"""
+    if usb_camera is None or not usb_camera.isOpened():
+        return jsonify({"error": "USB camera not available"}), 500
+    
+    return Response(generate_stream(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/api/trigger-light', methods=['POST'])
 def trigger_light():
