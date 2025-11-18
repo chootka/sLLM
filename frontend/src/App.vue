@@ -30,6 +30,7 @@
           <div class="timelapse-container">
             <img 
               v-if="currentImage && !imageError" 
+              :key="imageKey"
               :src="currentImage" 
               class="timelapse-image"
               alt="Slime mould"
@@ -76,7 +77,7 @@
       <div class="panel" style="margin-top: 30px;">
         <h2>Controls</h2>
         <div style="display: flex; align-items: center; gap: 20px;">
-          <button @click="captureImage" class="control-button">
+          <button @click="captureImage(true)" class="control-button">
             Capture Image
           </button>
           <button 
@@ -133,6 +134,7 @@ export default {
       timelinePosition: 0,
       currentImage: null,
       imageError: false,
+      imageKey: 0, // Used to force img element re-render
       
       // System status
       isOnline: false,
@@ -338,8 +340,12 @@ export default {
       }
     },
     
-    async captureImage() {
-      console.log('🦠 Capture Image button clicked')
+    async captureImage(isManual = false) {
+      if (isManual) {
+        console.log('🦠 Capture Image button clicked (MANUAL)')
+      } else {
+        console.log('📸 Automatic image capture')
+      }
       console.log('API URL:', this.apiUrl)
       
       try {
@@ -396,11 +402,13 @@ export default {
         }
         
         this.images.push(imageData)
+        // Update timeline position
+        this.timelinePosition = this.images.length - 1
+        // Update image and force re-render by incrementing key
+        this.imageKey++
         this.currentImage = imageUrl
         this.imageError = false
-        this.timelinePosition = this.images.length - 1
-        
-        console.log('✅ Image added to timeline. Total images:', this.images.length)
+        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey)
         
         // Keep only last 100 images to prevent memory issues
         if (this.images.length > 100) {
