@@ -135,6 +135,7 @@ export default {
       currentImage: null,
       imageError: false,
       imageKey: 0, // Used to force img element re-render
+      capturingImage: false, // Prevent concurrent captures
       
       // System status
       isOnline: false,
@@ -341,12 +342,20 @@ export default {
     },
     
     async captureImage(isManual = false) {
+      // Prevent concurrent captures
+      if (this.capturingImage) {
+        console.log('⏸️  Capture already in progress, skipping...')
+        return
+      }
+      
       if (isManual) {
         console.log('🦠 Capture Image button clicked (MANUAL)')
       } else {
         console.log('📸 Automatic image capture')
       }
       console.log('API URL:', this.apiUrl)
+      
+      this.capturingImage = true
       
       try {
         // Add cache-busting timestamp to ensure we get a fresh image
@@ -404,11 +413,20 @@ export default {
         this.images.push(imageData)
         // Update timeline position
         this.timelinePosition = this.images.length - 1
-        // Update image and force re-render by incrementing key
-        this.imageKey++
-        this.currentImage = imageUrl
+        
+        // Force complete re-render by clearing image first, then setting it
+        // This ensures Vue completely replaces the img element
+        this.currentImage = null
         this.imageError = false
-        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey)
+        this.imageKey++ // Increment key to force Vue to create new img element
+        
+        // Use nextTick to ensure DOM updates after clearing
+        await this.$nextTick()
+        
+        // Now set the new image - Vue will create a fresh img element
+        this.currentImage = imageUrl
+        
+        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'URL:', imageUrl.substring(0, 50) + '...')
         
         // Keep only last 100 images to prevent memory issues
         if (this.images.length > 100) {
@@ -426,11 +444,15 @@ export default {
         })
         this.imageError = true
         this.currentImage = null
+      } finally {
+        this.capturingImage = false
       }
     },
     
     onTimelineScrub() {
       if (this.images.length > 0 && this.timelinePosition < this.images.length) {
+        // Force re-render when scrubbing timeline
+        this.imageKey++
         this.currentImage = this.images[this.timelinePosition].url
         this.imageError = false
       }
