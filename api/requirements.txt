@@ -7,6 +7,7 @@ python-socketio==5.10.0
 # GPIO and Hardware interfaces
 RPi.GPIO==0.7.1
 adafruit-circuitpython-ads1x15==2.2.23
+pyserial==3.5
 
 # Camera support
 picamera2==0.3.16

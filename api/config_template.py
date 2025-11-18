@@ -34,10 +34,15 @@ SERVER_PORT = 5000
 DEBUG_MODE = False
 
 # Data Storage
-DATA_DIR = '/home/pi/sllm/data'
-IMAGE_DIR = f'{DATA_DIR}/images'
-LOG_DIR = f'{DATA_DIR}/logs'
-CSV_DIR = f'{DATA_DIR}/readings'
+# Use relative path from project root, or absolute path on Pi
+# For local development: '../data' (relative to api/ directory)
+# For Pi deployment: '/var/www/sllm/data' or project root 'data'
+import os
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+IMAGE_DIR = os.path.join(DATA_DIR, 'images')
+LOG_DIR = os.path.join(DATA_DIR, 'logs')
+CSV_DIR = os.path.join(DATA_DIR, 'readings')
 
 # Safety Features
 MAX_EXPOSURE_DURATION = 30     # Maximum seconds exposure light can be on

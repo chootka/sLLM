@@ -38,9 +38,26 @@ echo "Creating deployment directories..."
 mkdir -p $FRONTEND_DIR
 mkdir -p $API_DIR
 
-# Copy frontend files
-echo "Copying frontend files..."
-cp -r frontend/* $FRONTEND_DIR/
+# Build and copy frontend files
+echo "Building frontend..."
+cd "$PROJECT_ROOT/frontend"
+if [ -f "package.json" ]; then
+    # Install npm dependencies if node_modules doesn't exist
+    if [ ! -d "node_modules" ]; then
+        echo "Installing npm dependencies..."
+        npm install
+    fi
+    # Build the frontend
+    echo "Running Vite build..."
+    npm run build
+    # Copy built files
+    echo "Copying built frontend files..."
+    cp -r dist/* $FRONTEND_DIR/
+else
+    # Fallback: copy frontend files directly if no package.json
+    echo "No package.json found, copying frontend files directly..."
+    cp -r "$PROJECT_ROOT/frontend"/* $FRONTEND_DIR/
+fi
 chown -R www-data:www-data $FRONTEND_DIR
 chmod -R 755 $FRONTEND_DIR
 
@@ -50,17 +67,24 @@ cp -r api/* $API_DIR/
 chown -R www-data:www-data $API_DIR
 chmod -R 755 $API_DIR
 
+# Create data directories
+echo "Creating data directories..."
+DATA_DIR="$DEPLOY_DIR/data"
+mkdir -p "$DATA_DIR/images"
+mkdir -p "$DATA_DIR/logs"
+mkdir -p "$DATA_DIR/readings"
+chown -R www-data:www-data "$DATA_DIR"
+chmod -R 755 "$DATA_DIR"
+
 # Install Python dependencies in virtual environment
 echo "Installing Python dependencies..."
 cd $API_DIR
 
-# Use existing virtual environment
-VENV_PATH="/home/chootka/slime_env"
+# Create virtual environment if it doesn't exist
+VENV_PATH="$API_DIR/venv"
 if [ ! -d "$VENV_PATH" ]; then
-    echo "⚠️  Virtual environment not found at $VENV_PATH"
-    echo "   Creating new virtual environment at $API_DIR/venv..."
-    python3 -m venv "$API_DIR/venv"
-    VENV_PATH="$API_DIR/venv"
+    echo "Creating virtual environment at $VENV_PATH..."
+    python3 -m venv "$VENV_PATH"
 fi
 
 # Activate virtual environment and install dependencies
@@ -114,11 +138,8 @@ else
     echo "   See DEPLOYMENT.md for configuration"
 fi
 
-# Determine virtual environment path
-VENV_PATH="/home/chootka/slime_env"
-if [ ! -d "$VENV_PATH" ]; then
-    VENV_PATH="$API_DIR/venv"
-fi
+# Virtual environment path (always use project-local venv)
+VENV_PATH="$API_DIR/venv"
 
 # Setup Flask API service
 if [ -f "/etc/systemd/system/sllm-api.service" ]; then

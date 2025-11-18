@@ -121,8 +121,8 @@ Camera --------> USB or CSI port (depending on camera type)
    Type=simple
    User=pi
    WorkingDirectory=/home/pi
-   Environment="PATH=/home/pi/slime_env/bin"
-   ExecStart=/home/pi/slime_env/bin/python /home/pi/slime_api.py
+   Environment="PATH=/var/www/sllm/api/venv/bin:/usr/bin:/usr/local/bin"
+   ExecStart=/var/www/sllm/api/venv/bin/python /var/www/sllm/api/app.py
    Restart=always
 
    [Install]

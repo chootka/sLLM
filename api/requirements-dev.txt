@@ -1,0 +1,24 @@
+# Development requirements (for macOS/Windows)
+# Excludes Raspberry Pi-specific packages that won't install on non-Linux systems
+
+# Core Flask dependencies
+flask==3.0.0
+flask-cors==4.0.0
+flask-socketio==5.3.5
+python-socketio==5.10.0
+
+# Serial communication (for Arduino)
+pyserial==3.5
+
+# Numerical computing
+numpy==1.26.2
+
+# Note: The following packages from requirements.txt are Raspberry Pi-specific 
+# and will only install on Linux (Raspberry Pi):
+# - RPi.GPIO==0.7.1 (GPIO control)
+# - picamera2==0.3.16 (Raspberry Pi camera)
+# - adafruit-circuitpython-ads1x15==2.2.23 (I2C ADC - replaced by Arduino serial)
+# - adafruit-blinka, adafruit-platformdetect, adafruit-pureio (CircuitPython support)
+
+# To install all packages including Pi-specific ones, use requirements.txt on the Raspberry Pi
+

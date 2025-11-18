@@ -1,2 +1,7 @@
 /data/
 scripts/config.sh
+api/venv/
+api/.venv/
+frontend/node_modules/
+frontend/dist/
+.DS_Store

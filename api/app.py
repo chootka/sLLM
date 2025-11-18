@@ -19,8 +19,8 @@ from flask_socketio import SocketIO, emit
 import RPi.GPIO as GPIO
 import board
 import busio
-import adafruit_ads1x15.ads1115 as ADS
-from adafruit_ads1x15.analog_in import AnalogIn
+import serial
+import serial.tools.list_ports
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
@@ -73,12 +73,44 @@ GPIO.setup(EXPOSURE_LIGHT_PIN, GPIO.OUT)
 GPIO.output(RING_LIGHT_PIN, GPIO.LOW)
 GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.LOW)
 
-# Initialize ADC (ADS1115)
-i2c = busio.I2C(board.SCL, board.SDA)
-ads = ADS.ADS1115(i2c, address=config.ADC_ADDRESS)
-ads.gain = config.ADC_GAIN  # Set gain from config
-# Create differential input between A0 and A1
-chan = AnalogIn(ads, ADS.P0, ADS.P1)
+# Initialize Serial connection to Arduino
+SERIAL_BAUD = 1200  # Match Arduino's Serial.begin(1200)
+
+def find_arduino_port():
+    """Find the Arduino serial port automatically"""
+    ports = serial.tools.list_ports.comports()
+    for port in ports:
+        # Common Arduino identifiers
+        if any(keyword in port.description.upper() for keyword in ['USB', 'ARDUINO', 'CH340', 'FTDI', 'SERIAL']):
+            return port.device
+    # Fallback: try common port names
+    for port_name in ['/dev/ttyUSB0', '/dev/ttyACM0', '/dev/ttyUSB1', '/dev/ttyACM1']:
+        try:
+            test_serial = serial.Serial(port_name, SERIAL_BAUD, timeout=1)
+            test_serial.close()
+            return port_name
+        except:
+            continue
+    return None
+
+SERIAL_PORT = find_arduino_port()
+arduino_serial = None
+if SERIAL_PORT:
+    try:
+        arduino_serial = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+        print(f"✓ Arduino connected on {SERIAL_PORT} at {SERIAL_BAUD} baud")
+    except Exception as e:
+        print(f"✗ Failed to open serial port {SERIAL_PORT}: {e}")
+        arduino_serial = None
+else:
+    print("✗ WARNING: Could not find Arduino serial port")
+    print("  Trying default /dev/ttyUSB0...")
+    try:
+        arduino_serial = serial.Serial('/dev/ttyUSB0', SERIAL_BAUD, timeout=1)
+        print("✓ Connected to /dev/ttyUSB0")
+    except Exception as e:
+        print(f"✗ Failed to open /dev/ttyUSB0: {e}")
+        arduino_serial = None
 
 # Initialize DHT sensor (if available)
 dht_sensor = None
@@ -98,29 +130,62 @@ camera_config = picam2.create_still_configuration(main={"size": config.CAMERA_RE
 picam2.configure(camera_config)
 
 def read_electrical_data():
-    """Continuously read electrical data from the slime mold"""
+    """Continuously read electrical data from Arduino via serial port"""
     global current_reading
+    
+    if not arduino_serial:
+        print("ERROR: Arduino serial port not initialized. Cannot read electrical data.")
+        return
     
     while True:
         try:
-            # Read voltage from ADC
-            voltage = chan.voltage
-            timestamp = time.time()
+            # Read a line from serial port
+            if arduino_serial.in_waiting > 0:
+                line = arduino_serial.readline().decode('utf-8', errors='ignore').strip()
+                
+                if line:
+                    # Parse the voltage value (Arduino sends in mV, convert to V)
+                    try:
+                        voltage_mv = float(line)
+                        voltage = voltage_mv / 1000.0  # Convert mV to V
+                        
+                        timestamp = time.time()
+                        reading = {
+                            "timestamp": timestamp,
+                            "value": voltage,
+                            "datetime": datetime.now().isoformat()
+                        }
+                        
+                        with readings_lock:
+                            readings_buffer.append(reading)
+                            current_reading = reading
+                            
+                    except ValueError:
+                        # Skip invalid lines (non-numeric data)
+                        continue
             
-            reading = {
-                "timestamp": timestamp,
-                "value": voltage,
-                "datetime": datetime.now().isoformat()
-            }
+            # Small delay to prevent CPU spinning
+            time.sleep(0.01)
             
-            with readings_lock:
-                readings_buffer.append(reading)
-                current_reading = reading
-            
-            time.sleep(1.0 / config.ELECTRICAL_SAMPLE_RATE)  # Read at configured rate
-            
+        except serial.SerialException as e:
+            print(f"Serial port error: {e}")
+            time.sleep(1)
+            # Try to reconnect
+            global arduino_serial
+            try:
+                if arduino_serial and arduino_serial.is_open:
+                    arduino_serial.close()
+            except:
+                pass
+            try:
+                if SERIAL_PORT:
+                    arduino_serial = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+                    print(f"Reconnected to {SERIAL_PORT}")
+            except Exception as reconnect_error:
+                print(f"Failed to reconnect: {reconnect_error}")
+                arduino_serial = None
         except Exception as e:
-            print(f"Error reading ADC: {e}")
+            print(f"Error reading serial: {e}")
             time.sleep(1)
 
 def read_environment_data():
@@ -348,3 +413,6 @@ if __name__ == '__main__':
         picam2.close()
         if dht_sensor:
             dht_sensor.exit()
+        if arduino_serial and arduino_serial.is_open:
+            arduino_serial.close()
+            print("Serial port closed")
