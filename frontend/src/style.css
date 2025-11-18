@@ -290,7 +290,7 @@ canvas + canvas {
     }
     
     body {
-        padding: 8px;
+        padding: 4px;
     }
     
     .container {
@@ -301,12 +301,12 @@ canvas + canvas {
     
     h1 {
         font-size: 1.3em;
-        margin-bottom: 15px;
-        padding: 0 5px;
+        margin-bottom: 12px;
+        padding: 0 2px;
     }
     
     .panel {
-        padding: 12px;
+        padding: 10px;
         width: 100%;
         max-width: 100%;
     }
@@ -397,8 +397,21 @@ canvas + canvas {
     }
     
     .grid {
-        gap: 15px;
-        margin-bottom: 15px;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .environment-display {
+        gap: 8px;
+        margin: 12px 0;
+    }
+    
+    .timeline-header {
+        margin-bottom: 10px;
+    }
+    
+    .timeline-footer {
+        margin-top: 10px;
     }
 }
 
