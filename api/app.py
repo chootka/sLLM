@@ -468,8 +468,8 @@ def capture_image():
         
         print(f"✓ Frame captured: {frame.shape if frame is not None else 'None'}")
         
-        # Save image
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Save image with millisecond precision to ensure unique filenames
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Include milliseconds (last 3 digits of microseconds)
         filename = os.path.join(config.IMAGE_DIR, f"slime_{timestamp}.jpg")
         print(f"💾 Saving image to: {filename}")
         
