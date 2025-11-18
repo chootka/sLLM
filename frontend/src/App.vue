@@ -107,7 +107,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.12',
+      appVersion: '1.0.13',
       
       // API configuration
       apiUrl: window.location.origin,
@@ -182,7 +182,6 @@ export default {
       
       // Real-time data events
       this.socket.on('reading_update', (data) => {
-        console.log('Reading update received:', data)
         this.currentReading = data.value
         const date = new Date(data.datetime)
         this.lastUpdateTime = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
@@ -190,7 +189,6 @@ export default {
       })
       
       this.socket.on('environment_update', (data) => {
-        console.log('Environment update received:', data)
         this.temperature = data.temperature
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
@@ -242,7 +240,17 @@ export default {
             plugins: {
               legend: {
                 display: false
+              },
+              tooltip: {
+                enabled: false
+              },
+              decimation: {
+                enabled: false
               }
+            },
+            interaction: {
+              intersect: false,
+              mode: 'index'
             },
             scales: {
               x: {
@@ -300,20 +308,11 @@ export default {
     },
     
     updateChart(reading) {
-      if (!this.chart || !this.chart.data || !this.chart.data.datasets || !this.chart.data.datasets[0]) {
-        console.warn('Chart not ready for update')
-        return
-      }
+      if (!this.chart || !this.chart.data || !this.chart.data.datasets || !this.chart.data.datasets[0]) return
       
       const time = new Date(reading.datetime).toLocaleTimeString()
       this.chart.data.labels.push(time)
       this.chart.data.datasets[0].data.push(reading.value)
-      
-      console.log('Chart data:', {
-        labels: this.chart.data.labels.length,
-        data: this.chart.data.datasets[0].data.length,
-        latest: reading.value
-      })
       
       // Keep only last 50 points
       if (this.chart.data.labels.length > 50) {
@@ -321,7 +320,11 @@ export default {
         this.chart.data.datasets[0].data.shift()
       }
       
-      this.chart.update('none')
+      try {
+        this.chart.update('none')
+      } catch (error) {
+        console.log('Chart update error:', error)
+      }
     },
     
     async captureImage() {
