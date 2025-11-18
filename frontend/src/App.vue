@@ -55,7 +55,7 @@
       </div>
       
       <!-- Environmental Monitoring Panel -->
-      <div class="panel" v-if="hasEnvironmentalData">
+      <div class="panel">
         <h2>Environmental Conditions</h2>
         <div class="environment-display">
           <div class="env-metric">
@@ -68,7 +68,7 @@
           </div>
         </div>
         <div class="timestamp">
-          {{ environmentUpdateTime }}
+          {{ environmentUpdateTime || 'No data yet' }}
         </div>
       </div>
       
@@ -107,7 +107,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.10',
+      appVersion: '1.0.11',
       
       // API configuration
       apiUrl: window.location.origin,
@@ -189,13 +189,12 @@ export default {
       })
       
       this.socket.on('environment_update', (data) => {
+        console.log('Environment update received:', data)
         this.temperature = data.temperature
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
         const date = new Date(data.datetime)
         this.environmentUpdateTime = `Last update: ${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
-        
-        // Just update the display values, no chart for now
       })
       
       this.socket.on('status_update', (data) => {
