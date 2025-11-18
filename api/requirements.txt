@@ -17,7 +17,7 @@ numpy==1.26.2
 
 # Optional: Temperature/Humidity sensor
 # For SHT31 (recommended - more accurate, I2C):
-adafruit-circuitpython-sht31d==2.4.4
+adafruit-circuitpython-sht31d==2.3.29
 # For DHT22/DHT11 (GPIO-based, less accurate):
 # adafruit-circuitpython-dht==4.0.4
 
