@@ -36,30 +36,36 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) scale(1.5);
+    transform: translate(-50%, -50%);
     pointer-events: none;
     border: none;
     margin: 0;
     padding: 0;
+    /* Always fill the viewport, cropping if necessary */
+    min-width: 100vw;
+    min-height: 100vh;
     width: 100vw;
     height: 100vh;
+    object-fit: cover;
 }
 
-/* For screens wider than 16:9, scale video to be wider than viewport */
+/* For screens wider than 16:9, make video taller to fill height */
 @media (min-aspect-ratio: 16/9) {
     .video-background iframe {
         width: calc(100vh * 16 / 9);
         height: 100vh;
-        transform: translate(-50%, -50%) scale(1.5);
+        min-width: calc(100vh * 16 / 9);
+        min-height: 100vh;
     }
 }
 
-/* For screens taller than 16:9, scale video to be taller than viewport */
+/* For screens taller than 16:9, make video wider to fill width */
 @media (max-aspect-ratio: 16/9) {
     .video-background iframe {
         width: 100vw;
         height: calc(100vw * 9 / 16);
-        transform: translate(-50%, -50%) scale(1.5);
+        min-width: 100vw;
+        min-height: calc(100vw * 9 / 16);
     }
 }
 
