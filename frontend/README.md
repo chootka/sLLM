@@ -60,7 +60,7 @@ frontend/
 
 ## Deployment
 
-The deployment script (`scripts/deploy.sh`) automatically:
+The deployment script (`scripts/deploy_on_pi.sh`) automatically:
 1. Installs npm dependencies
 2. Builds the frontend with Vite
 3. Copies the built files to `/var/www/sllm/frontend/`

@@ -9,7 +9,7 @@ From your dev machine (where you are now), run:
 cd /Users/sarah/Documents/_projects/sLLM/dev/sLLM
 
 # Transfer everything to Pi
-scp -r frontend api nginx.conf deploy.sh pi@100.85.144.126:/home/pi/sllm-deploy/
+scp -r frontend api nginx.conf deploy_on_pi.sh pi@100.85.144.126:/home/pi/sllm-deploy/
 ```
 
 ## Step 2: SSH into Pi and Run Deploy Script
@@ -22,7 +22,7 @@ ssh pi@100.85.144.126
 cd /home/pi/sllm-deploy
 
 # Run the deploy script with sudo
-sudo ./deploy.sh
+sudo ./deploy_on_pi.sh
 ```
 
 That's it! The script will:
@@ -60,8 +60,8 @@ curl https://sllm.tailf7c7fb.ts.net/api/status
 
 If you get permission errors:
 ```bash
-# Make deploy.sh executable
-chmod +x deploy.sh
+# Make deploy_on_pi.sh executable
+chmod +x deploy_on_pi.sh
 ```
 
 If nginx config fails:

@@ -2,6 +2,48 @@
 
 This guide covers deploying sLLM to your Raspberry Pi 5 using Tailscale for secure remote access.
 
+## Quick Start: Automated Deployment
+
+**For the fastest deployment, use the automated scripts:**
+
+### Option 1: Deploy from Your Local Machine (Recommended)
+
+From your local machine, run:
+```bash
+./scripts/deploy_to_pi.sh
+```
+
+This script will:
+- SSH into your Raspberry Pi
+- Pull the latest code from git
+- Run the deployment script on the Pi
+
+**Prerequisites:** You need `scripts/config.sh` configured with your Pi's details (see `scripts/config.example.sh`).
+
+### Option 2: Deploy on the Pi Directly
+
+If you're already on the Pi or prefer manual control:
+
+1. **Pull latest code:**
+   ```bash
+   cd /path/to/sllm
+   git pull
+   ```
+
+2. **Run deployment script:**
+   ```bash
+   sudo ./scripts/deploy_on_pi.sh
+   ```
+
+The deployment script automatically:
+- Builds the frontend with Vite
+- Copies files to `/var/www/sllm/`
+- Creates virtual environment and installs dependencies
+- Sets up nginx configuration
+- Creates and starts the systemd service
+
+**For manual step-by-step instructions, continue reading below.**
+
 ## Prerequisites
 
 - Raspberry Pi 5 with slime mold monitoring hardware

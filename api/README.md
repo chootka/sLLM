@@ -58,7 +58,7 @@ nano config.py
 
 ## Deployment
 
-The deployment script (`scripts/deploy.sh`) automatically:
+The deployment script (`scripts/deploy_on_pi.sh`) automatically:
 1. Creates a virtual environment at `/var/www/sllm/api/venv`
 2. Installs all dependencies from `requirements.txt`
 3. Sets up the systemd service

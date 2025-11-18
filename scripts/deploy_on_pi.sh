@@ -19,9 +19,26 @@ FRONTEND_DIR="$DEPLOY_DIR/frontend"
 API_DIR="$DEPLOY_DIR/api"
 NGINX_CONF="/etc/nginx/sites-available/sllm.visceral.systems"
 
-# Check if running as root or with sudo
-if [ "$EUID" -ne 0 ]; then 
-    echo "Please run with sudo"
+# Detect OS
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    IS_LINUX=true
+    WEB_USER="www-data"
+    WEB_GROUP="www-data"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    IS_LINUX=false
+    WEB_USER=$(whoami)
+    WEB_GROUP=$(id -gn)
+    echo "⚠️  Running on macOS - this script is designed for Raspberry Pi deployment"
+    echo "   Some operations will be skipped or adapted for macOS"
+else
+    IS_LINUX=false
+    WEB_USER=$(whoami)
+    WEB_GROUP=$(id -gn)
+fi
+
+# Check if running as root or with sudo (only required on Linux)
+if [ "$IS_LINUX" = true ] && [ "$EUID" -ne 0 ]; then 
+    echo "Please run with sudo on Linux"
     exit 1
 fi
 
@@ -58,13 +75,17 @@ else
     echo "No package.json found, copying frontend files directly..."
     cp -r "$PROJECT_ROOT/frontend"/* $FRONTEND_DIR/
 fi
-chown -R www-data:www-data $FRONTEND_DIR
+if [ "$IS_LINUX" = true ]; then
+    chown -R $WEB_USER:$WEB_GROUP $FRONTEND_DIR
+fi
 chmod -R 755 $FRONTEND_DIR
 
 # Copy API files
 echo "Copying API files..."
 cp -r api/* $API_DIR/
-chown -R www-data:www-data $API_DIR
+if [ "$IS_LINUX" = true ]; then
+    chown -R $WEB_USER:$WEB_GROUP $API_DIR
+fi
 chmod -R 755 $API_DIR
 
 # Create data directories
@@ -73,7 +94,9 @@ DATA_DIR="$DEPLOY_DIR/data"
 mkdir -p "$DATA_DIR/images"
 mkdir -p "$DATA_DIR/logs"
 mkdir -p "$DATA_DIR/readings"
-chown -R www-data:www-data "$DATA_DIR"
+if [ "$IS_LINUX" = true ]; then
+    chown -R $WEB_USER:$WEB_GROUP "$DATA_DIR"
+fi
 chmod -R 755 "$DATA_DIR"
 
 # Install Python dependencies in virtual environment

@@ -42,7 +42,7 @@ fi
 
 # Make deploy script executable on Pi
 echo "🔧 Making deploy script executable..."
-ssh ${PI_USER}@${PI_IP} "chmod +x ${PI_DIR}/scripts/deploy.sh"
+ssh ${PI_USER}@${PI_IP} "chmod +x ${PI_DIR}/scripts/deploy_on_pi.sh"
 
 echo ""
 echo "✅ Setup complete!"
@@ -53,9 +53,9 @@ echo "   ssh ${PI_USER}@${PI_IP}"
 echo ""
 echo "2. Run the deploy script:"
 echo "   cd ${PI_DIR}"
-echo "   sudo ./scripts/deploy.sh"
+echo "   sudo ./scripts/deploy_on_pi.sh"
 echo ""
 echo "For future updates, just run on Pi:"
-echo "   cd ${PI_DIR} && git pull && sudo ./scripts/deploy.sh"
+echo "   cd ${PI_DIR} && git pull && sudo ./scripts/deploy_on_pi.sh"
 echo ""
 
