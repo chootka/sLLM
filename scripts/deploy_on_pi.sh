@@ -182,9 +182,12 @@ fi
 # Virtual environment path (always use project-local venv)
 VENV_PATH="$API_DIR/venv"
 
-# PYTHONNOUSERSITE=1 prevents Python from finding user site-packages
-# The venv's Python will automatically prioritize venv site-packages
+# Detect Python version and site-packages path
+PYTHON_VERSION=$($VENV_PATH/bin/python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "python3")
+VENV_SITE_PACKAGES="$VENV_PATH/lib/$PYTHON_VERSION/site-packages"
 
+# PYTHONNOUSERSITE=1 prevents Python from finding user site-packages
+# PYTHONPATH explicitly set to ONLY venv site-packages to prevent system-wide NumPy conflicts
 # Setup Flask API service
 if [ -f "/etc/systemd/system/sllm-api.service" ]; then
     echo "Updating Flask API service to use virtual environment..."
@@ -202,6 +205,7 @@ Group=chootka
 WorkingDirectory=/home/chootka
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 Environment="PYTHONNOUSERSITE=1"
+Environment="PYTHONPATH=$VENV_SITE_PACKAGES"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
@@ -230,6 +234,7 @@ Group=chootka
 WorkingDirectory=/home/chootka
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 Environment="PYTHONNOUSERSITE=1"
+Environment="PYTHONPATH=$VENV_SITE_PACKAGES"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
