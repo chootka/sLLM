@@ -10,10 +10,10 @@ adafruit-circuitpython-ads1x15==2.2.23
 pyserial==3.5
 
 # Camera support (USB camera via OpenCV)
-opencv-python==4.8.1.78
+opencv-python==4.9.0.80
 
-# Numerical computing
-numpy==1.26.2
+# Numerical computing (compatible with opencv-python)
+numpy==1.26.4
 
 # Optional: Temperature/Humidity sensor
 # For SHT31 (recommended - more accurate, I2C):
