@@ -11,6 +11,8 @@ import threading
 import base64
 import os
 import sys
+# Add system site-packages for libgpiod (required for Raspberry Pi 5)
+sys.path.insert(0, '/usr/lib/python3/dist-packages')
 from datetime import datetime
 from collections import deque
 from flask import Flask, jsonify, send_file, request
