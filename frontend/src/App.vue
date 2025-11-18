@@ -73,7 +73,7 @@
       </div>
       
       <!-- Control Panel -->
-      <div class="panel">
+      <div class="panel" style="margin-top: 30px;">
         <h2>Controls</h2>
         <div style="display: flex; align-items: center; gap: 20px;">
           <button @click="captureImage" class="control-button">
@@ -186,7 +186,8 @@ export default {
       // Real-time data events
       this.socket.on('reading_update', (data) => {
         this.currentReading = data.value
-        this.lastUpdateTime = new Date(data.datetime).toLocaleTimeString()
+        const date = new Date(data.datetime)
+        this.lastUpdateTime = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
         this.updateChart(data)
       })
       
@@ -194,7 +195,8 @@ export default {
         this.temperature = data.temperature
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
-        this.environmentUpdateTime = `Updated: ${new Date(data.datetime).toLocaleTimeString()}`
+        const date = new Date(data.datetime)
+        this.environmentUpdateTime = `Last Update: ${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
         this.updateEnvironmentChart(data)
       })
       
@@ -275,10 +277,14 @@ export default {
           animation: false,
           plugins: {
             legend: {
-              display: false
+              display: true,
+              position: 'top',
+              labels: {
+                color: '#ecddb1'
+              }
             },
             tooltip: {
-              enabled: false
+              enabled: true
             }
           },
           scales: {
@@ -384,12 +390,7 @@ export default {
         if (this.chart.data.datasets[2]) this.chart.data.datasets[2].data.shift()
       }
       
-      // Simple debounce - only update if not already updating
-      if (!this.chartUpdating) {
-        this.chartUpdating = true
-        this.chart.update('none')
-        setTimeout(() => { this.chartUpdating = false }, 50)
-      }
+      this.debouncedChartUpdate()
     },
     
     updateEnvironmentChart(envData) {
@@ -428,12 +429,35 @@ export default {
         if (this.chart.data.datasets[2]) this.chart.data.datasets[2].data.shift()
       }
       
-      // Simple debounce - only update if not already updating
-      if (!this.chartUpdating) {
-        this.chartUpdating = true
-        this.chart.update('none')
-        setTimeout(() => { this.chartUpdating = false }, 50)
+      this.debouncedChartUpdate()
+    },
+    
+    debouncedChartUpdate() {
+      if (!this.chart || this.chartUpdating) return
+      
+      // Clear any pending update
+      if (this.chartUpdateTimeout) {
+        clearTimeout(this.chartUpdateTimeout)
       }
+      
+      // Schedule update after a delay to batch multiple updates
+      this.chartUpdateTimeout = setTimeout(() => {
+        if (this.chart && !this.chartUpdating) {
+          this.chartUpdating = true
+          // Use requestAnimationFrame to ensure update happens in next frame
+          requestAnimationFrame(() => {
+            if (this.chart) {
+              try {
+                this.chart.update('none')
+              } catch (e) {
+                console.error('Chart update error:', e)
+              } finally {
+                this.chartUpdating = false
+              }
+            }
+          })
+        }
+      }, 150)
     },
     
     async captureImage() {
@@ -497,7 +521,8 @@ export default {
           this.temperature = status.environment.temperature
           this.humidity = status.environment.humidity
           this.hasEnvironmentalData = true
-          this.environmentUpdateTime = `Updated: ${new Date(status.environment.datetime).toLocaleTimeString()}`
+          const date = new Date(status.environment.datetime)
+          this.environmentUpdateTime = `Last update: ${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
         }
       } catch (error) {
         this.isOnline = false
