@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="video-background">
+    <div class="video-background-container">
       <iframe 
         src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0&responsive=1"
         frameborder="0"
@@ -12,6 +12,7 @@
           left: 0;
           position: fixed;
           transform: scale(1.5);"
+        class="video-background-iframe"
         >
       </iframe>
     </div>
