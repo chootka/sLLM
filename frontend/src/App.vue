@@ -283,8 +283,8 @@ export default {
               },
               y: {
                 display: true,
-                min: -5,
-                max: 5,
+                min: -10,
+                max: 10,
                 grid: {
                   color: 'rgba(255, 255, 255, 0.1)'
                 },
