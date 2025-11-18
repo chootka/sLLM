@@ -42,7 +42,12 @@ body {
     border: none;
     margin: 0;
     padding: 0;
-    /* Stretch to fill entire screen - distort if needed */
+    /* 
+     * Vimeo responsive=1 parameter makes the player responsive to container size.
+     * Setting iframe to 100vw x 100vh forces it to fill the viewport.
+     * Vimeo will scale the video to fit, but may maintain aspect ratio.
+     * To force distortion, we can use CSS transforms if needed.
+     */
 }
 
 .container {

@@ -2,10 +2,11 @@
   <div>
     <div class="video-background">
       <iframe 
-        src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0" 
+        src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0&responsive=1&title=0&byline=0&portrait=0" 
         frameborder="0" 
         allow="autoplay; fullscreen; picture-in-picture" 
-        allowfullscreen>
+        allowfullscreen
+        style="width: 100%; height: 100%;">
       </iframe>
     </div>
     <div class="container">
