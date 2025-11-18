@@ -37,6 +37,12 @@ if ssh -o ConnectTimeout=5 -A ${PI_USER}@${PI_IP} "[ -d ${PI_DIR}/.git ]" 2>/dev
     ssh -A ${PI_USER}@${PI_IP} "cd ${PI_DIR} && git pull"
 else
     echo "❌ Repository not found on Pi!"
+    echo "   Checking if directory exists..."
+    ssh -A ${PI_USER}@${PI_IP} "ls -la ${PI_DIR} 2>&1 || echo 'Directory does not exist'"
+    echo ""
+    echo "   Debug: Testing SSH connection..."
+    ssh -A ${PI_USER}@${PI_IP} "echo 'SSH connection successful' && pwd && ls -la ${PI_DIR}/.git 2>&1 || echo '.git directory not found'"
+    echo ""
     echo "   Please run scripts/transfer_to_pi.sh first to clone the repository"
     exit 1
 fi

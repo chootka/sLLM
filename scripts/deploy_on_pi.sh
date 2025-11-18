@@ -82,7 +82,22 @@ chmod -R 755 $FRONTEND_DIR
 
 # Copy API files
 echo "Copying API files..."
-cp -r api/* $API_DIR/
+cd "$PROJECT_ROOT"
+if [ -d "api" ]; then
+    # Use rsync if available (more reliable), otherwise use cp with proper glob handling
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -av --exclude='__pycache__' --exclude='*.pyc' --exclude='venv' api/ $API_DIR/
+    else
+        # Fallback: copy directory contents using a loop to avoid glob issues
+        for item in api/* api/.[!.]*; do
+            if [ -e "$item" ]; then
+                cp -r "$item" $API_DIR/
+            fi
+        done
+    fi
+else
+    echo "⚠️  Warning: api directory not found at $PROJECT_ROOT/api"
+fi
 if [ "$IS_LINUX" = true ]; then
     chown -R $WEB_USER:$WEB_GROUP $API_DIR
 fi
