@@ -182,9 +182,8 @@ fi
 # Virtual environment path (always use project-local venv)
 VENV_PATH="$API_DIR/venv"
 
-# Detect Python version from venv
-PYTHON_VERSION=$(basename $(ls -d $VENV_PATH/lib/python*.* 2>/dev/null | head -1) 2>/dev/null || echo "python3")
-PYTHON_SITE_PACKAGES="$VENV_PATH/lib/$PYTHON_VERSION/site-packages"
+# PYTHONNOUSERSITE=1 prevents Python from finding user site-packages
+# The venv's Python will automatically prioritize venv site-packages
 
 # Setup Flask API service
 if [ -f "/etc/systemd/system/sllm-api.service" ]; then
@@ -203,7 +202,6 @@ Group=chootka
 WorkingDirectory=/home/chootka
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 Environment="PYTHONNOUSERSITE=1"
-Environment="PYTHONPATH=$PYTHON_SITE_PACKAGES"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
@@ -232,7 +230,6 @@ Group=chootka
 WorkingDirectory=/home/chootka
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 Environment="PYTHONNOUSERSITE=1"
-Environment="PYTHONPATH=$PYTHON_SITE_PACKAGES"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
 RestartSec=10
