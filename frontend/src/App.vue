@@ -18,7 +18,7 @@
           <div class="readings-display">
             {{ currentReading.toFixed(1) }} mV
           </div>
-          <canvas ref="readingsChart"></canvas>
+          <canvas ref="chart"></canvas>
           <div class="timestamp">
             Last update: {{ lastUpdateTime }}
           </div>
@@ -106,6 +106,9 @@ export default {
   name: 'App',
   data() {
     return {
+      // App version - increment on each deployment
+      appVersion: '1.0.10',
+      
       // API configuration
       apiUrl: window.location.origin,
       socket: null,
@@ -140,15 +143,12 @@ export default {
       
       // Intervals
       imageInterval: null,
-      fallbackInterval: null,
-      chartUpdateTimeout: null,
-      chartReady: false,
-      chartUpdating: false,
-      chartErrorCount: 0
+      fallbackInterval: null
     }
   },
   
   mounted() {
+    console.log(`🦠 sLLM Frontend v${this.appVersion}`)
     this.initializeChart()
     this.connectSocket()
     this.startImageCapture()
@@ -161,10 +161,7 @@ export default {
     }
     if (this.imageInterval) clearInterval(this.imageInterval)
     if (this.fallbackInterval) clearInterval(this.fallbackInterval)
-    if (this.chartUpdateTimeout) clearTimeout(this.chartUpdateTimeout)
-    if (this.chart) {
-      this.chart.destroy()
-    }
+    if (this.chart) this.chart.destroy()
   },
   
   methods: {
@@ -196,8 +193,9 @@ export default {
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
         const date = new Date(data.datetime)
-        this.environmentUpdateTime = `Last Update: ${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
-        this.updateEnvironmentChart(data)
+        this.environmentUpdateTime = `Last update: ${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
+        
+        // Just update the display values, no chart for now
       })
       
       this.socket.on('status_update', (data) => {
@@ -215,126 +213,60 @@ export default {
     },
     
     initializeChart() {
-      // Wait for next tick to ensure canvas is rendered
       this.$nextTick(() => {
-        const canvas = this.$refs.readingsChart
-        if (!canvas) {
-          console.error('Chart canvas not found')
-          return
-        }
+        const canvas = this.$refs.chart
+        if (!canvas) return
         
         const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          console.error('Could not get 2d context')
-          return
-        }
+        if (!ctx) return
         
-        // Destroy existing chart if any
-        if (this.chart) {
-          this.chart.destroy()
-        }
+        if (this.chart) this.chart.destroy()
         
         this.chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [
-            {
-              label: 'Voltage (in mV)',
+          type: 'line',
+          data: {
+            labels: [],
+            datasets: [{
+              label: 'Voltage (mV)',
               data: [],
               borderColor: '#a0d468',
               backgroundColor: 'rgba(160, 212, 104, 0.1)',
               borderWidth: 2,
               tension: 0.4,
-              pointRadius: 0,
-              yAxisID: 'y'
-            },
-            {
-              label: 'Temperature (°C)',
-              data: [],
-              borderColor: '#ff6b6b',
-              backgroundColor: 'rgba(255, 107, 107, 0.1)',
-              borderWidth: 2,
-              tension: 0.4,
-              pointRadius: 0,
-              yAxisID: 'y1'
-            },
-            {
-              label: 'Humidity (%)',
-              data: [],
-              borderColor: '#4ecdc4',
-              backgroundColor: 'rgba(78, 205, 196, 0.1)',
-              borderWidth: 2,
-              tension: 0.4,
-              pointRadius: 0,
-              yAxisID: 'y1'
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          plugins: {
-            legend: {
-              display: true,
-              position: 'top',
-              labels: {
-                color: '#ecddb1'
-              }
-            },
-            tooltip: {
-              enabled: true
-            }
+              pointRadius: 0
+            }]
           },
-          scales: {
-            x: {
-              display: true,
-              grid: {
-                color: 'rgba(255, 255, 255, 0.1)'
-              },
-              ticks: {
-                color: '#666',
-                maxTicksLimit: 6
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
               }
             },
-            y: {
-              type: 'linear',
-              display: true,
-              position: 'left',
-              title: {
+            scales: {
+              x: {
                 display: true,
-                text: 'Voltage (in mV)',
-                color: '#a0d468'
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#666',
+                  maxTicksLimit: 6
+                }
               },
-              grid: {
-                color: 'rgba(255, 255, 255, 0.05)'
-              },
-              ticks: {
-                color: '#a0d468'
-              }
-            },
-            y1: {
-              type: 'linear',
-              display: true,
-              position: 'right',
-              title: {
+              y: {
                 display: true,
-                text: 'Temp (°C) / Humidity (%)',
-                color: '#ecddb1'
-              },
-              grid: {
-                drawOnChartArea: false
-              },
-              ticks: {
-                color: '#ecddb1'
+                grid: {
+                  color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                  color: '#666'
+                }
               }
             }
           }
-        }
         })
-        // Mark chart as ready immediately after creation
-        this.chartReady = true
       })
     },
     
@@ -374,90 +306,13 @@ export default {
       this.chart.data.labels.push(time)
       this.chart.data.datasets[0].data.push(reading.value)
       
-      // Keep datasets in sync
-      if (this.chart.data.datasets[1]) {
-        this.chart.data.datasets[1].data.push(null)
-      }
-      if (this.chart.data.datasets[2]) {
-        this.chart.data.datasets[2].data.push(null)
-      }
-      
       // Keep only last 50 points
       if (this.chart.data.labels.length > 50) {
         this.chart.data.labels.shift()
         this.chart.data.datasets[0].data.shift()
-        if (this.chart.data.datasets[1]) this.chart.data.datasets[1].data.shift()
-        if (this.chart.data.datasets[2]) this.chart.data.datasets[2].data.shift()
       }
       
-      this.debouncedChartUpdate()
-    },
-    
-    updateEnvironmentChart(envData) {
-      if (!this.chart || !this.chart.data) return
-      
-      const time = new Date(envData.datetime).toLocaleTimeString()
-      const lastIndex = this.chart.data.labels.length - 1
-      
-      if (lastIndex >= 0 && this.chart.data.labels[lastIndex] === time) {
-        // Update existing point
-        if (this.chart.data.datasets[1]) {
-          this.chart.data.datasets[1].data[lastIndex] = envData.temperature
-        }
-        if (this.chart.data.datasets[2]) {
-          this.chart.data.datasets[2].data[lastIndex] = envData.humidity
-        }
-      } else {
-        // Add new point
-        this.chart.data.labels.push(time)
-        if (this.chart.data.datasets[0]) {
-          this.chart.data.datasets[0].data.push(null)
-        }
-        if (this.chart.data.datasets[1]) {
-          this.chart.data.datasets[1].data.push(envData.temperature)
-        }
-        if (this.chart.data.datasets[2]) {
-          this.chart.data.datasets[2].data.push(envData.humidity)
-        }
-      }
-      
-      // Keep only last 50 points
-      if (this.chart.data.labels.length > 50) {
-        this.chart.data.labels.shift()
-        if (this.chart.data.datasets[0]) this.chart.data.datasets[0].data.shift()
-        if (this.chart.data.datasets[1]) this.chart.data.datasets[1].data.shift()
-        if (this.chart.data.datasets[2]) this.chart.data.datasets[2].data.shift()
-      }
-      
-      this.debouncedChartUpdate()
-    },
-    
-    debouncedChartUpdate() {
-      if (!this.chart || this.chartUpdating) return
-      
-      // Clear any pending update
-      if (this.chartUpdateTimeout) {
-        clearTimeout(this.chartUpdateTimeout)
-      }
-      
-      // Schedule update after a delay to batch multiple updates
-      this.chartUpdateTimeout = setTimeout(() => {
-        if (this.chart && !this.chartUpdating) {
-          this.chartUpdating = true
-          // Use requestAnimationFrame to ensure update happens in next frame
-          requestAnimationFrame(() => {
-            if (this.chart) {
-              try {
-                this.chart.update('none')
-              } catch (e) {
-                console.error('Chart update error:', e)
-              } finally {
-                this.chartUpdating = false
-              }
-            }
-          })
-        }
-      }, 150)
+      this.chart.update('none')
     },
     
     async captureImage() {
