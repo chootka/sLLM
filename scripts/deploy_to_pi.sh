@@ -25,9 +25,13 @@ if [ -z "$PI_USER" ] || [ -z "$PI_IP" ] || [ -z "$PI_DIR" ]; then
     exit 1
 fi
 
-echo "🚀 Deploying sLLM to Raspberry Pi..."
+# Set default DEPLOY_DIR if not specified
+DEPLOY_DIR="${DEPLOY_DIR:-/var/www/sllm}"
+
+echo "🦠 Deploying sLLM to Raspberry Pi..."
 echo "   Pi: ${PI_USER}@${PI_IP}"
 echo "   Project: ${PI_DIR}"
+echo "   Deploy to: ${DEPLOY_DIR}"
 echo ""
 
 # Check if repo exists on Pi and pull/clone
@@ -50,7 +54,7 @@ fi
 # Run deploy script on Pi
 echo ""
 echo "🔧 Running deployment on Pi..."
-ssh -t -A ${PI_USER}@${PI_IP} "cd ${PI_DIR} && sudo ./scripts/deploy_on_pi.sh"
+ssh -t -A ${PI_USER}@${PI_IP} "cd ${PI_DIR} && sudo DEPLOY_DIR=${DEPLOY_DIR} ./scripts/deploy_on_pi.sh"
 
 echo ""
 echo "✅ Deployment complete!"

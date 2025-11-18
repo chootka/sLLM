@@ -141,7 +141,9 @@ export default {
       // Intervals
       imageInterval: null,
       fallbackInterval: null,
-      chartUpdateTimeout: null
+      chartUpdateTimeout: null,
+      chartReady: false,
+      chartUpdating: false
     }
   },
   
@@ -210,8 +212,26 @@ export default {
     },
     
     initializeChart() {
-      const ctx = this.$refs.readingsChart.getContext('2d')
-      this.chart = new Chart(ctx, {
+      // Wait for next tick to ensure canvas is rendered
+      this.$nextTick(() => {
+        const canvas = this.$refs.readingsChart
+        if (!canvas) {
+          console.error('Chart canvas not found')
+          return
+        }
+        
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          console.error('Could not get 2d context')
+          return
+        }
+        
+        // Destroy existing chart if any
+        if (this.chart) {
+          this.chart.destroy()
+        }
+        
+        this.chart = new Chart(ctx, {
         type: 'line',
         data: {
           labels: [],
@@ -251,6 +271,7 @@ export default {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false,
           interaction: {
             mode: 'index',
             intersect: false
@@ -267,7 +288,8 @@ export default {
             },
             tooltip: {
               mode: 'index',
-              intersect: false
+              intersect: false,
+              enabled: true
             }
           },
           scales: {
@@ -315,6 +337,9 @@ export default {
             }
           }
         }
+        })
+        // Mark chart as ready immediately after creation
+        this.chartReady = true
       })
     },
     
@@ -348,7 +373,7 @@ export default {
     },
     
     updateChart(reading) {
-      if (!this.chart || !this.chart.data) return
+      if (!this.chart || !this.chart.data || this.chartUpdating) return
       
       const time = new Date(reading.datetime).toLocaleTimeString()
       
@@ -372,19 +397,11 @@ export default {
         this.chart.data.datasets[2].data.shift()
       }
       
-      // Throttle updates to prevent stack overflow
-      if (this.chartUpdateTimeout) {
-        clearTimeout(this.chartUpdateTimeout)
-      }
-      this.chartUpdateTimeout = setTimeout(() => {
-        if (this.chart) {
-          this.chart.update('none')
-        }
-      }, 100)
+      this.scheduleChartUpdate()
     },
     
     updateEnvironmentChart(envData) {
-      if (!this.chart || !this.chart.data) return
+      if (!this.chart || !this.chart.data || this.chartUpdating) return
       
       const time = new Date(envData.datetime).toLocaleTimeString()
       
@@ -419,15 +436,33 @@ export default {
         this.chart.data.datasets[2].data.shift()
       }
       
-      // Throttle updates to prevent stack overflow
+      this.scheduleChartUpdate()
+    },
+    
+    scheduleChartUpdate() {
+      // Clear any pending update
       if (this.chartUpdateTimeout) {
         clearTimeout(this.chartUpdateTimeout)
+        this.chartUpdateTimeout = null
       }
+      
+      // Schedule a single update after a short delay
       this.chartUpdateTimeout = setTimeout(() => {
-        if (this.chart) {
-          this.chart.update('none')
+        if (this.chart && !this.chartUpdating) {
+          this.chartUpdating = true
+          try {
+            // Use 'none' mode to prevent animation which can cause recursion
+            this.chart.update('none')
+          } catch (e) {
+            console.error('Chart update error:', e)
+            // If update fails, mark chart as not ready to prevent further errors
+            this.chartReady = false
+          } finally {
+            this.chartUpdating = false
+            this.chartUpdateTimeout = null
+          }
         }
-      }, 100)
+      }, 150)
     },
     
     async captureImage() {

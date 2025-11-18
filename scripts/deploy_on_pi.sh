@@ -14,7 +14,9 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$PROJECT_ROOT"
 
 # Configuration
-DEPLOY_DIR="/var/www/sllm"
+# DEPLOY_DIR can be overridden via environment variable (set in config.sh on local machine)
+# When running deploy_to_pi.sh, it will pass this as an environment variable
+DEPLOY_DIR="${DEPLOY_DIR:-/var/www/sllm}"
 FRONTEND_DIR="$DEPLOY_DIR/frontend"
 API_DIR="$DEPLOY_DIR/api"
 NGINX_CONF="/etc/nginx/sites-available/sllm.visceral.systems"

@@ -24,7 +24,7 @@ if [ -z "$PI_USER" ] || [ -z "$PI_IP" ] || [ -z "$PI_DIR" ] || [ -z "$REPO_URL" 
     exit 1
 fi
 
-echo "🚀 Setting up sLLM on Raspberry Pi..."
+echo "🦠 Setting up sLLM on Raspberry Pi..."
 echo "   Pi: ${PI_USER}@${PI_IP}"
 echo "   Repo: ${REPO_URL} (SSH)"
 echo "   Destination: ${PI_DIR}"
