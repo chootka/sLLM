@@ -209,6 +209,16 @@ export default {
         this.exposureLightOn = data.exposure_light
       })
       
+      // Listen for image capture events
+      this.socket.on('image_captured', (data) => {
+        console.log('📸 Image captured event received:', data)
+        // Update display with the new image
+        if (data.filename) {
+          const imageUrl = `${this.apiUrl}/api/images/${data.filename}?t=${Date.now()}`
+          this.addImageToTimeline(imageUrl, data.filename)
+        }
+      })
+      
       // Fallback polling for initial data
       this.fallbackInterval = setInterval(() => {
         this.checkStatus()
@@ -358,82 +368,28 @@ export default {
       this.capturingImage = true
       
       try {
-        // Add cache-busting timestamp to ensure we get a fresh image
+        // Add cache-busting timestamp to ensure we get a fresh response
         const timestamp = Date.now()
         console.log('Sending POST request to /api/capture-image...')
         const response = await axios.post(`${this.apiUrl}/api/capture-image?t=${timestamp}`, {}, {
-          responseType: 'blob',
           headers: {
             'Cache-Control': 'no-cache'
           }
         })
         
-        console.log('Response received:', {
-          status: response.status,
-          statusText: response.statusText,
-          dataType: response.data?.constructor?.name,
-          dataSize: response.data?.size
-        })
+        console.log('Response received:', response.data)
         
-        if (!response.data || response.data.size === 0) {
-          console.error('⚠️  Received empty response data')
-          throw new Error('Empty image data received')
+        if (!response.data || !response.data.success) {
+          throw new Error(response.data?.error || 'Capture failed')
         }
         
-        // Check if response is too small (likely an error message, not an image)
-        // JPEG images are typically at least a few KB
-        if (response.data.size < 1000) {
-          console.warn('⚠️  Response is suspiciously small for an image:', response.data.size, 'bytes')
-          // Try to read it as text to see the error message
-          const text = await response.data.text()
-          console.error('Response content (likely error):', text)
-          let errorMessage = 'Server returned invalid response'
-          try {
-            const errorJson = JSON.parse(text)
-            errorMessage = errorJson.error || text
-          } catch {
-            errorMessage = text || 'Unknown error'
-          }
-          throw new Error(errorMessage)
-        }
+        // Use the filename from the response to construct the image URL
+        const imageUrl = `${this.apiUrl}${response.data.url}?t=${Date.now()}`
+        console.log('Image URL:', imageUrl)
         
-        // Revoke old blob URL if it exists to prevent memory leaks
-        if (this.currentImage && this.currentImage.startsWith('blob:')) {
-          URL.revokeObjectURL(this.currentImage)
-        }
+        // Add image to timeline immediately
+        this.addImageToTimeline(imageUrl, response.data.filename)
         
-        const imageUrl = URL.createObjectURL(response.data)
-        console.log('Created image URL:', imageUrl)
-        
-        const imageData = {
-          url: imageUrl,
-          timestamp: new Date().toISOString()
-        }
-        
-        this.images.push(imageData)
-        // Update timeline position
-        this.timelinePosition = this.images.length - 1
-        
-        // Force complete re-render by clearing image first, then setting it
-        // This ensures Vue completely replaces the img element
-        this.currentImage = null
-        this.imageError = false
-        this.imageKey++ // Increment key to force Vue to create new img element
-        
-        // Use nextTick to ensure DOM updates after clearing
-        await this.$nextTick()
-        
-        // Now set the new image - Vue will create a fresh img element
-        this.currentImage = imageUrl
-        
-        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'URL:', imageUrl.substring(0, 50) + '...')
-        
-        // Keep only last 100 images to prevent memory issues
-        if (this.images.length > 100) {
-          URL.revokeObjectURL(this.images[0].url)
-          this.images.shift()
-          console.log('Removed oldest image (keeping max 100)')
-        }
       } catch (error) {
         console.error('❌ Error capturing image:', error)
         console.error('Error details:', {
@@ -446,6 +402,45 @@ export default {
         this.currentImage = null
       } finally {
         this.capturingImage = false
+      }
+    },
+    
+    addImageToTimeline(imageUrl, filename) {
+      // Revoke old blob URLs if they exist (cleanup)
+      if (this.currentImage && this.currentImage.startsWith('blob:')) {
+        URL.revokeObjectURL(this.currentImage)
+      }
+      
+      const imageData = {
+        url: imageUrl,
+        filename: filename,
+        timestamp: new Date().toISOString()
+      }
+      
+      this.images.push(imageData)
+      // Update timeline position
+      this.timelinePosition = this.images.length - 1
+      
+      // Force complete re-render by clearing image first, then setting it
+      this.currentImage = null
+      this.imageError = false
+      this.imageKey++ // Increment key to force Vue to create new img element
+      
+      // Use nextTick to ensure DOM updates after clearing
+      this.$nextTick(() => {
+        // Now set the new image - Vue will create a fresh img element
+        this.currentImage = imageUrl
+        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename)
+      })
+      
+      // Keep only last 100 images to prevent memory issues
+      if (this.images.length > 100) {
+        const oldImage = this.images.shift()
+        // Revoke blob URLs if they exist
+        if (oldImage.url && oldImage.url.startsWith('blob:')) {
+          URL.revokeObjectURL(oldImage.url)
+        }
+        console.log('Removed oldest image (keeping max 100)')
       }
     },
     

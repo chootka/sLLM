@@ -440,6 +440,31 @@ def handle_disconnect():
     """Handle client disconnection"""
     print(f"Client disconnected: {request.sid}")
 
+@app.route('/api/images/<filename>', methods=['GET'])
+def get_image(filename):
+    """Serve an image file by filename"""
+    try:
+        # Security: only allow jpg files from IMAGE_DIR
+        if not filename.endswith('.jpg'):
+            return jsonify({"error": "Invalid file type"}), 400
+        
+        # Prevent directory traversal
+        if '/' in filename or '..' in filename:
+            return jsonify({"error": "Invalid filename"}), 400
+        
+        filepath = os.path.join(config.IMAGE_DIR, filename)
+        if not os.path.exists(filepath):
+            return jsonify({"error": "Image not found"}), 404
+        
+        response = send_file(filepath, mimetype='image/jpeg')
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        print(f"Error serving image {filename}: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/capture-image', methods=['POST'])
 def capture_image():
     """Capture an image with the USB camera"""
@@ -486,19 +511,22 @@ def capture_image():
         print("💡 Turning off ring light...")
         turn_ring_light_off()
         
-        # Emit image capture event
+        image_filename = os.path.basename(filename)
+        
+        # Emit image capture event with filename
         socketio.emit('image_captured', {
-            "filename": os.path.basename(filename),
+            "filename": image_filename,
             "timestamp": time.time()
         })
         
-        # Return the image file with cache-busting headers
-        print(f"✅ Returning image file: {filename}")
-        response = send_file(filename, mimetype='image/jpeg')
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
-        return response
+        # Return JSON with filename instead of the image file directly
+        # Frontend will fetch the image using the filename to avoid blob URL caching issues
+        print(f"✅ Image captured: {image_filename}")
+        return jsonify({
+            "success": True,
+            "filename": image_filename,
+            "url": f"/api/images/{image_filename}"
+        })
         
     except Exception as e:
         error_msg = f"Error capturing image: {str(e)}"
