@@ -100,9 +100,10 @@ if [ -d "api" ]; then
 else
     echo "⚠️  Warning: api directory not found at $PROJECT_ROOT/api"
 fi
-if [ "$IS_LINUX" = true ]; then
-    chown -R $WEB_USER:$WEB_GROUP $API_DIR
-fi
+    if [ "$IS_LINUX" = true ]; then
+        # Set ownership to chootka (service runs as chootka, needs write access for GPIO)
+        chown -R chootka:chootka $API_DIR
+    fi
 chmod -R 755 $API_DIR
 
 # Create data directories
@@ -195,7 +196,7 @@ After=network.target
 Type=simple
 User=chootka
 Group=chootka
-WorkingDirectory=$API_DIR
+WorkingDirectory=/home/chootka
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
@@ -222,7 +223,7 @@ After=network.target
 Type=simple
 User=chootka
 Group=chootka
-WorkingDirectory=$API_DIR
+WorkingDirectory=/home/chootka
 Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
 ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
 Restart=always
