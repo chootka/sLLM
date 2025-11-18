@@ -80,6 +80,7 @@
             Capture Image
           </button>
           <button 
+            v-if="false"
             @click="toggleLight" 
             :class="['control-button', exposureLightOn ? 'danger' : '']"
           >

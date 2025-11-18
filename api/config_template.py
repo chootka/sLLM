@@ -2,7 +2,7 @@
 # Copy this to config.py and modify as needed
 
 # GPIO Pin Configuration
-RING_LIGHT_PIN = 17        # GPIO pin for ring light control
+RING_LIGHT_PIN = 17        # GPIO pin for ring light relay control (switches USB power)
 EXPOSURE_LIGHT_PIN = 27    # GPIO pin for exposure light
 
 # Camera Settings

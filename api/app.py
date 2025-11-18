@@ -24,10 +24,18 @@ import board
 import busio
 import serial
 import serial.tools.list_ports
-from picamera2 import Picamera2
-from picamera2.encoders import JpegEncoder
-from picamera2.outputs import FileOutput
+import cv2
 import numpy as np
+
+# USB HID support for HID-based relay modules
+try:
+    import usb.core
+    import usb.util
+    HID_AVAILABLE = True
+except ImportError:
+    HID_AVAILABLE = False
+    print("⚠️  pyusb not installed - HID relay support disabled")
+    print("  Install with: pip install pyusb")
 
 # Load configuration
 try:
@@ -66,8 +74,8 @@ CORS(app)  # Enable CORS for web frontend
 socketio = SocketIO(app, cors_allowed_origins="*")  # Enable Socket.IO with CORS
 
 # Configuration from config.py
-RING_LIGHT_PIN = config.RING_LIGHT_PIN
 EXPOSURE_LIGHT_PIN = config.EXPOSURE_LIGHT_PIN
+RING_LIGHT_PIN = getattr(config, 'RING_LIGHT_PIN', 17)  # GPIO pin for ring light relay control
 DHT_PIN = getattr(config, 'DHT_PIN', 4)  # GPIO pin for DHT sensors
 SHT31_I2C_ADDRESS = getattr(config, 'SHT31_I2C_ADDRESS', 0x44)  # Default I2C address for SHT31
 MAX_READINGS = config.MAX_READINGS_BUFFER
@@ -86,10 +94,10 @@ current_environment = {"temperature": None, "humidity": None, "timestamp": 0}
 
 # Initialize hardware
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(RING_LIGHT_PIN, GPIO.OUT)
 GPIO.setup(EXPOSURE_LIGHT_PIN, GPIO.OUT)
-GPIO.output(RING_LIGHT_PIN, GPIO.LOW)
+GPIO.setup(RING_LIGHT_PIN, GPIO.OUT)
 GPIO.output(EXPOSURE_LIGHT_PIN, GPIO.LOW)
+GPIO.output(RING_LIGHT_PIN, GPIO.LOW)  # Ring light off by default
 
 # Initialize Serial connection to Arduino
 SERIAL_BAUD = 1200  # Match Arduino's Serial.begin(1200)
@@ -130,6 +138,34 @@ else:
         print(f"✗ Failed to open /dev/ttyUSB0: {e}")
         arduino_serial = None
 
+# Ring light control via GPIO relay module
+# The Neewer BR60 is USB-powered but doesn't have software control.
+# Use a GPIO relay module to switch the USB power lines:
+# - Connect relay module to Pi: GND→GND, 5V→5V, Signal→GPIO 17
+# - Use USB breakout board: plug ring light USB cable into breakout
+# - Wire breakout VBUS (+5V) through relay terminals: USB power→COM, NO→Breakout VBUS
+# - Wire breakout GND directly (not through relay)
+# - When GPIO 17 goes HIGH, relay closes and ring light turns on
+print(f"✓ Ring light relay control initialized on GPIO {RING_LIGHT_PIN}")
+
+def turn_ring_light_on():
+    """Turn on the ring light via GPIO-controlled relay"""
+    try:
+        GPIO.output(RING_LIGHT_PIN, GPIO.HIGH)
+        return True
+    except Exception as e:
+        print(f"Error turning on ring light: {e}")
+        return False
+
+def turn_ring_light_off():
+    """Turn off the ring light via GPIO-controlled relay"""
+    try:
+        GPIO.output(RING_LIGHT_PIN, GPIO.LOW)
+        return True
+    except Exception as e:
+        print(f"Error turning off ring light: {e}")
+        return False
+
 # Initialize temperature/humidity sensor (if available)
 env_sensor = None
 if SENSOR_AVAILABLE:
@@ -152,10 +188,23 @@ if SENSOR_AVAILABLE:
         print(f"✗ Failed to initialize {SENSOR_TYPE} sensor: {e}")
         env_sensor = None
 
-# Initialize camera
-picam2 = Picamera2()
-camera_config = picam2.create_still_configuration(main={"size": config.CAMERA_RESOLUTION})
-picam2.configure(camera_config)
+# Initialize USB camera
+usb_camera = None
+try:
+    usb_camera = cv2.VideoCapture(0)  # Use first available USB camera
+    if usb_camera.isOpened():
+        # Set camera resolution if specified in config
+        if hasattr(config, 'CAMERA_RESOLUTION') and config.CAMERA_RESOLUTION:
+            width, height = config.CAMERA_RESOLUTION
+            usb_camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            usb_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        print("✓ USB camera initialized")
+    else:
+        print("✗ WARNING: Could not open USB camera")
+        usb_camera = None
+except Exception as e:
+    print(f"✗ Failed to initialize USB camera: {e}")
+    usb_camera = None
 
 def read_electrical_data():
     """Continuously read electrical data from Arduino via serial port"""
@@ -389,24 +438,28 @@ def handle_disconnect():
 
 @app.route('/api/capture-image', methods=['POST'])
 def capture_image():
-    """Capture an image with the microscope camera"""
+    """Capture an image with the USB camera"""
     try:
-        # Turn on ring light
-        GPIO.output(RING_LIGHT_PIN, GPIO.HIGH)
+        if usb_camera is None or not usb_camera.isOpened():
+            return jsonify({"error": "USB camera not available"}), 500
+        
+        # Turn on USB ring light
+        turn_ring_light_on()
         time.sleep(config.RING_LIGHT_DELAY)  # Let light stabilize
         
-        # Start camera if not already started
-        if not picam2.started:
-            picam2.start()
-            time.sleep(config.CAMERA_WARMUP_TIME)  # Camera warmup
+        # Capture image from USB camera
+        ret, frame = usb_camera.read()
+        if not ret:
+            turn_ring_light_off()
+            return jsonify({"error": "Failed to capture image from USB camera"}), 500
         
-        # Capture image
+        # Save image
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = os.path.join(config.IMAGE_DIR, f"slime_{timestamp}.jpg")
-        picam2.capture_file(filename)
+        cv2.imwrite(filename, frame)
         
-        # Turn off ring light
-        GPIO.output(RING_LIGHT_PIN, GPIO.LOW)
+        # Turn off USB ring light
+        turn_ring_light_off()
         
         # Emit image capture event
         socketio.emit('image_captured', {
@@ -499,7 +552,9 @@ if __name__ == '__main__':
         socketio.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT, debug=config.DEBUG_MODE, allow_unsafe_werkzeug=True)
     finally:
         GPIO.cleanup()
-        picam2.close()
+        if usb_camera:
+            usb_camera.release()
+            print("USB camera released")
         # Only DHT sensors have exit() method, SHT31 doesn't need cleanup
         if env_sensor and SENSOR_TYPE != 'SHT31':
             try:
@@ -509,3 +564,5 @@ if __name__ == '__main__':
         if arduino_serial and arduino_serial.is_open:
             arduino_serial.close()
             print("Serial port closed")
+        # Turn off ring light on shutdown
+        turn_ring_light_off()

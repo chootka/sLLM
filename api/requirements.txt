@@ -9,8 +9,8 @@ RPi.GPIO==0.7.1
 adafruit-circuitpython-ads1x15==2.2.23
 pyserial==3.5
 
-# Camera support
-picamera2==0.3.16
+# Camera support (USB camera via OpenCV)
+opencv-python==4.8.1.78
 
 # Numerical computing
 numpy==1.26.2
