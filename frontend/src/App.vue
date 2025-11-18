@@ -214,7 +214,8 @@ export default {
         console.log('📸 Image captured event received:', data)
         // Update display with the new image
         if (data.filename) {
-          const imageUrl = `${this.apiUrl}/api/images/${data.filename}?t=${Date.now()}`
+          // Use both timestamp and random number to ensure unique URL
+          const imageUrl = `${this.apiUrl}/api/images/${data.filename}?t=${Date.now()}&r=${Math.random()}`
           this.addImageToTimeline(imageUrl, data.filename)
         }
       })
@@ -384,7 +385,8 @@ export default {
         }
         
         // Use the filename from the response to construct the image URL
-        const imageUrl = `${this.apiUrl}${response.data.url}?t=${Date.now()}`
+        // Add both timestamp and random number to ensure completely unique URL
+        const imageUrl = `${this.apiUrl}${response.data.url}?t=${Date.now()}&r=${Math.random()}`
         console.log('Image URL:', imageUrl)
         
         // Add image to timeline immediately
@@ -411,8 +413,13 @@ export default {
         URL.revokeObjectURL(this.currentImage)
       }
       
+      // Ensure URL has unique cache-busting parameters
+      const uniqueUrl = imageUrl.includes('?') 
+        ? `${imageUrl}&_=${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        : `${imageUrl}?_=${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
       const imageData = {
-        url: imageUrl,
+        url: uniqueUrl,
         filename: filename,
         timestamp: new Date().toISOString()
       }
@@ -429,8 +436,8 @@ export default {
       // Use nextTick to ensure DOM updates after clearing
       this.$nextTick(() => {
         // Now set the new image - Vue will create a fresh img element
-        this.currentImage = imageUrl
-        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename)
+        this.currentImage = uniqueUrl
+        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename, 'URL:', uniqueUrl.substring(0, 80) + '...')
       })
       
       // Keep only last 100 images to prevent memory issues
