@@ -16,7 +16,7 @@
         <div class="panel">
           <h2>Electrical Activity</h2>
           <div class="readings-display">
-            {{ currentReading.toFixed(4) }} V
+            {{ currentReading.toFixed(1) }} mV
           </div>
           <canvas ref="readingsChart"></canvas>
           <div class="timestamp">
@@ -285,7 +285,7 @@ export default {
               position: 'left',
               title: {
                 display: true,
-                text: 'Voltage (V)',
+                text: 'Voltage (in mV)',
                 color: '#a0d468'
               },
               grid: {

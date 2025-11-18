@@ -208,15 +208,14 @@ def read_electrical_data():
                 line = arduino_serial.readline().decode('utf-8', errors='ignore').strip()
                 
                 if line:
-                    # Parse the voltage value (Arduino sends in mV, convert to V)
+                    # Parse the voltage value (Arduino sends in mV, keep as mV)
                     try:
                         voltage_mv = float(line)
-                        voltage = voltage_mv / 1000.0  # Convert mV to V
                         
                         timestamp = time.time()
                         reading = {
                             "timestamp": timestamp,
-                            "value": voltage,
+                            "value": voltage_mv,  # Keep in millivolts
                             "datetime": datetime.now().isoformat()
                         }
                         
