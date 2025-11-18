@@ -34,8 +34,8 @@ body {
 
 .video-background iframe {
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: 0;
+    left: 0;
     transform: translate(-50%, -50%);
     pointer-events: none;
     border: none;
@@ -48,22 +48,6 @@ body {
      */
     width: 100vw;
     height: 56.25vw; /* Default: 16:9 aspect ratio based on width */
-}
-
-/* For wide screens (wider than 16:9): scale based on height to fill vertically */
-@media (min-aspect-ratio: 16/9) {
-    .video-background iframe {
-        width: 177.78vh; /* 16/9 * 100vh - ensures full height coverage */
-        height: 100vh;
-    }
-}
-
-/* For tall screens (narrower than 16:9): scale based on width to fill horizontally */
-@media (max-aspect-ratio: 16/9) {
-    .video-background iframe {
-        width: 100vw;
-        height: 56.25vw; /* 9/16 * 100vw - ensures full width coverage */
-    }
 }
 
 .container {
