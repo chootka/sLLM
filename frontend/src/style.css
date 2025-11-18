@@ -34,16 +34,15 @@ body {
 
 .video-background iframe {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(1.5);
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
     pointer-events: none;
     border: none;
     margin: 0;
     padding: 0;
-    /* Make iframe fill viewport, then scale up to ensure no black bars */
-    width: 100vw;
-    height: 100vh;
+    /* Stretch to fill entire screen - distort if needed */
 }
 
 .container {
