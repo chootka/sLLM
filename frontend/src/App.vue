@@ -25,8 +25,14 @@
         </div>
         
         <!-- Timelapse Viewer Panel -->
-        <div class="panel">
-          <h2>Visual Timeline</h2>
+        <div class="panel timeline-panel">
+          <div class="timeline-header">
+            <h2>Visual Timeline</h2>
+            <div class="status-indicator-wrapper">
+              <span :class="['status-indicator', isOnline ? 'online' : 'offline']"></span>
+              <span class="status-text">{{ isOnline ? 'Connected' : 'Disconnected' }}</span>
+            </div>
+          </div>
           <div class="timelapse-container">
             <img 
               v-if="currentImage && !imageError" 
@@ -49,8 +55,13 @@
             @input="onTimelineScrub"
             v-if="images.length > 0"
           >
-          <div class="timestamp">
-            {{ images.length }} images captured
+          <div class="timeline-footer">
+            <div class="timestamp">
+              {{ images.length }} images captured
+            </div>
+            <button @click="captureImage(true)" class="control-button capture-button">
+              Capture Image
+            </button>
           </div>
         </div>
       </div>
@@ -73,26 +84,6 @@
         </div>
       </div>
       
-      <!-- Control Panel -->
-      <div class="panel" style="margin-top: 30px;">
-        <h2>Controls</h2>
-        <div style="display: flex; align-items: center; gap: 20px;">
-          <button @click="captureImage(true)" class="control-button">
-            Capture Image
-          </button>
-          <button 
-            v-if="false"
-            @click="toggleLight" 
-            :class="['control-button', exposureLightOn ? 'danger' : '']"
-          >
-            {{ exposureLightOn ? 'Turn Off' : 'Turn On' }} Exposure Light
-          </button>
-          <div>
-            <span :class="['status-indicator', isOnline ? 'online' : 'offline']"></span>
-            {{ isOnline ? 'Connected' : 'Disconnected' }}
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>

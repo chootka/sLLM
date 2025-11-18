@@ -99,6 +99,44 @@ h1 {
     font-size: 1.2em;
 }
 
+.timeline-panel {
+    position: relative;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.timeline-header h2 {
+    margin: 0;
+}
+
+.status-indicator-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+}
+
+.status-text {
+    color: #888;
+    font-size: 0.9em;
+}
+
+.timeline-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.capture-button {
+    margin: 0;
+}
+
 .timelapse-container {
     position: relative;
     background: #000;
@@ -286,6 +324,26 @@ canvas + canvas {
     .control-button {
         font-size: 0.9em;
         padding: 10px 15px;
+    }
+    
+    .timeline-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .status-indicator-wrapper {
+        align-self: flex-end;
+    }
+    
+    .timeline-footer {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    .capture-button {
+        width: 100%;
     }
 }
 
