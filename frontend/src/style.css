@@ -19,37 +19,6 @@ body {
     position: relative;
 }
 
-.video-background {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
-    overflow: hidden;
-    background: #000000;
-    margin: 0;
-    padding: 0;
-}
-
-.video-background iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    border: none;
-    margin: 0;
-    padding: 0;
-    /* 
-     * Airbnb-style edge-to-edge video technique (object-fit: cover simulation):
-     * Scale iframe to cover entire viewport while maintaining 16:9 aspect ratio
-     * This ensures no black bars - video will crop to fill screen
-     */
-    width: 100vw;
-    height: 56.25vw; /* Default: 16:9 aspect ratio based on width */
-}
-
 .container {
     max-width: 1400px;
     margin: 0 auto;
