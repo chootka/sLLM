@@ -41,31 +41,32 @@ body {
     border: none;
     margin: 0;
     padding: 0;
-    /* Always fill the viewport, cropping if necessary */
-    min-width: 100vw;
-    min-height: 100vh;
-    width: 100vw;
-    height: 100vh;
-    object-fit: cover;
 }
 
-/* For screens wider than 16:9, make video taller to fill height */
+/* For screens wider than 16:9, scale video to fill height (will crop sides) */
 @media (min-aspect-ratio: 16/9) {
     .video-background iframe {
         width: calc(100vh * 16 / 9);
         height: 100vh;
-        min-width: calc(100vh * 16 / 9);
-        min-height: 100vh;
+        transform: translate(-50%, -50%);
     }
 }
 
-/* For screens taller than 16:9, make video wider to fill width */
+/* For screens taller than 16:9, scale video to fill width (will crop top/bottom) */
 @media (max-aspect-ratio: 16/9) {
     .video-background iframe {
         width: 100vw;
         height: calc(100vw * 9 / 16);
-        min-width: 100vw;
-        min-height: calc(100vw * 9 / 16);
+        transform: translate(-50%, -50%);
+    }
+}
+
+/* Default: for 16:9 screens, fill viewport */
+@media (aspect-ratio: 16/9) {
+    .video-background iframe {
+        width: 100vw;
+        height: 100vh;
+        transform: translate(-50%, -50%);
     }
 }
 
