@@ -106,6 +106,15 @@ fi
     fi
 chmod -R 755 $API_DIR
 
+# Fix config.py DATA_DIR path if it points to wrong location
+if [ -f "$API_DIR/config.py" ]; then
+    echo "Fixing config.py DATA_DIR path..."
+    # Replace any /home/pi/sllm/data paths with the correct deployment path
+    sed -i "s|DATA_DIR = '/home/pi/sllm/data'|DATA_DIR = '$DEPLOY_DIR/data'|g" "$API_DIR/config.py"
+    sed -i "s|DATA_DIR = \"/home/pi/sllm/data\"|DATA_DIR = \"$DEPLOY_DIR/data\"|g" "$API_DIR/config.py"
+    echo "✓ Config path updated"
+fi
+
 # Create data directories
 echo "Creating data directories..."
 DATA_DIR="$DEPLOY_DIR/data"
