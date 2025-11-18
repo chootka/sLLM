@@ -496,7 +496,7 @@ if __name__ == '__main__':
     
     # Run Flask app with Socket.IO
     try:
-        socketio.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT, debug=config.DEBUG_MODE)
+        socketio.run(app, host=config.SERVER_HOST, port=config.SERVER_PORT, debug=config.DEBUG_MODE, allow_unsafe_werkzeug=True)
     finally:
         GPIO.cleanup()
         picam2.close()
