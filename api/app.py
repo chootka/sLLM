@@ -440,6 +440,34 @@ def handle_disconnect():
     """Handle client disconnection"""
     print(f"Client disconnected: {request.sid}")
 
+@app.route('/api/images', methods=['GET'])
+def list_images():
+    """List all captured images"""
+    try:
+        if not os.path.exists(config.IMAGE_DIR):
+            return jsonify({"images": []})
+        
+        # Get all .jpg files, sorted by modification time (newest first)
+        image_files = []
+        for filename in os.listdir(config.IMAGE_DIR):
+            if filename.endswith('.jpg') and not filename.startswith('.'):
+                filepath = os.path.join(config.IMAGE_DIR, filename)
+                if os.path.isfile(filepath):
+                    mtime = os.path.getmtime(filepath)
+                    image_files.append({
+                        "filename": filename,
+                        "url": f"/api/images/{filename}",
+                        "timestamp": datetime.fromtimestamp(mtime).isoformat()
+                    })
+        
+        # Sort by timestamp (newest first)
+        image_files.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return jsonify({"images": image_files})
+    except Exception as e:
+        print(f"Error listing images: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/images/<filename>', methods=['GET'])
 def get_image(filename):
     """Serve an image file by filename"""

@@ -195,6 +195,7 @@ export default {
     console.log(`🦠 sLLM Frontend v${this.appVersion}`)
     this.initializeChart()
     this.connectSocket()
+    this.loadExistingImages()
     this.startImageCapture()
   },
   
@@ -340,6 +341,42 @@ export default {
         })
         this.chart = markRaw(chart)
       })
+    },
+    
+    async loadExistingImages() {
+      try {
+        console.log('📸 Loading existing images from server...')
+        const response = await axios.get(`${this.apiUrl}/api/images`)
+        const imageList = response.data.images || []
+        
+        console.log(`Found ${imageList.length} existing images`)
+        
+        // Keep only newest 100 images, then reverse to chronological order (oldest to newest)
+        const imagesToLoad = imageList.slice(0, 100).reverse()
+        
+        // Add images to timeline in chronological order (oldest first)
+        for (const img of imagesToLoad) {
+          const imageUrl = `${this.apiUrl}${img.url}?t=${Date.now()}`
+          this.images.push({
+            url: imageUrl,
+            filename: img.filename,
+            timestamp: img.timestamp
+          })
+        }
+        
+        // Set timeline position to latest image
+        if (this.images.length > 0) {
+          this.timelinePosition = this.images.length - 1
+          if (imageList.length > 100) {
+            console.log(`Loaded newest 100 images (${imageList.length - 100} older images not loaded)`)
+          }
+        }
+        
+        console.log(`✅ Loaded ${this.images.length} images into timeline`)
+      } catch (error) {
+        console.warn('Could not load existing images:', error)
+        // Not a critical error, continue anyway
+      }
     },
     
     startImageCapture() {
