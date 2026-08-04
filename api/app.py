@@ -10,6 +10,7 @@ import json
 import threading
 import base64
 import os
+import re
 import sys
 import random
 # Add system site-packages for libgpiod (required for Raspberry Pi 5)
@@ -440,6 +441,98 @@ def handle_disconnect():
     """Handle client disconnection"""
     print(f"Client disconnected: {request.sid}")
 
+# Capture filenames are slime_YYYYMMDD_HHMMSS.jpg, or slime_YYYYMMDD_HHMMSS_mmm.jpg
+# for captures written with millisecond precision (see capture_image below)
+IMAGE_FILENAME_RE = re.compile(r'^slime_(\d{8})_(\d{6})(?:_(\d{1,3}))?\.jpg$')
+
+def parse_image_filename(filename):
+    """Extract the capture time from an image filename, or None if it doesn't match"""
+    match = IMAGE_FILENAME_RE.match(filename)
+    if not match:
+        return None
+
+    date_part, time_part, ms_part = match.groups()
+    try:
+        captured_at = datetime.strptime(f"{date_part}_{time_part}", "%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+
+    if ms_part:
+        captured_at = captured_at.replace(microsecond=int(ms_part.ljust(3, '0')) * 1000)
+    return captured_at
+
+@app.route('/api/images', methods=['GET'])
+# nginx's /api/images/ proxy_pass location 301-redirects /api/images to
+# /api/images/, so the trailing-slash form has to be served here too
+@app.route('/api/images/', methods=['GET'])
+def list_images():
+    """List captured images, newest first, paginated.
+
+    Query params:
+      page     - 1-indexed page number (default 1)
+      per_page - images per page, 1-500 (default 100)
+      date     - restrict to a single capture day, as YYYYMMDD
+      order    - 'desc' for newest first (default), or 'asc'
+    """
+    try:
+        try:
+            page = max(1, int(request.args.get('page', 1)))
+            per_page = min(500, max(1, int(request.args.get('per_page', 100))))
+        except (TypeError, ValueError):
+            return jsonify({"error": "page and per_page must be integers"}), 400
+
+        date_filter = request.args.get('date')
+        if date_filter is not None and not re.fullmatch(r'\d{8}', date_filter):
+            return jsonify({"error": "date must be in YYYYMMDD format"}), 400
+
+        order = request.args.get('order', 'desc').lower()
+        if order not in ('asc', 'desc'):
+            return jsonify({"error": "order must be 'asc' or 'desc'"}), 400
+
+        entries = []
+        with os.scandir(config.IMAGE_DIR) as scan:
+            for entry in scan:
+                if not entry.is_file():
+                    continue
+                captured_at = parse_image_filename(entry.name)
+                if captured_at is None:
+                    continue
+                if date_filter and captured_at.strftime('%Y%m%d') != date_filter:
+                    continue
+                entries.append((entry.name, captured_at, entry.stat().st_size))
+
+        # Filenames lead with the timestamp, so sorting by name sorts chronologically
+        entries.sort(key=lambda entry: entry[0], reverse=(order == 'desc'))
+
+        total = len(entries)
+        start = (page - 1) * per_page
+        page_entries = entries[start:start + per_page]
+
+        return jsonify({
+            "images": [
+                {
+                    "filename": name,
+                    "url": f"/api/images/{name}",
+                    "datetime": captured_at.isoformat(),
+                    "timestamp": captured_at.timestamp(),
+                    "size": size
+                }
+                for name, captured_at, size in page_entries
+            ],
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page,
+            "order": order,
+            "date": date_filter
+        })
+    except FileNotFoundError:
+        print(f"Image directory not found: {config.IMAGE_DIR}")
+        return jsonify({"error": "Image directory not found"}), 500
+    except Exception as e:
+        print(f"Error listing images: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/images/<filename>', methods=['GET'])
 def get_image(filename):
     """Serve an image file by filename"""
@@ -620,7 +713,7 @@ def get_status():
         "sensors": {
             "electrical": True,
             "temperature_humidity": env_sensor is not None,
-            "camera": True
+            "camera": usb_camera is not None and usb_camera.isOpened()
         },
         "environment": current_environment if current_environment["temperature"] is not None else None
     })

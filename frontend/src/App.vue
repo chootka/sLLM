@@ -55,12 +55,13 @@
             <img 
               v-else-if="viewMode === 'timelapse' && currentImage && !imageError" 
               :key="imageKey"
-              :src="currentImage" 
+              :src="currentImage"
               class="timelapse-image"
               alt="Slime mould timelapse"
               @error="imageError = true"
+              @load="imageError = false"
             >
-            <div v-else-if="viewMode === 'timelapse'" style="height: 300px; display: flex; align-items: center; justify-content: center;">
+            <div v-else-if="viewMode === 'timelapse'" style="height: 100%; display: flex; align-items: center; justify-content: center;">
               <p style="font-size: 1.2em; color: #ecddb1;">No images captured yet</p>
             </div>
           </div>
@@ -81,12 +82,18 @@
                 <small style="color: #666;">Capturing {{ imagesPerDay }} images/day ({{ estimatedStoragePerDay }})</small>
               </span>
               <span v-else>
-                {{ images.length }} images captured
+                {{ images.length }} of {{ totalImagesOnServer }} images<br>
+                <small v-if="currentImageTime" style="color: #666;">{{ currentImageTime }}</small>
               </span>
             </div>
-            <button @click="toggleViewMode" class="control-button capture-button">
+            <button
+              v-if="cameraAvailable !== false"
+              @click="toggleViewMode"
+              class="control-button capture-button"
+            >
               {{ viewMode === 'livestream' ? 'View Timelapse' : 'View Livestream' }}
             </button>
+            <small v-else style="color: #666;">No camera connected</small>
           </div>
         </div>
       </div>
@@ -153,6 +160,10 @@ export default {
       imageKey: 0, // Used to force img element re-render
       capturingImage: false, // Prevent concurrent captures
       viewMode: 'livestream', // 'livestream' or 'timelapse'
+      maxImages: 100, // Max images held in memory at once
+      totalImagesOnServer: 0, // Full archive size reported by /api/images
+      cameraAvailable: null, // null until /api/status reports; false hides livestream
+      viewModeChosenByUser: false, // Don't override an explicit toggle
       
       // System status
       isOnline: false,
@@ -179,6 +190,11 @@ export default {
       const intervalMinutes = this.imageCaptureInterval / 60000
       return Math.floor(minutesPerDay / intervalMinutes)
     },
+    currentImageTime() {
+      const image = this.images[this.timelinePosition]
+      if (!image) return null
+      return new Date(image.timestamp).toLocaleString()
+    },
     estimatedStoragePerDay() {
       // Estimate storage: assume ~500KB per image (1920x1080 JPEG)
       const avgImageSizeKB = 500
@@ -191,10 +207,14 @@ export default {
     }
   },
   
-  mounted() {
+  async mounted() {
     console.log(`🦠 sLLM Frontend v${this.appVersion}`)
     this.initializeChart()
     this.connectSocket()
+    this.loadImages()
+    // Resolve camera availability before starting capture, so we don't poll a
+    // camera that isn't there (and can open straight into timelapse instead)
+    await this.checkStatus()
     this.startImageCapture()
   },
   
@@ -342,14 +362,49 @@ export default {
       })
     },
     
+    async loadImages() {
+      // Populate the timeline with images already on disk, so the timelapse
+      // isn't limited to whatever this browser session happens to capture
+      try {
+        const response = await axios.get(`${this.apiUrl}/api/images`, {
+          params: { page: 1, per_page: this.maxImages, order: 'desc' }
+        })
+
+        // Server returns newest first; reverse so the timeline runs oldest → newest
+        this.images = response.data.images.reverse().map(image => ({
+          url: `${this.apiUrl}${image.url}`,
+          filename: image.filename,
+          timestamp: image.datetime
+        }))
+        this.totalImagesOnServer = response.data.total
+
+        if (this.images.length > 0) {
+          // Park the scrubber on the newest frame and show it, so timelapse mode
+          // has something to display without waiting for a fresh capture
+          this.timelinePosition = this.images.length - 1
+          this.currentImage = this.images[this.timelinePosition].url
+          this.imageError = false
+        }
+        console.log(`🎞️  Loaded ${this.images.length} of ${this.totalImagesOnServer} archived images`)
+      } catch (error) {
+        console.warn('Could not load image archive:', error.message)
+      }
+    },
+
     startImageCapture() {
+      // Nothing to capture without a camera - skip rather than fail every minute
+      if (this.cameraAvailable === false) {
+        console.log('📷 No camera detected - skipping capture, showing archive only')
+        return
+      }
+
       // Get capture interval from API config
       this.fetchConfig().then(() => {
         // Capture image at configured interval
         this.imageInterval = setInterval(() => {
           this.captureImage()
         }, this.imageCaptureInterval)
-        
+
         // Initial capture
         this.captureImage()
       })
@@ -464,6 +519,7 @@ export default {
       }
       
       this.images.push(imageData)
+      this.totalImagesOnServer++
       // Update timeline position
       this.timelinePosition = this.images.length - 1
       
@@ -479,27 +535,31 @@ export default {
         console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename, 'URL:', uniqueUrl.substring(0, 80) + '...')
       })
       
-      // Keep only last 100 images to prevent memory issues
-      if (this.images.length > 100) {
+      // Keep only the most recent images to prevent memory issues
+      if (this.images.length > this.maxImages) {
         const oldImage = this.images.shift()
         // Revoke blob URLs if they exist
         if (oldImage.url && oldImage.url.startsWith('blob:')) {
           URL.revokeObjectURL(oldImage.url)
         }
-        console.log('Removed oldest image (keeping max 100)')
+        this.timelinePosition = this.images.length - 1
+        console.log(`Removed oldest image (keeping max ${this.maxImages})`)
       }
     },
     
     onTimelineScrub() {
       if (this.images.length > 0 && this.timelinePosition < this.images.length) {
-        // Force re-render when scrubbing timeline
-        this.imageKey++
+        // Swap the src without touching imageKey: recreating the <img> element
+        // would blank it out and collapse the container until the new frame
+        // loads. Scrubbed frames always have distinct filenames, so the
+        // cache-busting re-render that live captures need doesn't apply here.
         this.currentImage = this.images[this.timelinePosition].url
         this.imageError = false
       }
     },
     
     toggleViewMode() {
+      this.viewModeChosenByUser = true
       if (this.viewMode === 'livestream') {
         // Switch to timelapse mode
         this.viewMode = 'timelapse'
@@ -534,7 +594,13 @@ export default {
         
         this.isOnline = true
         this.exposureLightOn = status.exposure_light === 'on'
-        
+
+        // With no camera the livestream is a dead image, so open into timelapse
+        this.cameraAvailable = status.sensors?.camera === true
+        if (!this.cameraAvailable && !this.viewModeChosenByUser) {
+          this.viewMode = 'timelapse'
+        }
+
         // Update environmental data if available
         if (status.environment) {
           this.temperature = status.environment.temperature
