@@ -56,10 +56,31 @@ class Relay:
     a pin, a deadband decided elsewhere, and dwell times that stop a controller
     chattering the contacts. Switching goes through the gate so no ADC
     conversion is in flight when the contacts move.
+
+    The relay board is **active-high** -- verified on the bench by listening to
+    the contact: HIGH closes it, LOW opens it. So driving the pin LOW here at
+    startup leaves the load off, which is what we want from a service that may
+    restart at any time.
+
+    `pwm_pin` is an optional companion pin held high for as long as the relay
+    is closed. The Noctua is a 4-pin fan, and a 4-pin fan only free-runs at
+    full speed when its PWM line is genuinely floating. Ours is not floating:
+    the Pi idles that pin as an input with the pull-down enabled, which the fan
+    reads as a hard 0% duty and obeys by not turning. That is a relay that
+    clicks and a fan that sits still, which looks exactly like a wiring fault
+    and is not. Raising the pin with the relay is the whole fix.
+
+    This is a level, not a waveform. Nothing here asks for a fan speed --
+    `FanController` is bang-bang -- so there is no duty cycle for a real PWM
+    signal to carry. Hardware PWM would also need a `pwm-2chan` overlay and a
+    reboot, and this Pi's `RPi.GPIO` is the `rpi-lgpio` shim, so `GPIO.PWM`
+    would be software-timed and jittery. If full speed ever proves too strong,
+    that overlay is the upgrade path.
     """
 
-    def __init__(self, pin, gate, min_on=0, min_off=0, name="relay"):
+    def __init__(self, pin, gate, min_on=0, min_off=0, name="relay", pwm_pin=None):
         self.pin = pin
+        self.pwm_pin = pwm_pin
         self.name = name
         self._gate = gate
         self._min_on = min_on
@@ -75,6 +96,9 @@ class Relay:
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(pin, GPIO.OUT)
         GPIO.output(pin, GPIO.LOW)
+        if pwm_pin is not None:
+            GPIO.setup(pwm_pin, GPIO.OUT)
+            GPIO.output(pwm_pin, GPIO.LOW)
 
     @property
     def is_on(self):
@@ -102,7 +126,17 @@ class Relay:
             return False
 
         with self._gate.switching():
-            self._GPIO.output(self.pin, self._GPIO.HIGH if on else self._GPIO.LOW)
+            # Order matters. Raise the speed command before applying power so
+            # the fan never sees a live rail with a 0% duty on its PWM line,
+            # and cut power before releasing it on the way down.
+            if on:
+                if self.pwm_pin is not None:
+                    self._GPIO.output(self.pwm_pin, self._GPIO.HIGH)
+                self._GPIO.output(self.pin, self._GPIO.HIGH)
+            else:
+                self._GPIO.output(self.pin, self._GPIO.LOW)
+                if self.pwm_pin is not None:
+                    self._GPIO.output(self.pwm_pin, self._GPIO.LOW)
         self._on = on
         self._changed_at = time.monotonic()
         return True
@@ -112,36 +146,47 @@ class Relay:
 
 
 class FanController:
-    """Bang-bang humidity control with a floor schedule.
+    """Timed air exchange. The fan exists to keep fresh air moving so mould
+    does not establish -- that is its only job.
 
-    Two rules, whichever asks for the fan wins:
+    It is not humidity control and not temperature control. It will move both,
+    and that is accepted, but neither is a setpoint and neither is allowed to
+    decide when the fan runs. An earlier version of this class had it backwards,
+    treating relative humidity as the primary rule and the timed cycle as a
+    fallback named `floor_due`; if that framing turns up anywhere else in the
+    tree, it is wrong.
 
-    Humidity -- run above `rh_on`, stop below `rh_off`. The deadband between
-    them is what stops the fan cycling on sensor noise around a single
-    threshold.
+    The rule: run `cycle_on` seconds in every `cycle_period`. Short frequent
+    bursts rather than long runs, so the chamber gets exchanged without being
+    swept out.
 
-    Floor -- run `floor_on` seconds in every `floor_period` regardless. A
-    sealed chamber sitting at a stable 93% RH never trips the humidity rule,
-    and the organism still needs the CO2 clearing. Without this the fan could
-    stay off indefinitely.
+    `rh_on`/`rh_off` are an optional extra-ventilation override, off by default
+    (`rh_on=None`). It is deliberately not part of the mould logic -- it is
+    there only if a run ever turns up a reason to move more air at saturation.
+    When set, `rh_off` must sit below `rh_on`; the gap between them is what
+    stops the fan chattering on sensor noise around a single threshold.
     """
 
-    def __init__(self, relay, rh_on=95.0, rh_off=91.0,
-                 floor_period=1200, floor_on=60):
-        if rh_off >= rh_on:
+    def __init__(self, relay, rh_on=None, rh_off=None,
+                 cycle_period=300, cycle_on=60):
+        if rh_on is not None and (rh_off is None or rh_off >= rh_on):
             raise ValueError(f"rh_off {rh_off} must be below rh_on {rh_on}")
+        if not 0 < cycle_on <= cycle_period:
+            raise ValueError(
+                f"cycle_on {cycle_on} must be above 0 and within cycle_period {cycle_period}"
+            )
         self.relay = relay
         self.rh_on = rh_on
         self.rh_off = rh_off
-        self.floor_period = floor_period
-        self.floor_on = floor_on
+        self.cycle_period = cycle_period
+        self.cycle_on = cycle_on
         self._window_start = time.monotonic()
         self._ran_this_window = 0.0
         self._last_tick = time.monotonic()
         self.reason = "startup"
 
     def _advance_window(self, now):
-        if now - self._window_start >= self.floor_period:
+        if now - self._window_start >= self.cycle_period:
             self._window_start = now
             self._ran_this_window = 0.0
 
@@ -153,24 +198,21 @@ class FanController:
         self._last_tick = now
         self._advance_window(now)
 
-        floor_due = self._ran_this_window < self.floor_on
+        # The air-exchange cycle is the rule, and it is deliberately evaluated
+        # without reference to any sensor. A failed SHT31 must not be able to
+        # stop the chamber being ventilated.
+        cycle_due = self._ran_this_window < self.cycle_on
+        want, reason = cycle_due, (
+            "air exchange" if cycle_due else "exchange satisfied"
+        )
 
-        if humidity is None:
-            # No reading: fall back to the floor schedule alone. Ventilating on
-            # a fixed duty is safe; guessing at humidity is not.
-            want, reason = floor_due, "floor (no reading)"
-        elif humidity >= self.rh_on:
-            want, reason = True, f"humidity {humidity:.1f}% >= {self.rh_on}%"
-        elif humidity <= self.rh_off:
-            want, reason = floor_due, (
-                "floor schedule" if floor_due else f"humidity {humidity:.1f}% <= {self.rh_off}%"
-            )
-        else:
-            # Inside the deadband: hold, unless the floor schedule wants it.
-            want = self.relay.is_on or floor_due
-            reason = "deadband hold" if self.relay.is_on else (
-                "floor schedule" if floor_due else "deadband idle"
-            )
+        # Optional extra ventilation at saturation. It can only ever add run
+        # time on top of the cycle, never subtract it.
+        if self.rh_on is not None and humidity is not None:
+            if humidity >= self.rh_on:
+                want, reason = True, f"humidity {humidity:.1f}% >= {self.rh_on}%"
+            elif humidity > self.rh_off and self.relay.is_on:
+                want, reason = True, "humidity deadband hold"
 
         self.reason = reason
         return self.relay.set(want)
@@ -181,7 +223,8 @@ class FanController:
             "reason": self.reason,
             "held_for": round(self.relay.held_for, 1),
             "window_runtime": round(self._ran_this_window, 1),
-            "window_target": self.floor_on,
+            "window_target": self.cycle_on,
+            "window_period": self.cycle_period,
         }
 
 
@@ -219,18 +262,21 @@ class EnvironmentMonitor:
             try:
                 relay = Relay(
                     config.FAN_PIN, self.gate,
-                    min_on=getattr(config, 'FAN_MIN_ON', 180),
-                    min_off=getattr(config, 'FAN_MIN_OFF', 180),
+                    min_on=getattr(config, 'FAN_MIN_ON', 60),
+                    min_off=getattr(config, 'FAN_MIN_OFF', 60),
                     name="fan",
+                    pwm_pin=getattr(config, 'FAN_PWM_PIN', None),
                 )
                 self.fan = FanController(
                     relay,
-                    rh_on=getattr(config, 'FAN_RH_ON', 95.0),
-                    rh_off=getattr(config, 'FAN_RH_OFF', 91.0),
-                    floor_period=getattr(config, 'FAN_FLOOR_PERIOD', 1200),
-                    floor_on=getattr(config, 'FAN_FLOOR_ON', 60),
+                    rh_on=getattr(config, 'FAN_RH_ON', None),
+                    rh_off=getattr(config, 'FAN_RH_OFF', None),
+                    cycle_period=getattr(config, 'FAN_CYCLE_PERIOD', 300),
+                    cycle_on=getattr(config, 'FAN_CYCLE_ON', 60),
                 )
-                print(f"✓ fan relay on GPIO {config.FAN_PIN}")
+                pwm = getattr(config, 'FAN_PWM_PIN', None)
+                print(f"✓ fan relay on GPIO {config.FAN_PIN}"
+                      + (f", PWM held high on GPIO {pwm}" if pwm is not None else ""))
             except Exception as exc:
                 print(f"✗ fan relay unavailable: {exc}")
         else:

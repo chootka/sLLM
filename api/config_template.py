@@ -46,21 +46,43 @@ SHT31_I2C_ADDRESS = 0x44       # 0x44 default, 0x45 if the ADDR pin is pulled hi
 SENSOR_READ_INTERVAL = 1.0     # seconds
 
 # --- chamber fan ------------------------------------------------------------
-# Bang-bang on relative humidity with a deadband, plus a floor schedule so CO2
-# still clears on a humid plateau where the RH rule alone would never fire.
+# The fan keeps fresh air moving so mould does not establish. That is its only
+# purpose. It will shift humidity and temperature as a side effect, which is
+# accepted, but neither is a setpoint and neither decides when it runs -- the
+# timed cycle below is the whole rule.
 #
-# Set FAN_ENABLED once the Noctua and its relay are actually wired. Left False
-# the environment loop still reads and publishes humidity, it just does not
-# drive anything. A vaporizer, if one is added later, is the same shape: a
-# relay on a pin with dwell times, driven from a deadband.
-FAN_ENABLED = False
-FAN_PIN = 22                   # BCM, relay controlling the Noctua NF-A6x25
-FAN_RH_ON = 95.0               # % RH above which the fan runs
-FAN_RH_OFF = 91.0              # % RH below which it stops
-FAN_MIN_ON = 180               # seconds, minimum run once started
-FAN_MIN_OFF = 180              # seconds, minimum rest once stopped
-FAN_FLOOR_PERIOD = 1200        # seconds, the CO2 floor schedule window
-FAN_FLOOR_ON = 60              # seconds of run per window regardless of RH
+# Wiring, verified on the bench 2026-08-05 by listening to the contact and
+# watching the blades:
+#   relay IN  -> physical pin 16 = BCM 23, active-high (HIGH closes)
+#   fan PWM   -> physical pin 32 = BCM 12
+# The PWM line is held HIGH as a level whenever the relay closes, not driven
+# as a waveform -- see the Relay docstring in gpio/sensor.py for why. Without
+# it the relay clicks and the fan does not turn, because the pin idles as an
+# input with the pull-down on and the fan reads that as 0% duty.
+#
+# A vaporizer, if one is added later, is the same shape: a relay on a pin with
+# dwell times, driven from whatever rule suits it.
+FAN_ENABLED = True
+FAN_PIN = 23                   # BCM, relay controlling the Noctua NF-A6x25 5V
+FAN_PWM_PIN = 12               # BCM, fan PWM line, held high while running
+
+# Air exchange: run FAN_CYCLE_ON seconds in every FAN_CYCLE_PERIOD. 60 in 300
+# is 20% duty -- short frequent bursts rather than long runs. This is a
+# starting point, not a derived number; the empty-chamber run is what tunes it.
+FAN_CYCLE_PERIOD = 300         # seconds, the air-exchange window
+FAN_CYCLE_ON = 60              # seconds of run per window
+
+# Dwell times, only to stop the contacts chattering. Keep FAN_MIN_ON below
+# FAN_CYCLE_ON or the relay will refuse to release at the end of a burst and
+# overrun the window.
+FAN_MIN_ON = 30                # seconds, minimum run once started
+FAN_MIN_OFF = 60               # seconds, minimum rest once stopped
+
+# Optional extra ventilation at saturation. Off by default: it is not part of
+# the mould logic. Set both to enable, RH_OFF below RH_ON. It can only ever add
+# run time on top of the cycle, never take it away.
+FAN_RH_ON = None               # e.g. 95.0
+FAN_RH_OFF = None              # e.g. 91.0
 
 # --- camera -----------------------------------------------------------------
 # Pi Camera Module 3 NoIR (IMX708) on CSI. Capture runs through the matrix
