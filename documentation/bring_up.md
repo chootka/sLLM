@@ -103,13 +103,20 @@ launchctl setenv OLLAMA_HOST 0.0.0.0     # then restart Ollama
 ollama pull qwen2.5:14b
 ```
 
-**On the Pi:**
+**On the Pi — run the loop from the deployed tree, not the checkout:**
 
 ```bash
+cd /var/www/sllm
 ./scripts/py llm/loop.py --check       # is the model reachable, is there a window
 ./scripts/py llm/loop.py --dry-run     # full loop, never drives the matrix
 sudo ./scripts/py llm/loop.py          # live
 ```
+
+The loop reads the CSV that `sllm-api.service` writes, and the service writes
+under `/var/www/sllm/data`. Run from `~/sllm` it resolves its own, empty data
+directory and reports `0 samples` — which looks exactly like a dead ADC and
+is not. Replay runs are fine from either tree, since they bring their own
+data.
 
 ### Testing without waiting on the organism
 

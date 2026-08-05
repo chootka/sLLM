@@ -116,13 +116,21 @@ else
     echo "⚠️  Warning: api directory not found at $PROJECT_ROOT/api"
 fi
 
-# The hardware modules live outside api/ and the API imports them by path.
-echo "Copying hardware modules..."
-mkdir -p "$DEPLOY_DIR/gpio"
-rsync -av --delete --exclude='__pycache__' --exclude='*.pyc' \
-    gpio/ "$DEPLOY_DIR/gpio/"
+# The hardware modules, the model loop and the interpreter wrapper all live
+# outside api/ and are imported or invoked by path.
+#
+# llm/ and scripts/ are deployed rather than run from the checkout because the
+# loop reads the CSV that the *service* writes, under $DEPLOY_DIR/data. Run
+# from ~/sllm it resolves its own empty data directory and sees no samples at
+# all, which looks exactly like a broken ADC.
+echo "Copying hardware modules, model loop and wrapper..."
+for component in gpio llm scripts; do
+    mkdir -p "$DEPLOY_DIR/$component"
+    rsync -av --delete --exclude='__pycache__' --exclude='*.pyc' \
+        "$component/" "$DEPLOY_DIR/$component/"
+done
 if [ "$IS_LINUX" = true ]; then
-    chown -R chootka:chootka "$DEPLOY_DIR/gpio"
+    chown -R chootka:chootka "$DEPLOY_DIR/gpio" "$DEPLOY_DIR/llm" "$DEPLOY_DIR/scripts"
 fi
     if [ "$IS_LINUX" = true ]; then
         # Set ownership to chootka (service runs as chootka, needs write access for GPIO)
