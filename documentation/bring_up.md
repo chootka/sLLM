@@ -9,8 +9,8 @@ State as of 2026-08-05, on the replacement Pi 5 (serial 62a24b43).
 | ADS1115 | I²C 0x48 | reading, 3 channels differential at 1 Hz, gain 16 |
 | SHT31 | I²C 0x44 | reading, ~24.7 °C / 53 %RH |
 | WS2812B matrix | GPIO 18 | opens as root; **not** reachable from the API, see below |
-| Camera | CSI | not attached yet |
-| Noctua fan | relay | not wired, `FAN_ENABLED = False` |
+| Camera | CSI | attached and capturing, but aimed at the ceiling |
+| Noctua fan | BCM 23 relay + BCM 12 PWM | running, 60s in every 300s |
 
 The GPIO 2/3 damage on the old board did not follow to this one:
 `pinctrl get 2,3` reads `hi` on both, and both devices enumerate.
