@@ -94,6 +94,35 @@ The red imaging flash is required for the capture sequence to mean anything,
 so this has to be settled before the timelapse is scientifically useful. It
 does not block attaching the camera or checking focus.
 
+## The three services, and which one is the experiment
+
+```
+sllm-matrixd   root    owns the WS2812B panel, unix socket at /run/sllm/matrix.sock
+sllm-api       chootka sampling, logging, camera timelapse, fan. A matrixd client.
+sllm-loop      chootka THE MODEL LOOP. Off unless you start it.
+```
+
+The first two start at boot. **`sllm-loop` does not**, deliberately: the model
+driving light into a chamber is something to start on purpose, not something
+that resumes because the power blinked.
+
+```bash
+sudo systemctl start sllm-loop      # begin
+sudo systemctl stop sllm-loop       # end, clears the stimulus on the way out
+systemctl is-active sllm-loop       # is the experiment running
+journalctl -u sllm-loop -f          # watch turns as they happen
+sudo systemctl enable sllm-loop     # only when it should survive a reboot
+```
+
+Stopping is safe: SIGTERM unwinds through loop.py's handler so the last zone
+the model chose is cleared. Killing it with SIGKILL is not — that skips the
+cleanup and leaves the zone lit, and only matrixd's own shutdown would blank it.
+
+To change the turn interval or the sham rate for a service run, edit
+`LLM_TURN_INTERVAL` and `LLM_SHAM_RATE` in `api/config.py`; the unit passes no
+flags so the config is the only knob. Run it in the foreground instead when you
+want the command-line flags.
+
 ## The model loop
 
 `llm/loop.py` is the live version of `llm/filters/harness.py`. It imports the

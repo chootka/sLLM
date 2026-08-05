@@ -1,0 +1,52 @@
+[Unit]
+Description=sLLM model loop (electrodes -> reducer -> model -> matrix)
+Documentation=file:///var/www/sllm/documentation/bring_up.md
+After=network-online.target sllm-api.service sllm-matrixd.service
+# The loop reads the CSV that sllm-api writes and drives the panel through
+# matrixd. Neither is a hard dependency -- it fails loudly and exits if the
+# matrix is unreachable rather than running as an unlabelled sham -- but both
+# should be up first.
+Wants=sllm-api.service sllm-matrixd.service
+# These two belong in [Unit], not [Service]; systemd ignores them silently in
+# [Service] and the rate limit then does not exist at all.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# Unprivileged. This is only possible because matrixd owns the panel: before
+# the helper existed, a live run needed root and the system interpreter.
+User=chootka
+Group=chootka
+WorkingDirectory=/var/www/sllm
+ExecStart=/var/www/sllm/api/venv/bin/python -u /var/www/sllm/llm/loop.py
+
+# SIGTERM, so loop.py's handler unwinds and clears the stimulus on the way out.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Deliberately NOT Restart=always. If the loop exits because the matrix went
+# away, restarting it in a tight cycle would either spam the model or silently
+# convert the run into a permanent sham. A stopped loop is a visible problem;
+# a flapping one is not.
+Restart=on-failure
+RestartSec=60
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/sllm/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+# Deliberately not enabled at boot by default. The model driving light into a
+# chamber is something to start on purpose, not something that resumes because
+# the power blinked. Enable it once the installation is meant to run unattended.
+WantedBy=multi-user.target

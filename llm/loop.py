@@ -39,6 +39,7 @@ import json
 import os
 import pathlib
 import random
+import signal
 import sys
 import time
 from datetime import datetime, timezone
@@ -299,7 +300,23 @@ def open_matrix(dry_run):
         return None, str(exc)
 
 
+def install_signal_handlers():
+    """Make SIGTERM unwind the stack instead of killing the process outright.
+
+    systemd stops a service with SIGTERM, and Python's default action for it
+    terminates immediately without running `finally` blocks. That matters here:
+    the `finally` at the end of main() is what clears the stimulus. Without
+    this, `systemctl stop sllm-loop` would leave whichever zone the model last
+    chose lit indefinitely, with nothing left running that knows to turn it off.
+    """
+    def _interrupt(_sig, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _interrupt)
+
+
 def main():
+    install_signal_handlers()
     parser = argparse.ArgumentParser()
     parser.add_argument('--check', action='store_true',
                         help='verify Ollama and the data window, run no turns')
