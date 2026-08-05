@@ -395,22 +395,25 @@ export default {
     },
 
     startImageCapture() {
-      // Nothing to capture without a camera - skip rather than fail every minute
+      // The page is a VIEWER. It must never drive a capture on its own.
+      //
+      // It used to POST /api/capture-image on page load and then on its own
+      // timer, so the real capture rate was one stream per open browser tab on
+      // top of the backend timelapse. Every capture fires the red imaging flash
+      // over the organism, which means uncontrolled optical stimulus timed by
+      // human web traffic -- and the model is never told a flash happened. The
+      // backend timelapse is the single source of captures; this listens for
+      // the image_captured socket event and renders what arrives.
+      //
+      // The Capture Image button still works: that is a deliberate human
+      // action, not a side effect of loading a web page.
+      this.fetchConfig()
+
       if (this.cameraAvailable === false) {
-        console.log('📷 No camera detected - skipping capture, showing archive only')
+        console.log('📷 No camera detected - showing archive only')
         return
       }
-
-      // Get capture interval from API config
-      this.fetchConfig().then(() => {
-        // Capture image at configured interval
-        this.imageInterval = setInterval(() => {
-          this.captureImage()
-        }, this.imageCaptureInterval)
-
-        // Initial capture
-        this.captureImage()
-      })
+      console.log('👁️  Viewer mode: frames arrive from the backend timelapse')
     },
     
     async fetchConfig() {
@@ -505,6 +508,14 @@ export default {
     },
     
     addImageToTimeline(imageUrl, filename) {
+      // A manual capture arrives twice: once as the POST response, once as the
+      // image_captured socket event for the same file. Without this the same
+      // frame is appended twice, which double-counts the archive and evicts a
+      // real frame off the front of the 100-image window.
+      if (filename && this.images.some(image => image.filename === filename)) {
+        return
+      }
+
       // Revoke old blob URLs if they exist (cleanup)
       if (this.currentImage && this.currentImage.startsWith('blob:')) {
         URL.revokeObjectURL(this.currentImage)

@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 import syspath  # noqa: F401  (path setup, must precede hardware imports)
+import leds  # zone geometry and the Matrix type; touches no hardware on import
 
 from datetime import datetime
 
@@ -242,10 +243,13 @@ def main():
     if mode == "shot":
         matrix = None
         try:
-            import leds
+            from matrix_client import open_matrix
 
-            matrix = leds.Matrix()
-            print("matrix ready, capture will use the blank/flash sequence")
+            matrix, matrix_error = open_matrix()
+            if matrix is None:
+                print(f"· no matrix ({matrix_error}); capturing without backlight")
+            else:
+                print("matrix ready, capture will use the blank/flash sequence")
         except Exception as exc:
             print(f"· no matrix ({exc}); capturing without backlight")
 
@@ -256,7 +260,12 @@ def main():
             print(f"captured {camera.capture()}")
         finally:
             camera.close()
-            if matrix is not None:
+            # Only blank the panel if this process owns it. Through matrixd the
+            # panel outlives this command and other clients are using it, so
+            # off() here would drop the barrier zone out from under them --
+            # and the barrier is what keeps the plasmodium off the reference
+            # electrode. The daemon blanks on its own shutdown instead.
+            if matrix is not None and isinstance(matrix, leds.Matrix):
                 matrix.off()
         return 0
 

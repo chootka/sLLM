@@ -283,12 +283,18 @@ def validate_action(reply, zones, barrier_zone, max_duration):
 
 
 def open_matrix(dry_run):
+    """The panel, preferring the root-owned daemon.
+
+    With matrixd running this works unprivileged, so a live run no longer needs
+    sudo. Without it, the direct fallback still opens the panel in-process,
+    which needs both root and the system interpreter.
+    """
     if dry_run:
         return None, "dry run"
     try:
-        import leds
+        from matrix_client import open_matrix as _open
 
-        return leds.Matrix(), None
+        return _open()
     except Exception as exc:
         return None, str(exc)
 

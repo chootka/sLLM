@@ -85,18 +85,26 @@ environment = EnvironmentMonitor(config, gate=gate, log=environment_log(config))
 
 
 def open_matrix():
-    """The LED matrix, or None.
+    """The LED matrix via the root-owned daemon, or None.
 
     neopixel drives the WS2812 chain through /dev/mem and needs root. This
-    service runs as chootka, so unless it is given that access the matrix is
-    unavailable here and captures happen without the red backlight. That is a
-    deployment decision, not something to paper over: see documentation.
+    service is a Flask app reachable from the internet through nginx and must
+    not be root, so it does not open the panel itself -- gpio/matrixd.py does,
+    and this talks to it over a unix socket. `allow_direct=False` because the
+    fallback of driving the panel in-process is exactly what we are refusing:
+    it would fail here anyway, and if it ever succeeded that would mean the API
+    had been given privileges it should not have.
+
+    None means captures happen without the red backlight, as before.
     """
     try:
-        import leds
+        from matrix_client import open_matrix as _open
 
-        matrix = leds.Matrix()
-        print("✓ matrix ready")
+        matrix, error = _open(allow_direct=False)
+        if matrix is None:
+            print(f"· matrix unavailable ({error}); captures will have no backlight")
+            return None
+        print("✓ matrix ready via matrixd")
         return matrix
     except Exception as exc:
         print(f"· matrix unavailable ({exc}); captures will have no backlight")
@@ -487,7 +495,14 @@ def main():
         if camera is not None:
             camera.close()
         if matrix is not None:
-            matrix.off()
+            # Clear this service's stimulus, but do not blank the panel. The
+            # API no longer owns it -- matrixd does, and llm/loop.py may be
+            # driving zones through the same daemon. off() would also drop the
+            # barrier zone, which must stay lit whenever the organism is in.
+            try:
+                matrix.clear_stimulus()
+            except Exception as exc:  # noqa: BLE001 -- shutdown must not raise
+                print(f"could not clear stimulus on shutdown: {exc}")
 
 
 if __name__ == '__main__':
