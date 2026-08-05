@@ -67,6 +67,13 @@ from the API, for two independent reasons:
    dist-packages`. Mixing them gives
    `ws2811_channel_t_gpionum_set, argument 2 of type 'int'`.
 
+**Update 2026-08-05:** `python3-picamera2` and `python3-numpy` are now
+installed for the system interpreter, which previously had neither. That
+matters twice over. It removed a second symptom of the same split — before it,
+no single interpreter had both `picamera2` and `_rpi_ws281x`, so the
+blank/flash capture sequence could not run at all. And it makes option 2 below
+cheap, because system python can now run the entire stack.
+
 Until this is resolved the API starts fine and reports `"matrix": false`,
 captures happen without the red backlight, and `/api/trigger-light` returns
 503. Nothing else is affected.
@@ -109,8 +116,18 @@ ollama pull qwen2.5:14b
 cd /var/www/sllm
 ./scripts/py llm/loop.py --check       # is the model reachable, is there a window
 ./scripts/py llm/loop.py --dry-run     # full loop, never drives the matrix
-sudo ./scripts/py llm/loop.py          # live
+sudo python3 llm/loop.py               # live -- system python, NOT ./scripts/py
 ```
+
+**A live run must use system `python3`, not `./scripts/py`.** The venv cannot
+drive the panel: it fails with `ws2811_channel_t_gpionum_set, argument 2 of
+type 'int'`, and the loop then refuses to start rather than running as a silent
+permanent sham. The system interpreter has `numpy`, `requests`, `picamera2` and
+`_rpi_ws281x` together, so it can do the whole job.
+
+For a hardware smoke test, add `--sham-rate 0 --interval 30`. At the default
+sham rate of 0.25 roughly one turn in four is deliberately not applied, which
+looks exactly like a dead matrix and will have you debugging working hardware.
 
 The loop reads the CSV that `sllm-api.service` writes, and the service writes
 under `/var/www/sllm/data`. Run from `~/sllm` it resolves its own, empty data
