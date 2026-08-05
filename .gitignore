@@ -1,7 +1,8 @@
 /data/
 scripts/config.sh
-api/venv/
-api/.venv/
-frontend/node_modules/
+node_modules/
 frontend/dist/
 .DS_Store
+__pycache__/
+*.pyc
+venv/

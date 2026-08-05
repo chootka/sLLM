@@ -1,7 +1,8 @@
 # sLLM (slimey Large Language Model)
 
-**Public URL:**
-- https://sllm.tailf7c7fb.ts.net/
+**Public URLs:**
+- https://sllm.visceral.systems/
+- http://sllm.tailf7c7fb.ts.net/
 
 ## PROJECT OVERVIEW
 sLLM, or "slimey Large Language Model," is an experimental research project that creates a communication bridge between humans and Physarum polycephalum (common slime mold). Through a custom-built chat interface, humans can send messages that are translated into environmental stimuli for the slime mold. The slime mold's electrical responses are then captured, interpreted, and translated back into natural language.
