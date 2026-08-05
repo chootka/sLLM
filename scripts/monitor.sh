@@ -1,7 +1,7 @@
 #!/bin/bash
-# Setup script for Slime Mold Monitor on Raspberry Pi
+# Setup script for Slime Mould Monitor on Raspberry Pi
 
-echo "Setting up Slime Mold Monitor..."
+echo "Setting up Slime Mould Monitor..."
 
 # Update system
 sudo apt-get update

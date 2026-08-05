@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Configuration setup helper for Slime Mold Monitor
+Configuration setup helper for Slime Mould Monitor
 Creates config.py from template with user customization
 """
 
@@ -9,7 +9,7 @@ import shutil
 
 def setup_config():
     """Interactive configuration setup"""
-    print("Slime Mold Monitor Configuration Setup")
+    print("Slime Mould Monitor Configuration Setup")
     print("=" * 40)
     
     # Check if config.py already exists

@@ -1,4 +1,4 @@
-# Slime Mold Monitor - Hardware Setup Guide
+# Slime Mould Monitor - Hardware Setup Guide
 
 ## Components Needed
 
@@ -7,7 +7,7 @@
 - Microscope with ring light
 - Microscope camera
 - Macro lens camera
-- Slime molds in petri dishes
+- Slime moulds in petri dishes
 - Aluminum tape
 
 ### Still Needed:
@@ -22,7 +22,7 @@
 
 ### Aluminum Tape Electrodes:
 ```
-Petri Dish with Slime Mold
+Petri Dish with Slime Mould
     |
     | (Aluminum tape strip 1)
     |
@@ -70,8 +70,8 @@ Camera --------> USB or CSI port (depending on camera type)
    - Leave about 5cm extending outside for connections
    - Ensure the strips don't touch each other
 
-3. **Inoculate with Slime Mold:**
-   - Place the slime mold in the center
+3. **Inoculate with Slime Mould:**
+   - Place the slime mould in the center
    - Ensure it has paths to both electrodes
    - Add oat flakes as food sources
 
@@ -114,7 +114,7 @@ Camera --------> USB or CSI port (depending on camera type)
    Add:
    ```ini
    [Unit]
-   Description=Slime Mold Monitor API
+   Description=Slime Mould Monitor API
    After=network.target
 
    [Service]
@@ -180,7 +180,7 @@ Camera --------> USB or CSI port (depending on camera type)
 
 ## Safety Notes
 
-- Keep exposure light duration short to avoid harming the slime mold
+- Keep exposure light duration short to avoid harming the slime mould
 - Maintain proper humidity in the enclosure
-- Handle the slime mold gently
+- Handle the slime mould gently
 - Keep the setup away from direct sunlight

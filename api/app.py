@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Slime Mold API Server
+Slime Mould API Server
 Provides endpoints for electrical readings, camera capture, and light control
 with real-time Socket.IO support
 """

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Slime Mold Monitor - Minimal version for testing
+Slime Mould Monitor - Minimal version for testing
 Works with just gpiozero or falls back to mock mode
 """
 
@@ -234,7 +234,7 @@ def handle_disconnect():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("SLIME MOLD MONITOR - Starting Up")
+    print("SLIME MOULD MONITOR - Starting Up")
     print("="*50)
     
     if GPIO_AVAILABLE:

@@ -46,7 +46,7 @@ The deployment script automatically:
 
 ## Prerequisites
 
-- Raspberry Pi 5 with slime mold monitoring hardware
+- Raspberry Pi 5 with slime mould monitoring hardware
 - Tailscale account (free at https://tailscale.com)
 - Optional: Custom domain (e.g., `sllm.visceral.systems`) if you want to use your own domain name
 - Optional: Cloudflare account if using custom domain with Tailscale Funnel

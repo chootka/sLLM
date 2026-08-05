@@ -1,4 +1,4 @@
-# Slime Mold Monitor Configuration File
+# Slime Mould Monitor Configuration File
 # Copy this to config.py and modify as needed
 
 # GPIO Pin Configuration
