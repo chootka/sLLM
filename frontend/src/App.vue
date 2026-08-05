@@ -103,11 +103,12 @@
         <h2>Environmental Conditions</h2>
         <div class="environment-display">
           <div class="env-metric">
-            <div class="value">{{ temperature ? temperature.toFixed(1) : '--' }}°C</div>
+            <div class="value">{{ temperature !== null ? temperature.toFixed(1) : '--' }}°C</div>
+            <div class="sub-value">{{ temperatureF !== null ? temperatureF.toFixed(1) : '--' }}°F</div>
             <div class="label">Temperature</div>
           </div>
           <div class="env-metric">
-            <div class="value">{{ humidity ? humidity.toFixed(1) : '--' }}%</div>
+            <div class="value">{{ humidity !== null ? humidity.toFixed(1) : '--' }}%</div>
             <div class="label">Humidity</div>
           </div>
         </div>
@@ -146,6 +147,7 @@ export default {
       
       // Environmental data
       temperature: null,
+      temperatureF: null,
       humidity: null,
       temperatureHistory: [],
       humidityHistory: [],
@@ -254,6 +256,7 @@ export default {
       
       this.socket.on('environment_update', (data) => {
         this.temperature = data.temperature
+        this.temperatureF = data.temperature_f
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
         const date = new Date(data.datetime)
@@ -604,6 +607,7 @@ export default {
         // Update environmental data if available
         if (status.environment) {
           this.temperature = status.environment.temperature
+          this.temperatureF = status.environment.temperature_f
           this.humidity = status.environment.humidity
           this.hasEnvironmentalData = true
           const date = new Date(status.environment.datetime)

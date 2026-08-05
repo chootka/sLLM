@@ -154,6 +154,20 @@ class Matrix:
         self._blue[zone] = intensity
         self._render()
 
+    def active_zones(self):
+        """Zones currently lit as stimulus, {zone: intensity}.
+
+        Excludes the barrier, which is always lit and is not a stimulus.
+        """
+        return {
+            z: level for z, level in enumerate(self._blue)
+            if level > 0 and z != BARRIER_ZONE
+        }
+
+    def stimulus_active(self):
+        """Whether any drivable zone is currently lit."""
+        return bool(self.active_zones())
+
     def clear_stimulus(self):
         """All zones off except the barrier."""
         for z in range(ZONES):

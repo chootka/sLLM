@@ -86,19 +86,43 @@ chmod -R 755 $FRONTEND_DIR
 echo "Copying API files..."
 cd "$PROJECT_ROOT"
 if [ -d "api" ]; then
-    # Use rsync if available (more reliable), otherwise use cp with proper glob handling
-    if command -v rsync >/dev/null 2>&1; then
-        rsync -av --exclude='__pycache__' --exclude='*.pyc' --exclude='venv' api/ $API_DIR/
-    else
-        # Fallback: copy directory contents using a loop to avoid glob issues
-        for item in api/* api/.[!.]*; do
-            if [ -e "$item" ]; then
-                cp -r "$item" $API_DIR/
-            fi
-        done
+    if ! command -v rsync >/dev/null 2>&1; then
+        echo "❌ rsync is required for deployment"
+        exit 1
+    fi
+    # --delete so files removed from the repo also leave the deployment; that
+    # is the whole point of a deploy step rather than a copy. Excluded paths
+    # are protected from deletion by rsync, so venv and config.py survive it.
+    #
+    # config.py is excluded in BOTH directions: it is per-machine and
+    # untracked, and the deployed copy is the only record of the deployed
+    # settings. Overwriting it from the repo is precisely how the two trees
+    # drifted before -- the repo said /home/pi/sllm/data, the deployment said
+    # /var/www/sllm/data, and a sed further down quietly patched it every
+    # time. config_template.py still ships, so a fresh deployment can seed one.
+    rsync -av --delete \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        --exclude='venv' \
+        --exclude='config.py' \
+        api/ $API_DIR/
+
+    if [ ! -f "$API_DIR/config.py" ]; then
+        echo "No config.py at $API_DIR - seeding one from config_template.py"
+        cp "$API_DIR/config_template.py" "$API_DIR/config.py"
+        chown chootka:chootka "$API_DIR/config.py"
     fi
 else
     echo "⚠️  Warning: api directory not found at $PROJECT_ROOT/api"
+fi
+
+# The hardware modules live outside api/ and the API imports them by path.
+echo "Copying hardware modules..."
+mkdir -p "$DEPLOY_DIR/gpio"
+rsync -av --delete --exclude='__pycache__' --exclude='*.pyc' \
+    gpio/ "$DEPLOY_DIR/gpio/"
+if [ "$IS_LINUX" = true ]; then
+    chown -R chootka:chootka "$DEPLOY_DIR/gpio"
 fi
     if [ "$IS_LINUX" = true ]; then
         # Set ownership to chootka (service runs as chootka, needs write access for GPIO)
@@ -106,14 +130,9 @@ fi
     fi
 chmod -R 755 $API_DIR
 
-# Fix config.py DATA_DIR path if it points to wrong location
-if [ -f "$API_DIR/config.py" ]; then
-    echo "Fixing config.py DATA_DIR path..."
-    # Replace any /home/pi/sllm/data paths with the correct deployment path
-    sed -i "s|DATA_DIR = '/home/pi/sllm/data'|DATA_DIR = '$DEPLOY_DIR/data'|g" "$API_DIR/config.py"
-    sed -i "s|DATA_DIR = \"/home/pi/sllm/data\"|DATA_DIR = \"$DEPLOY_DIR/data\"|g" "$API_DIR/config.py"
-    echo "✓ Config path updated"
-fi
+# config.py no longer needs patching: config_template.py derives DATA_DIR from
+# the directory the file itself sits in, so a checkout at ~/sllm and a deploy
+# at /var/www/sllm each resolve to their own data directory with no edit.
 
 # Create data directories
 echo "Creating data directories..."

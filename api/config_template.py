@@ -1,55 +1,103 @@
-# Slime Mold Monitor Configuration File
-# Copy this to config.py and modify as needed
+# sLLM configuration template.
+#
+# Copy to config.py and edit for the machine you are on:
+#
+#     cp config_template.py config.py
+#
+# config.py is deliberately NOT tracked in git. Each checkout and each deployed
+# copy keeps its own, so the two can never silently drift the way they did when
+# config.py was committed (the repo said /home/pi, the deployed copy said
+# /var/www, and only the deployed one was right).
 
-# GPIO Pin Configuration
-RING_LIGHT_PIN = 17        # GPIO pin for ring light relay control (switches USB power)
-EXPOSURE_LIGHT_PIN = 27    # GPIO pin for exposure light
-
-# Camera Settings
-CAMERA_RESOLUTION = (1920, 1080)
-CAMERA_WARMUP_TIME = 2     # seconds
-RING_LIGHT_DELAY = 0.5     # seconds to wait after turning on ring light
-
-# Data Collection Settings
-ELECTRICAL_SAMPLE_RATE = 10    # Hz (samples per second)
-MAX_READINGS_BUFFER = 1000     # Maximum readings to keep in memory
-IMAGE_CAPTURE_INTERVAL = 300   # seconds (5 minutes)
-
-# Environmental Monitoring
-SENSOR_TYPE = 'SHT31'          # Options: 'SHT31' (recommended), 'DHT22', 'DHT11'
-SHT31_I2C_ADDRESS = 0x44       # I2C address for SHT31 (default 0x44, alternative 0x45)
-DHT_PIN = 4                    # GPIO pin for DHT22/DHT11 sensors (only used if SENSOR_TYPE is DHT22/DHT11)
-DHT_READ_INTERVAL = 2          # seconds (DHT22 minimum is 2 seconds, SHT31 can read faster)
-ENABLE_DHT_SENSOR = True       # Set to False to disable temperature/humidity sensor
-
-# Socket.IO Settings
-SOCKET_EMIT_INTERVAL = 0.5     # seconds between Socket.IO emissions
-ENABLE_WEBSOCKETS = True       # Set to False to disable Socket.IO
-
-# ADC Settings
-ADC_GAIN = 1                   # Gain setting for ADS1115 (1 = ±4.096V)
-ADC_ADDRESS = 0x48            # I2C address of ADS1115
-
-# Server Settings
-SERVER_HOST = '0.0.0.0'
-SERVER_PORT = 5000
-DEBUG_MODE = False
-
-# Data Storage
-# Use relative path from project root, or absolute path on Pi
-# For local development: '../data' (relative to api/ directory)
-# For Pi deployment: '/var/www/sllm/data' or project root 'data'
 import os
+
+# --- data storage -----------------------------------------------------------
+# Derived from wherever this file actually lives, so a checkout at ~/sllm and a
+# deploy at /var/www/sllm each resolve to their own data directory with no edit.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 IMAGE_DIR = os.path.join(DATA_DIR, 'images')
 LOG_DIR = os.path.join(DATA_DIR, 'logs')
 CSV_DIR = os.path.join(DATA_DIR, 'readings')
 
-# Safety Features
-MAX_EXPOSURE_DURATION = 30     # Maximum seconds exposure light can be on
-AUTO_LIGHT_OFF = True         # Automatically turn off exposure light after max duration
+# --- electrodes, ADS1115 ----------------------------------------------------
+# Three recording electrodes read differentially against the reference in the
+# corner under the barrier zone. Gain 16 is +/-0.256V full scale; plasmodium
+# surface potentials are single-digit millivolts, so the coarse gains waste
+# nearly all the range.
+ADC_ADDRESS = 0x48
+ADC_GAIN = 16
+ADC_SAMPLE_RATE = 1.0          # Hz
+ADC_CHANNELS = (0, 1, 2)       # differential pairs, each against channel 3
+ADC_REFERENCE_CHANNEL = 3
+MAX_READINGS_BUFFER = 1000
 
-# Frontend Update Rates
-CHART_UPDATE_RATE = 500       # milliseconds
-STATUS_CHECK_INTERVAL = 5000  # milliseconds
+# Settling time after any switching event before the ADC is allowed to convert
+# again. Nothing may convert while the matrix, fan or relay is being energised.
+ADC_SWITCH_SETTLE = 0.25       # seconds
+
+# --- temperature and humidity, SHT31 ----------------------------------------
+SHT31_I2C_ADDRESS = 0x44       # 0x44 default, 0x45 if the ADDR pin is pulled high
+SENSOR_READ_INTERVAL = 1.0     # seconds
+
+# --- chamber fan ------------------------------------------------------------
+# Bang-bang on relative humidity with a deadband, plus a floor schedule so CO2
+# still clears on a humid plateau where the RH rule alone would never fire.
+#
+# Set FAN_ENABLED once the Noctua and its relay are actually wired. Left False
+# the environment loop still reads and publishes humidity, it just does not
+# drive anything. A vaporizer, if one is added later, is the same shape: a
+# relay on a pin with dwell times, driven from a deadband.
+FAN_ENABLED = False
+FAN_PIN = 22                   # BCM, relay controlling the Noctua NF-A6x25
+FAN_RH_ON = 95.0               # % RH above which the fan runs
+FAN_RH_OFF = 91.0              # % RH below which it stops
+FAN_MIN_ON = 180               # seconds, minimum run once started
+FAN_MIN_OFF = 180              # seconds, minimum rest once stopped
+FAN_FLOOR_PERIOD = 1200        # seconds, the CO2 floor schedule window
+FAN_FLOOR_ON = 60              # seconds of run per window regardless of RH
+
+# --- camera -----------------------------------------------------------------
+# Pi Camera Module 3 NoIR (IMX708) on CSI. Capture runs through the matrix
+# blank/flash sequence in gpio/leds.py, so no separate illuminator is
+# configured here.
+#
+# Set CAMERA_RESOLUTION to None to use the largest mode the fitted sensor
+# reports. 2304x1296 is the IMX708's binned full-field mode: the full 4608x2592
+# is four times the pixels for no extra information about a plasmodium, and it
+# makes a multi-day timelapse enormous.
+CAMERA_RESOLUTION = (2304, 1296)
+CAMERA_WARMUP_TIME = 2         # seconds
+IMAGE_CAPTURE_INTERVAL = 300   # seconds
+
+# Module 3 has an autofocus lens and the dish never moves, so focus is locked
+# rather than left hunting between frames. None sweeps autofocus once at
+# startup and holds it. A number fixes the lens in dioptres (1/metres): 0 is
+# infinity, and for a dish roughly 20cm below the lens, 5.0 is the ballpark.
+# Set this once the camera is mounted and the framing is final.
+CAMERA_FOCUS_DIOPTRES = None
+
+# --- stimulus ---------------------------------------------------------------
+# The blue zone the API lights when the dashboard's light button is used.
+# Zone 4 is the centre of the dish. Zone 2 is the barrier over the reference
+# electrode and is never drivable -- gpio/leds.py refuses it.
+DEFAULT_STIMULUS_ZONE = 4
+MAX_STIMULUS_DURATION = 300    # seconds; a manual stimulus always self-cancels
+
+# --- live preview -----------------------------------------------------------
+# Frames per second for /api/stream. Kept low on purpose: the preview exists to
+# frame and focus the camera, and every frame competes with the timelapse for
+# the same capture lock.
+STREAM_FPS = 2
+TIMELAPSE_ENABLED = True
+
+# --- server -----------------------------------------------------------------
+SERVER_HOST = '0.0.0.0'
+SERVER_PORT = 5000
+DEBUG_MODE = False
+SOCKET_EMIT_INTERVAL = 0.5     # seconds between Socket.IO emissions
+ENABLE_WEBSOCKETS = True
+
+# --- frontend ---------------------------------------------------------------
+CHART_UPDATE_RATE = 500        # milliseconds
+STATUS_CHECK_INTERVAL = 5000   # milliseconds

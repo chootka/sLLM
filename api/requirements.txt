@@ -3,25 +3,32 @@ flask==3.0.0
 flask-cors==4.0.0
 flask-socketio==5.3.5
 python-socketio==5.10.0
+# Lets Socket.IO upgrade to a real websocket instead of falling back to
+# long-polling, which is what the "Invalid transport" 400s in the log were.
+simple-websocket==1.0.0
 
-# GPIO and Hardware interfaces
-RPi.GPIO==0.7.1
+# I2C hardware: ADS1115 electrodes, SHT31 temperature and humidity
 adafruit-circuitpython-ads1x15==2.2.23
-pyserial==3.5
-
-# Camera support (USB camera via OpenCV)
-opencv-python==4.9.0.80
-
-# Numerical computing (compatible with opencv-python)
-numpy==1.26.4
-
-# Optional: Temperature/Humidity sensor
-# For SHT31 (recommended - more accurate, I2C):
 adafruit-circuitpython-sht31d==2.3.29
-# For DHT22/DHT11 (GPIO-based, less accurate):
-# adafruit-circuitpython-dht==4.0.4
-
-# Additional dependencies that may be needed
 adafruit-blinka==8.29.0
 adafruit-platformdetect==3.57.0
 adafruit-pureio==1.1.11
+
+# WS2812B matrix. Needs root at runtime -- it drives the PWM peripheral
+# through /dev/mem -- so anything touching the matrix runs under sudo.
+adafruit-circuitpython-neopixel==6.3.11
+
+# Numerical support for the Adafruit stack. Held below 2.0 because the
+# apt-installed picamera2 is built against the numpy 1.x ABI.
+numpy==1.26.4
+
+# Deliberately NOT pip-installed. These come from apt and are found via
+# /usr/lib/python3/dist-packages, which app.py appends to sys.path:
+#   python3-picamera2   camera; there is no working pip build for the Pi 5
+#   python3-rpi-lgpio   the RPi.GPIO shim for the Pi 5's gpiochip. The real
+#                       RPi.GPIO 0.7.x does not work on Pi 5 at all.
+#
+# Dropped 2026-08-05, no hardware behind them any more:
+#   opencv-python  the USB camera is gone; the camera is CSI via picamera2
+#   pyserial       the Arduino is gone; electrodes are on the ADS1115
+#   RPi.GPIO       superseded by the apt rpi-lgpio shim, see above

@@ -231,6 +231,17 @@ canvas + canvas {
     color: #ecddb1;
 }
 
+/* Fahrenheit, under the Celsius reading. Same colour at reduced opacity
+   rather than a grey, so it reads as the same measurement in another unit
+   and not as a separate, dimmer metric. */
+.env-metric .sub-value {
+    font-size: 1.1em;
+    font-weight: 300;
+    color: #ecddb1;
+    opacity: 0.6;
+    margin-top: 2px;
+}
+
 .env-metric .label {
     font-size: 0.9em;
     color: #888;
