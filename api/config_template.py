@@ -30,7 +30,12 @@ ADC_GAIN = 16
 ADC_SAMPLE_RATE = 1.0          # Hz
 ADC_CHANNELS = (0, 1, 2)       # differential pairs, each against channel 3
 ADC_REFERENCE_CHANNEL = 3
-MAX_READINGS_BUFFER = 1000
+
+# In-memory rolling buffer. Must exceed the reducer's 30 minute window or the
+# model loop can never assemble a full one -- at 1 Hz, 1800 samples IS the
+# window, so this carries 40 minutes for headroom. The durable record is the
+# CSV in data/readings, not this.
+MAX_READINGS_BUFFER = 2400
 
 # Settling time after any switching event before the ADC is allowed to convert
 # again. Nothing may convert while the matrix, fan or relay is being energised.
@@ -90,6 +95,27 @@ MAX_STIMULUS_DURATION = 300    # seconds; a manual stimulus always self-cancels
 # the same capture lock.
 STREAM_FPS = 2
 TIMELAPSE_ENABLED = True
+
+# --- the model loop ---------------------------------------------------------
+# Ollama runs on the laptop, not here. This is chootka-pro's Tailscale address,
+# so it works from anywhere rather than only on the studio LAN.
+#
+# Ollama binds 127.0.0.1 by default and will refuse the Pi until it is told
+# otherwise. On the Mac:
+#     launchctl setenv OLLAMA_HOST 0.0.0.0
+# then restart Ollama. Check from here with: python3 llm/loop.py --check
+OLLAMA_HOST = 'http://100.127.41.6:11434'
+OLLAMA_MODEL = 'qwen2.5:14b'
+
+LLM_PROMPT = 'blind'           # blind | informed | null, see llm/filters/prompts.md
+LLM_WINDOW_S = 1800            # what the model sees, 30 min ~ 15-30 contractions
+LLM_TURN_INTERVAL = 600        # how often it speaks
+LLM_HISTORY_TURNS = 8          # how far back it remembers
+
+# Fraction of turns where the action is logged and NOT applied. The model is
+# never told which turn it is in; that is what makes it a control rather than
+# a bug. Set to 0.0 only for a deliberately uncontrolled run.
+LLM_SHAM_RATE = 0.25
 
 # --- server -----------------------------------------------------------------
 SERVER_HOST = '0.0.0.0'

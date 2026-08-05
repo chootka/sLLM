@@ -64,6 +64,7 @@ from adc import ElectrodeMonitor
 from bus import SwitchGate
 from camera import Timelapse, open_camera
 from sensor import EnvironmentMonitor
+from store import electrode_log, environment_log
 
 app = Flask(__name__)
 CORS(app)
@@ -77,8 +78,10 @@ for directory in (config.IMAGE_DIR, config.LOG_DIR, config.CSV_DIR):
 # own module's switching.
 gate = SwitchGate(getattr(config, 'ADC_SWITCH_SETTLE', 0.25))
 
-electrodes = ElectrodeMonitor(config, gate=gate)
-environment = EnvironmentMonitor(config, gate=gate)
+# Both monitors write every sample to a daily CSV under data/readings. The
+# rolling buffers are for the API; these files are the record of the run.
+electrodes = ElectrodeMonitor(config, gate=gate, log=electrode_log(config))
+environment = EnvironmentMonitor(config, gate=gate, log=environment_log(config))
 
 
 def open_matrix():

@@ -87,6 +87,90 @@ The red imaging flash is required for the capture sequence to mean anything,
 so this has to be settled before the timelapse is scientifically useful. It
 does not block attaching the camera or checking focus.
 
+## The model loop
+
+`llm/loop.py` is the live version of `llm/filters/harness.py`. It imports the
+reducer and the prompts rather than copying them, so the replay harness stays
+evidence about what the live loop actually does.
+
+Ollama runs on the laptop (`chootka-pro`, Tailscale `100.127.41.6`), not here.
+
+**On the Mac, once:** Ollama binds `127.0.0.1` by default and will refuse the
+Pi until told otherwise.
+
+```bash
+launchctl setenv OLLAMA_HOST 0.0.0.0     # then restart Ollama
+ollama pull qwen2.5:14b
+```
+
+**On the Pi:**
+
+```bash
+./scripts/py llm/loop.py --check       # is the model reachable, is there a window
+./scripts/py llm/loop.py --dry-run     # full loop, never drives the matrix
+sudo ./scripts/py llm/loop.py          # live
+```
+
+### Testing without waiting on the organism
+
+`--replay` slides the loop along a fixed session and `--speed` compresses the
+clock. Twelve turns that would take two hours run in about two seconds. Replay
+always implies `--dry-run`, and its turns are written to `data/logs/replay/`
+so synthetic rows never land in the real record.
+
+```bash
+./scripts/py llm/loop.py --replay synthetic --speed 600 --turns 24
+./scripts/py llm/loop.py --replay data/readings/electrodes_20260805.csv --speed 600
+```
+
+Synthetic sessions plant one event — the period lengthens 90s to 140s across
+turns 10 to 14 — and log it next to the model's note. Any other event the
+model reports is its own invention. A real recording cannot tell you that,
+because you do not know what was in it; it can tell you how the loop behaves
+on real noise. Both are worth running.
+
+### Sham blocks
+
+`LLM_SHAM_RATE` (default 0.25) is the fraction of turns where the action is
+logged and not applied. The model is never told which turn it is in. `sham`
+and `applied` are recorded per turn in the JSONL; neither ever enters a
+prompt.
+
+If the matrix cannot be driven, the loop refuses to start rather than running
+as a permanent unlabelled sham — pass `--dry-run` to say that is what you
+want.
+
+### What gets written
+
+```
+data/readings/electrodes_YYYYMMDD.csv     1 Hz, one row per sample, mV
+data/readings/environment_YYYYMMDD.csv    1 Hz, temperature C and F, RH
+data/logs/turns_YYYYMMDD.jsonl            one record per turn, live runs
+data/logs/replay/turns_YYYYMMDD.jsonl     replay and dry runs
+```
+
+Daily files, UTC. The turn record holds the reduced state, the model's full
+reply, the validated action, `sham`, `applied`, and any refusal reason — so a
+run can be re-read afterwards without the model's notes being the only
+account of it.
+
+## Picking this up again after a reboot
+
+Everything survives a power cycle. `sllm-api.service` is enabled and restarts
+on boot, so sampling and logging resume by themselves.
+
+```bash
+systemctl is-active sllm-api            # should be: active
+sudo i2cdetect -y 1                     # 44 and 48
+curl -s localhost/api/status | python3 -m json.tool
+tail -3 data/readings/electrodes_*.csv  # is it still logging
+git -C ~/sllm log --oneline -5          # what was done
+```
+
+Then read this file and `CLAUDE_README.md`. The open decisions are the matrix
+root problem above and, once the camera is on, setting
+`CAMERA_FOCUS_DIOPTRES`.
+
 ## Still to build
 
 Per `CLAUDE_README.md`: port `reducer.py` from `llm/filters`, then the model

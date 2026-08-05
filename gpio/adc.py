@@ -17,8 +17,8 @@ chip, and it is why the reference electrode is wired to A3.
 Every conversion runs inside `gate.quiet()`, so nothing is switching while the
 sample is taken. See gpio/bus.py.
 
-    python3 gpio/adc.py            # one sample from each channel
-    python3 gpio/adc.py watch      # stream until ctrl-c
+    ./scripts/py gpio/adc.py            # one sample from each channel
+    ./scripts/py gpio/adc.py watch      # stream until ctrl-c
 """
 
 import pathlib
@@ -28,6 +28,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
+import syspath  # noqa: F401  (path setup, must precede hardware imports)
 from bus import SwitchGate, get_i2c
 
 # The ADS1115 mux supports only these differential pairs.
@@ -95,9 +96,12 @@ class ElectrodeADC:
 class ElectrodeMonitor:
     """Background thread: sample at the configured rate into a rolling buffer."""
 
-    def __init__(self, config, gate=None):
+    def __init__(self, config, gate=None, log=None):
         self.interval = 1.0 / getattr(config, 'ADC_SAMPLE_RATE', 1.0)
-        self.buffer = deque(maxlen=getattr(config, 'MAX_READINGS_BUFFER', 1000))
+        self.buffer = deque(maxlen=getattr(config, 'MAX_READINGS_BUFFER', 2400))
+        # None disables disk logging; the standalone CLI passes nothing so a
+        # bring-up check does not scribble into the run's record.
+        self.log = log
         self.latest = {
             "timestamp": 0,
             "datetime": None,
@@ -156,6 +160,17 @@ class ElectrodeMonitor:
             self.latest = reading
             if error is None:
                 self.buffer.append(reading)
+
+        if error is None and self.log is not None:
+            row = {"timestamp": reading["timestamp"],
+                   "datetime": reading["datetime"]}
+            row.update({f"ch{k}_mv": v for k, v in reading["channels"].items()})
+            try:
+                self.log.append(row)
+            except OSError as exc:
+                # A full or unwritable disk must not stop sampling; the
+                # in-memory buffer keeps the loop running either way.
+                print(f"electrode log write failed: {exc}")
         return reading
 
     def snapshot(self):

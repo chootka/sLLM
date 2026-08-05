@@ -7,8 +7,8 @@ ended up on the dashboard for a chamber that was never being measured -- and
 sham blocks are already part of this experiment's design, so fabricated
 environmental data is not a harmless placeholder.
 
-    python3 gpio/sensor.py           # one reading
-    python3 gpio/sensor.py watch     # stream readings until ctrl-c
+    ./scripts/py gpio/sensor.py          # one reading
+    ./scripts/py gpio/sensor.py watch    # stream readings until ctrl-c
 """
 
 import pathlib
@@ -17,6 +17,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
+import syspath  # noqa: F401  (path setup, must precede hardware imports)
 from bus import SwitchGate, get_i2c
 
 
@@ -187,9 +188,10 @@ class FanController:
 class EnvironmentMonitor:
     """Background thread: read the sensor, drive the fan, publish the latest."""
 
-    def __init__(self, config, gate=None):
+    def __init__(self, config, gate=None, log=None):
         self.gate = gate or SwitchGate(getattr(config, 'ADC_SWITCH_SETTLE', 0.25))
         self.interval = getattr(config, 'SENSOR_READ_INTERVAL', 1.0)
+        self.log = log
         self.latest = {
             "temperature": None,
             "temperature_f": None,
@@ -264,6 +266,19 @@ class EnvironmentMonitor:
 
         with self._lock:
             self.latest = reading
+
+        if self.log is not None:
+            try:
+                self.log.append({
+                    "timestamp": reading["timestamp"],
+                    "datetime": reading["datetime"],
+                    "temperature_c": reading["temperature"],
+                    "temperature_f": reading["temperature_f"],
+                    "humidity_pct": reading["humidity"],
+                    "fan_on": reading.get("fan", {}).get("on"),
+                })
+            except OSError as exc:
+                print(f"environment log write failed: {exc}")
         return reading
 
     def snapshot(self):

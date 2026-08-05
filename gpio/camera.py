@@ -15,8 +15,8 @@ imperceptible to an organism responding over minutes.
 The matrix is optional. With no matrix the capture still works, it just has no
 backlight and no blanking -- useful for focusing and framing.
 
-    python3 gpio/camera.py info        # what camera is attached, if any
-    sudo python3 gpio/camera.py shot   # one capture through the flash sequence
+    ./scripts/py gpio/camera.py info        # what camera is attached
+    sudo ./scripts/py gpio/camera.py shot   # one capture through the flash sequence
 """
 
 import io
@@ -25,6 +25,8 @@ import pathlib
 import sys
 import threading
 import time
+import syspath  # noqa: F401  (path setup, must precede hardware imports)
+
 from datetime import datetime
 
 # Capture filenames are what api/app.py parses back into timestamps, so this
