@@ -67,7 +67,18 @@ from sensor import EnvironmentMonitor
 from store import electrode_log, environment_log
 
 app = Flask(__name__)
-CORS(app)
+
+# The public read-only surface stays open to any origin: the dashboard is meant
+# to be embeddable and none of it is secret. The admin routes are not, and are
+# pinned to the site's own origin. Bearer tokens already make CSRF structurally
+# impossible, so this is defence in depth rather than the only control -- but a
+# wide-open preflight on a route that starts and stops the experiment is not
+# something to leave lying around.
+CORS(app, resources={
+    r"/api/admin/*": {"origins": [getattr(config, 'ADMIN_ORIGIN',
+                                          'https://sllm.visceral.systems')]},
+    r"/*": {"origins": "*"},
+})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 for directory in (config.IMAGE_DIR, config.LOG_DIR, config.CSV_DIR):
@@ -110,6 +121,23 @@ def open_matrix():
         print(f"· matrix unavailable ({exc}); captures will have no backlight")
         return None
 
+
+def register_admin():
+    """Admin controls, or a clear reason why not.
+
+    Kept non-fatal on purpose: a missing webauthn install or a malformed
+    credential file must not take the dashboard and the sampling loop down with
+    it. The routes then return 503 and everything else carries on.
+    """
+    try:
+        import admin as admin_module
+
+        admin_module.register(app, config)
+    except Exception as exc:
+        print(f"· admin controls unavailable ({exc})")
+
+
+register_admin()
 
 matrix = open_matrix()
 camera = open_camera(config, matrix=matrix)

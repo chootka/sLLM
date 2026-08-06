@@ -140,7 +140,7 @@ LLM_HISTORY_TURNS = 8          # how far back it remembers
 LLM_SHAM_RATE = 0.25
 
 # --- server -----------------------------------------------------------------
-SERVER_HOST = '0.0.0.0'
+SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 5000
 DEBUG_MODE = False
 SOCKET_EMIT_INTERVAL = 0.5     # seconds between Socket.IO emissions
@@ -149,3 +149,27 @@ ENABLE_WEBSOCKETS = True
 # --- frontend ---------------------------------------------------------------
 CHART_UPDATE_RATE = 500        # milliseconds
 STATUS_CHECK_INTERVAL = 5000   # milliseconds
+
+# --- admin controls ---------------------------------------------------------
+# Start and stop the model loop from the web page. Authentication is a passkey
+# (WebAuthn), so there is no password anywhere in this file or in this system:
+# the private key never leaves your device's secure element and the server holds
+# only a public key. Nothing to brute-force, nothing to leak, nothing phishable
+# -- the credential is cryptographically bound to the origin below.
+#
+# Enrol the first passkey with scripts/enrol_passkey.py, which must be run on
+# the Pi. That SSH access IS the authority to enrol, and it is also the recovery
+# path if every registered device is lost. Register at least two devices so that
+# stays theoretical.
+#
+# ADMIN_ORIGIN must match exactly what the browser shows, scheme included.
+# WebAuthn compares it byte for byte and a mismatch fails with an unhelpful
+# error.
+ADMIN_RP_ID = 'sllm.visceral.systems'
+ADMIN_RP_NAME = 'sLLM'
+ADMIN_ORIGIN = 'https://sllm.visceral.systems'
+
+# Public keys of enrolled passkeys, plus unspent enrolment tokens. Created on
+# first enrolment, mode 0600. Contains no secrets that would let anyone log in
+# -- public keys are public -- but it is the list of what may.
+ADMIN_CREDENTIALS_FILE = os.path.join(DATA_DIR, 'admin_credentials.json')

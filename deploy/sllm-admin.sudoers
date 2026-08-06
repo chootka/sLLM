@@ -1,0 +1,25 @@
+# Lets the API start and stop the model loop from the admin web page, and
+# nothing else.
+#
+# Install to /etc/sudoers.d/sllm-admin with mode 0440, via visudo -c:
+#     sudo install -m 0440 -o root -g root \
+#         deploy/sllm-admin.sudoers /etc/sudoers.d/sllm-admin
+#     sudo visudo -c
+#
+# This does NOT change any human's sudo access. chootka keeps full sudo with a
+# password, exactly as before. This grants passwordless sudo to the `sllm`
+# service account only, because a web request cannot type a password.
+#
+# The two commands are fully-qualified and fully-specified: absolute path to
+# systemctl, a fixed verb, and a fixed unit name. There is no wildcard. sudo
+# matches the whole argv, so `systemctl start something-else`, `systemctl
+# daemon-reload`, and `systemctl start sllm-loop.service --now-do-something`
+# are all refused. api/admin.py additionally whitelists the verb before calling
+# out, so an injection would have to defeat both.
+#
+# Worth stating plainly: the worst an attacker who fully owns the API process
+# can do with this rule is start and stop the model loop -- which is exactly
+# what the admin page is for. There is no path from here to a root shell.
+
+sllm ALL=(root) NOPASSWD: /usr/bin/systemctl start sllm-loop.service
+sllm ALL=(root) NOPASSWD: /usr/bin/systemctl stop sllm-loop.service

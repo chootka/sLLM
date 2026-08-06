@@ -53,7 +53,16 @@ SOCKET_PATH = "/run/sllm/matrix.sock"
 # The unprivileged account the API runs as. The socket is chowned to this group
 # with mode 0660, so the API can talk to the daemon and nothing else on the box
 # can. This is the whole access control story; there is no auth in the protocol.
-SOCKET_GROUP = "chootka"
+#
+# `sllm` is a dedicated system account with no shell, no home and no sudo -- not
+# a human's login. That is the point: the API is reachable from the internet, so
+# whatever it runs as is what an attacker gets on a bad day. As a human account
+# that would mean SSH keys, git credentials and a shell profile that can be
+# rewritten to capture a sudo password. As `sllm` it means the data directory
+# and one systemd unit.
+#
+# chootka is a member of this group, so the standalone tools still work by hand.
+SOCKET_GROUP = "sllm"
 SOCKET_MODE = 0o660
 
 # How long a flash may stay open before the daemon restores without being told.

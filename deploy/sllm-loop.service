@@ -14,10 +14,11 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-# Unprivileged. This is only possible because matrixd owns the panel: before
+# Unprivileged, and a dedicated system account rather than a human login --
+# no shell, no home, no sudo. Only possible because matrixd owns the panel: before
 # the helper existed, a live run needed root and the system interpreter.
-User=chootka
-Group=chootka
+User=sllm
+Group=sllm
 WorkingDirectory=/var/www/sllm
 ExecStart=/var/www/sllm/api/venv/bin/python -u /var/www/sllm/llm/loop.py
 
