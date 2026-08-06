@@ -9,14 +9,14 @@ labelled, and analysis filters on the label.
 A run is `{id, mode, started_at, note}`. Modes:
 
     live    the real run. Nothing has been recorded in this mode yet.
-    test    building, bench work, anything that is not the real run. The
-            default, because mislabelling development as `live` would put
-            bench noise into the scientific record.
-    demo    invented data driving the panel, for showing people.
+    test    everything else -- bench work, demos, anything that is not the real
+            run. The default, because mislabelling development as `live` would
+            put bench noise into the scientific record.
 
-Three is the whole vocabulary. A finer taxonomy would be guessing at
-distinctions nobody will maintain -- and a label nobody keeps accurate is worse
-than no label, because it is trusted.
+Two is the whole vocabulary, and deliberately so. A finer taxonomy would invent
+distinctions nobody will maintain, and a label nobody keeps accurate is worse
+than no label because it still gets trusted. The only question that matters at
+analysis time is whether a row belongs to the real run.
 
 Two things follow from a mode that is not `live`:
 
@@ -39,7 +39,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-MODES = ('live', 'test', 'demo')
+MODES = ('test', 'live')
 DEFAULT_MODE = 'test'
 
 _lock = threading.Lock()

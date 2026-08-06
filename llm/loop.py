@@ -321,7 +321,7 @@ _stimulus_timer = None
 
 
 def apply_action(matrix, action, speed=1.0, min_duration=0.0,
-                 hold_until_next=False):
+                 hold_until_next=False, full_intensity=False):
     """Light the zone, and take it off again after the duration requested.
 
     `speed` compresses the duration alongside the turn interval, so a demo run
@@ -343,8 +343,17 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
         _stimulus_timer.cancel()
         _stimulus_timer = None
 
+    intensity = action["intensity"]
+    if full_intensity:
+        # A demo is not data, and the model's chosen intensity is typically
+        # 0.5-0.8 which, against STIM_BRIGHTNESS of 0.25, lands around 31/255 --
+        # only twice the always-on barrier, and easy to miss entirely in a lit
+        # room. Which zone the model picked is the point of a demo; how brightly
+        # it asked for it is not.
+        intensity = 1.0
+
     matrix.clear_stimulus()
-    matrix.set_zone(action["zone"], action["intensity"])
+    matrix.set_zone(action["zone"], intensity)
 
     # In a demo the zone stays lit until the model chooses the next one, so the
     # panel always shows the current choice and visibly moves. Scaling the
@@ -593,7 +602,8 @@ def main():
                 try:
                     apply_action(matrix, action, speed=args.speed,
                                  min_duration=min_stimulus_s,
-                                 hold_until_next=args.demo)
+                                 hold_until_next=args.demo,
+                                 full_intensity=args.demo)
                     record["applied"] = True
                 except Exception as exc:
                     record["apply_error"] = str(exc)

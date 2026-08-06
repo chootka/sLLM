@@ -31,30 +31,24 @@
       </div>
 
       <div v-else>
-        <p class="admin-status">
-          Model loop:
-          <strong :class="loopActive ? 'on' : 'off'">
-            {{ loopActive ? 'RUNNING' : 'stopped' }}
-          </strong>
-        </p>
-        <button class="admin-action" :disabled="busy || loopActive"
-                @click="setLoop('start')">Start loop</button>
-        <button class="admin-action" :disabled="busy || !loopActive"
-                @click="setLoop('stop')">Stop loop</button>
+        <p class="admin-label">Model loop</p>
+        <div class="pill" :class="{ busy }">
+          <button :class="{ active: !loopActive }" :disabled="busy"
+                  @click="setUnit('loop', 'stop')">stopped</button>
+          <button :class="{ active: loopActive, live: loopActive }"
+                  :disabled="busy" @click="setUnit('loop', 'start')">running</button>
+        </div>
 
         <hr class="admin-rule" />
 
-        <p class="admin-status">
-          Demo mode:
-          <strong :class="demoActive ? 'demo' : 'off'">
-            {{ demoActive ? 'RUNNING' : 'stopped' }}
-          </strong>
-        </p>
-        <button class="admin-action"
-                :disabled="busy || demoActive || occupied"
-                @click="setUnit('demo', 'start')">Start demo</button>
-        <button class="admin-action" :disabled="busy || !demoActive"
-                @click="setUnit('demo', 'stop')">Stop demo</button>
+        <p class="admin-label">Demo mode</p>
+        <div class="pill" :class="{ busy }">
+          <button :class="{ active: !demoActive }" :disabled="busy"
+                  @click="setUnit('demo', 'stop')">stopped</button>
+          <button :class="{ active: demoActive, demo: demoActive }"
+                  :disabled="busy || occupied"
+                  @click="setUnit('demo', 'start')">running</button>
+        </div>
         <p class="admin-hint">
           Demo invents data and drives the real panel, fast, so the hardware can
           be watched. Starting it stops the model loop, and vice versa — they
@@ -63,28 +57,28 @@
 
         <hr class="admin-rule" />
 
-        <p class="admin-status">
-          Recording:
-          <strong :class="mode === 'live' ? 'on' : 'demo'">{{ mode }}</strong>
-        </p>
-        <button v-for="m in modes" :key="m" class="admin-action"
-                :disabled="busy || mode === m" @click="setMode(m)">
-          {{ m }}
-        </button>
+        <p class="admin-label">Recording</p>
+        <div class="pill" :class="{ busy }">
+          <button :class="{ active: mode === 'test' }" :disabled="busy"
+                  @click="setMode('test')">test</button>
+          <button :class="{ active: mode === 'live', live: mode === 'live' }"
+                  :disabled="busy" @click="setMode('live')">live</button>
+        </div>
         <p class="admin-hint">
-          Nothing stops recording. Anything but <em>live</em> is tagged and
-          written to its own directory, so it is excluded by a filter rather
-          than by a hole in the series. Starting a demo switches this
-          automatically; coming back is deliberate.
+          Anything but <em>live</em> is tagged and written to its own directory,
+          so it is excluded by a filter. Starting a demo switches this
+          automatically.
         </p>
 
         <hr class="admin-rule" />
 
-        <label class="admin-toggle-row">
-          <span>Chamber occupied</span>
-          <input type="checkbox" :checked="occupied" :disabled="busy"
-                 @change="setChamber($event.target.checked)" />
-        </label>
+        <p class="admin-label">Chamber</p>
+        <div class="pill" :class="{ busy }">
+          <button :class="{ active: !occupied }" :disabled="busy"
+                  @click="setChamber(false)">empty</button>
+          <button :class="{ active: occupied, occupied }" :disabled="busy"
+                  @click="setChamber(true)">occupied</button>
+        </div>
 
         <hr class="admin-rule" />
 
@@ -425,9 +419,20 @@ export default {
 .admin-status .on { color: #6ec46e; }
 .admin-status .demo { color: #d9b26a; }
 .admin-status .occupied { color: #e0a0a0; }
-.admin-toggle-row { display: flex; justify-content: space-between;
-  align-items: center; padding: 0.35rem 0; cursor: pointer; }
-.admin-toggle-row input { cursor: pointer; }
+.admin-label { color: #888; font-size: 0.75rem; text-transform: uppercase;
+  letter-spacing: 0.06em; margin: 0.2rem 0 0.35rem; }
+.pill { display: flex; border: 1px solid #444; border-radius: 999px;
+  overflow: hidden; }
+.pill.busy { opacity: 0.5; }
+.pill button { flex: 1; padding: 0.4rem 0.5rem; border: none; cursor: pointer;
+  background: #1a1a1a; color: #777; font-size: 0.8rem; }
+.pill button + button { border-left: 1px solid #444; }
+.pill button:hover:not(:disabled):not(.active) { background: #242424; color: #bbb; }
+.pill button.active { background: #2f3f2f; color: #cfe6cf; }
+.pill button.active.live { background: #3f2f2f; color: #ffd0d0; }
+.pill button.active.demo { background: #3d3524; color: #e6d3a0; }
+.pill button.active.occupied { background: #3f2f2f; color: #ffd0d0; }
+.pill button:disabled { cursor: default; }
 .admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
 .admin-status .off { color: #999; }
 .admin-error { color: #e08080; }

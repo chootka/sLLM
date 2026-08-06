@@ -670,7 +670,7 @@ def register(app, config):
             if action == 'start' and which == 'demo':
                 import run as run_state
 
-                run_state.switch(config, 'demo', note='demo mode started')
+                run_state.switch(config, 'test', note='demo mode started')
 
             result = _systemctl(action, unit)
         except (OSError, subprocess.SubprocessError) as exc:
