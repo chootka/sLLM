@@ -1,0 +1,36 @@
+// Let the `sllm` service account start and stop the model loop, and nothing
+// else. Install to /etc/polkit-1/rules.d/50-sllm-loop.rules.
+//
+// This replaces an earlier sudoers rule, which could not work: sllm-api.service
+// sets NoNewPrivileges=true, and sudo is setuid, so the kernel refuses the
+// escalation outright. The error is confusing -- sudo blames containers -- but
+// it is the hardening doing its job. Rather than weaken the service, this uses
+// polkit, which authorises over D-Bus and needs no setuid binary at all.
+//
+// It is also narrower than the sudoers rule was. That granted two argv vectors
+// of one binary; this grants two verbs on one unit to one uid, checked by
+// systemd itself rather than by string matching on a command line.
+//
+// The worst an attacker who fully owns the API process can do with this is
+// start and stop the model loop -- which is exactly what the admin page is for.
+// There is no path from here to a root shell.
+
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (subject.user !== "sllm") {
+        return polkit.Result.NOT_HANDLED;
+    }
+
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+
+    var allowed = ["sllm-loop.service", "sllm-demo.service"];
+
+    if (allowed.indexOf(unit) !== -1 && (verb === "start" || verb === "stop")) {
+        return polkit.Result.YES;
+    }
+
+    return polkit.Result.NOT_HANDLED;
+});

@@ -19,7 +19,7 @@ sham block is not an error path; it is the control.
 
     ./scripts/py llm/loop.py --check      # connectivity and window, no turns
     ./scripts/py llm/loop.py --dry-run    # full loop, never drives the matrix
-    sudo ./scripts/py llm/loop.py         # live (the matrix needs root)
+    ./scripts/py llm/loop.py              # live (matrixd owns the panel, no sudo)
 
 Testing without waiting on an organism. --replay slides the same loop along a
 fixed session and --speed compresses the clock, so a 24-turn run that would
@@ -27,6 +27,22 @@ take four hours live takes under a minute. Replay always implies --dry-run.
 
     ./scripts/py llm/loop.py --replay synthetic --speed 600 --turns 24
     ./scripts/py llm/loop.py --replay data/readings/electrodes_20260805.csv --speed 600
+
+--demo is the one mode that runs fast AND drives the panel, for watching the
+hardware actually work:
+
+    ./scripts/py llm/loop.py --demo --turns 12
+
+It exists because nothing else could show you the physical chain. The live loop
+cannot be sped up without being made meaningless -- the 30 minute window and
+the 10 minute turn come from Physarum's contraction period, not from caution --
+so live, a zone changes once every ten minutes. Replay is fast but refuses to
+actuate. Between them there was no way to watch a zone go on and off.
+
+--demo therefore invents data and puts real light on the panel, which is only
+acceptable when the chamber is empty. It refuses to start if CHAMBER_OCCUPIED
+is set in config.py, and its turns are written to data/logs/replay/ so they can
+never be confused with a real session.
 
 Synthetic sessions carry a planted event at a known turn and log it alongside
 the model's note, so a claim can be checked against whether anything happened.
@@ -41,6 +57,7 @@ import pathlib
 import random
 import signal
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -300,6 +317,56 @@ def open_matrix(dry_run):
         return None, str(exc)
 
 
+_stimulus_timer = None
+
+
+def apply_action(matrix, action, speed=1.0):
+    """Light the zone, and take it off again after the duration requested.
+
+    `speed` compresses the duration alongside the turn interval, so a demo run
+    keeps the same on/off rhythm as a live one instead of holding every zone
+    lit straight through to the next turn.
+
+    The duration used to be parsed, validated, logged -- and never applied. The
+    zone was set and simply left until the next turn overwrote it, so a model
+    asking for a 30 second pulse got a 600 second one, twenty times longer.
+
+    That is worse than a cosmetic bug. The model reasons about each new window
+    on the belief that it applied a brief stimulus, and those inferences are the
+    experimental record. Every causal claim it made rested on a false premise
+    about its own action.
+    """
+    global _stimulus_timer
+
+    if _stimulus_timer is not None:
+        _stimulus_timer.cancel()
+        _stimulus_timer = None
+
+    matrix.clear_stimulus()
+    matrix.set_zone(action["zone"], action["intensity"])
+
+    duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
+    if duration <= 0:
+        return
+
+    def _expire():
+        try:
+            matrix.clear_stimulus()
+        except Exception as exc:  # noqa: BLE001 -- a timer thread must not die
+            print(f"could not clear stimulus after {duration}s: {exc}")
+
+    _stimulus_timer = threading.Timer(duration, _expire)
+    _stimulus_timer.daemon = True
+    _stimulus_timer.start()
+
+
+def cancel_stimulus_timer():
+    global _stimulus_timer
+    if _stimulus_timer is not None:
+        _stimulus_timer.cancel()
+        _stimulus_timer = None
+
+
 def install_signal_handlers():
     """Make SIGTERM unwind the stack instead of killing the process outright.
 
@@ -335,6 +402,10 @@ def main():
                         help='time compression in replay, e.g. 600 runs a '
                              '10 min turn interval in 1 s')
     parser.add_argument('--sham-rate', type=float, default=None)
+    parser.add_argument('--demo', action='store_true',
+                        help='synthetic data at speed, DRIVING the panel. For '
+                             'exercising the hardware; refuses if the chamber '
+                             'is occupied. Turns go to the replay log.')
     args = parser.parse_args()
 
     window_s = getattr(config, 'LLM_WINDOW_S', 1800)
@@ -345,7 +416,37 @@ def main():
 
     # Replay implies dry run. Driving the panel from a recording would put
     # real light on the organism on the strength of data that is not about it.
-    if args.replay:
+    #
+    # --demo is the one deliberate exception, and exists because there was
+    # otherwise NO way to watch the hardware work. The live loop cannot be made
+    # fast without being made meaningless -- a 30 minute window and a 10 minute
+    # turn are set by Physarum's contraction period, not by impatience -- and
+    # replay, which is fast, refuses to actuate. So the physical chain could
+    # only ever be observed at one zone change every ten minutes.
+    #
+    # What makes the exception safe is that it is loud, it is gated on the
+    # chamber being empty, and its turns are written to data/logs/replay/ where
+    # they can never be mistaken for the record of a real session.
+    if args.demo:
+        # Read fresh, every start. The flag is the presence of a file so it can
+        # be toggled from the admin panel without editing code or restarting
+        # anything -- a safety that needs an SSH session is one that will be
+        # stale exactly when it matters.
+        occupied_file = getattr(config, 'CHAMBER_OCCUPIED_FILE', None)
+        occupied = bool(occupied_file and os.path.exists(occupied_file))
+        if occupied or getattr(config, 'CHAMBER_OCCUPIED', False):
+            print("refusing --demo: the chamber is marked as occupied.\n"
+                  "This mode invents data and puts real light on the panel.\n"
+                  "Clear the flag in the admin panel only when there is\n"
+                  "nothing alive in the chamber.")
+            return 1
+        if not args.replay:
+            args.replay = 'synthetic'
+        if args.speed == 1.0:
+            # 60x turns a 600s interval into 10s, which is watchable.
+            args.speed = 60.0
+        args.dry_run = False
+    elif args.replay:
         args.dry_run = True
 
     prompts = load_prompts()
@@ -373,7 +474,14 @@ def main():
     print(f"prompt   {args.prompt}")
     print(f"sham     {sham_rate:.0%} of turns")
     if args.replay:
-        print(f"speed    {args.speed}x  (dry run: the matrix is never driven)")
+        if args.demo:
+            print(f"speed    {args.speed}x")
+            print("\n*** DEMO MODE ***\n"
+                  "Invented data, driving the real panel. Turns are written to\n"
+                  "data/logs/replay/ and are NOT part of the experimental record.\n"
+                  "Never run this with anything alive in the chamber.\n")
+        else:
+            print(f"speed    {args.speed}x  (dry run: the matrix is never driven)")
 
     if args.check:
         return 0 if ok else 1
@@ -449,8 +557,7 @@ def main():
 
             if action and not is_sham and not args.dry_run:
                 try:
-                    matrix.clear_stimulus()
-                    matrix.set_zone(action["zone"], action["intensity"])
+                    apply_action(matrix, action, speed=args.speed)
                     record["applied"] = True
                 except Exception as exc:
                     record["apply_error"] = str(exc)
@@ -481,6 +588,7 @@ def main():
     except KeyboardInterrupt:
         print("\nstopped")
     finally:
+        cancel_stimulus_timer()
         if matrix is not None:
             matrix.clear_stimulus()
         print(f"turns logged under {turns_log.directory}")

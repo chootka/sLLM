@@ -22,6 +22,8 @@ the OpenCV USB camera path (the camera is CSI), the DHT22/DHT11 fallback (the
 sensor is an SHT31), and the mock environment generator.
 """
 
+import glob
+import json
 import os
 import re
 import sys
@@ -359,6 +361,94 @@ def generate_stream():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         time.sleep(max(0.0, interval - (time.monotonic() - started)))
+
+
+@app.route('/api/turns', methods=['GET'])
+def get_turns():
+    """The model's turn records, newest last, for the /logs page.
+
+    **`sham` and `applied` are withheld unless the caller is an authenticated
+    admin.** This is not tidiness, it is the experiment's integrity. The design
+    depends on the model not knowing which turns are sham blocks, and this page
+    is publicly reachable. A public list of which turns were shams is a channel
+    straight back into the loop the moment anyone quotes it at the model, or it
+    gets scraped into something the model later reads. The reasoning and the
+    requested action are shown; whether it was applied is not.
+
+    A caveat that page cannot fix: someone standing in front of the chamber can
+    compare a shown action against whether the panel actually lit. Physical
+    presence has always been able to see that.
+    """
+    try:
+        limit = min(int(request.args.get('limit', 200)), 1000)
+    except ValueError:
+        limit = 200
+    after = request.args.get('after', '')
+
+    privileged = False
+    try:
+        import admin as admin_module
+
+        privileged = admin_module.is_authenticated()
+    except Exception:
+        privileged = False
+
+    paths = sorted(glob.glob(os.path.join(config.LOG_DIR, 'turns_*.jsonl')))
+    # Newest files last; read backwards only far enough to satisfy the limit.
+    lines = []
+    for path in reversed(paths):
+        try:
+            with open(path) as handle:
+                lines = handle.readlines() + lines
+        except OSError:
+            continue
+        if len(lines) >= limit and not after:
+            break
+
+    turns = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if after and record.get('datetime', '') <= after:
+            continue
+
+        reply = record.get('reply') or {}
+        turn = {
+            'turn': record.get('turn'),
+            'datetime': record.get('datetime'),
+            'source': record.get('source'),
+            'window_samples': record.get('window_samples'),
+            'state': record.get('state'),
+            'note': reply.get('note'),
+            'resource': reply.get('resource'),
+            'action': record.get('action'),
+            'action_refused': record.get('action_refused'),
+        }
+        if privileged:
+            turn['sham'] = record.get('sham')
+            turn['applied'] = record.get('applied')
+        turns.append(turn)
+
+    return jsonify({
+        'turns': turns[-limit:],
+        'privileged': privileged,
+        'loop_running': _loop_running(),
+    })
+
+
+def _loop_running():
+    try:
+        import admin as admin_module
+
+        active, _ = admin_module.loop_state()
+        return active
+    except Exception:
+        return None
 
 
 @app.route('/api/stream')

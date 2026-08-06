@@ -1,0 +1,53 @@
+[Unit]
+Description=sLLM demo loop (INVENTED data driving the real panel)
+Documentation=file:///var/www/sllm/documentation/bring_up.md
+After=network-online.target sllm-api.service sllm-matrixd.service
+Wants=sllm-api.service sllm-matrixd.service
+# Never alongside the real loop. systemd enforces this too, but the admin API
+# stops whichever unit is running before starting the other, because a failed
+# Conflicts= would just look like "the button did not work".
+Conflicts=sllm-loop.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=sllm
+Group=sllm
+WorkingDirectory=/var/www/sllm
+
+# --demo is the only mode that is both fast and actuating. It exists because
+# the live loop cannot be sped up without being made meaningless -- the 30
+# minute window and 10 minute turn come from Physarum's contraction period --
+# and --replay, which is fast, deliberately refuses to drive the panel. Between
+# them there was no way to watch a zone go on and off.
+#
+# So this invents data and puts real light on the panel. loop.py refuses to
+# start it if CHAMBER_OCCUPIED is set in config.py, and its turns are written to
+# data/logs/replay/ where they cannot be confused with a real session.
+ExecStart=/var/www/sllm/api/venv/bin/python -u /var/www/sllm/llm/loop.py --demo
+
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Never restarts. A demo is something a person starts to look at; if it exits,
+# the person is standing right there.
+Restart=no
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/sllm/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+# Never enabled at boot. Invented stimulus must not resume because the power
+# blinked.
+WantedBy=multi-user.target

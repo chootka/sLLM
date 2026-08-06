@@ -94,6 +94,49 @@ The red imaging flash is required for the capture sequence to mean anything,
 so this has to be settled before the timelapse is scientifically useful. It
 does not block attaching the camera or checking focus.
 
+## Diagnosing the panel over a chat session: read this first
+
+A large part of the night of 2026-08-05 was spent chasing a hardware fault on
+the LED panel that did not exist. The panel was fine the whole time.
+
+The cause was **observation lag**. I would set a zone, describe it, and by the
+time that message was read the state had already moved on; the reply described
+a different instant than the question. We compared notes across several minutes
+of drift and concluded half the chain was dead. It was not.
+
+If the panel ever looks wrong, do this instead of trading observations:
+
+1. **Hold one state for minutes, not seconds.** Set it, then stop touching it.
+2. **Use raw pixel bands, not zones**, so a mapping mistake cannot masquerade as
+   a hardware fault. Stop matrixd first -- two processes cannot drive GPIO 18.
+
+   ```bash
+   sudo systemctl stop sllm-matrixd
+   sudo python3 -c "
+   import sys; sys.path.insert(0,'gpio')
+   import board, neopixel, time
+   px = neopixel.NeoPixel(board.D18, 256, brightness=0.2, auto_write=False)
+   px.fill((0,0,0))
+   for i in range(0, 32): px[i] = (0,0,255)
+   px.show(); time.sleep(30)"
+   sudo systemctl start sllm-matrixd
+   ```
+
+   Pixels 0-31 are the **bottom** two rows, 224-255 the **top** two. That is
+   `FLIP_Y = True`, verified again on 2026-08-05.
+3. **Trust the daemon's own state**, queryable from any client, over anyone's
+   recollection of what the panel looked like:
+
+   ```bash
+   cd /var/www/sllm && sudo -u sllm ./scripts/py -c "
+   import sys; sys.path.insert(0,'gpio')
+   from matrix_client import MatrixClient
+   print(MatrixClient().active_zones())"
+   ```
+
+The barrier zone being lit and nothing else IS the correct resting state.
+`active_zones()` deliberately excludes the barrier, so `{}` means "barrier only".
+
 ## The three services, and which one is the experiment
 
 ```

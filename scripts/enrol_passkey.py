@@ -39,6 +39,8 @@ def main():
                         help='a name for the device, e.g. "phone"')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--revoke', type=int, metavar='N')
+    parser.add_argument('--relabel', nargs=2, metavar=('N', 'LABEL'),
+                        help='rename an already-enrolled passkey')
     args = parser.parse_args()
 
     import config
@@ -57,6 +59,24 @@ def main():
         pending = [e for e in store._read().get('enrolments', [])
                    if e['expires_at'] > time.time()]
         print(f"\n{len(pending)} unspent enrolment token(s)")
+        return 0
+
+    if args.relabel is not None:
+        index, label = args.relabel
+        data = store._read()
+        creds = data.get('credentials', [])
+        try:
+            index = int(index)
+        except ValueError:
+            print(f"'{index}' is not an index; use --list")
+            return 1
+        if not 0 <= index < len(creds):
+            print(f"no passkey at index {index}; use --list")
+            return 1
+        was = creds[index]['label']
+        creds[index]['label'] = label
+        store._write(data)
+        print(f"[{index}] '{was}' -> '{label}'")
         return 0
 
     if args.revoke is not None:

@@ -116,8 +116,10 @@
           {{ environmentUpdateTime || 'No data yet' }}
         </div>
       </div>
-      
+
     </div>
+
+    <AdminPanel :api-url="apiUrl" />
   </div>
 </template>
 
@@ -126,11 +128,13 @@ import { markRaw } from 'vue'
 import { io } from 'socket.io-client'
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
+import AdminPanel from './components/AdminPanel.vue'
 
 Chart.register(...registerables)
 
 export default {
   name: 'App',
+  components: { AdminPanel },
   data() {
     return {
       // App version - increment on each deployment

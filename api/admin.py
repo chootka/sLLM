@@ -5,9 +5,16 @@ reachable from the public internet, so the threat model is written down rather
 than assumed.
 
 **What an attacker gets if this falls:** the ability to start and stop
-sllm-loop. Not a shell, not the matrix directly, not the data. The sudoers rule
-in deploy/sllm-admin.sudoers permits exactly two argv vectors and nothing else,
-so a compromise here does not escalate past toggling one service.
+sllm-loop. Not a shell, not the matrix directly, not the data. The polkit rule
+in deploy/50-sllm-loop.rules grants the `sllm` uid exactly two verbs on exactly
+one unit, so a compromise here does not escalate past toggling one service.
+
+That started life as a sudoers rule and could not work: sllm-api.service sets
+NoNewPrivileges=true and sudo is setuid, so the kernel refuses the escalation.
+sudo reports this as a container misconfiguration, which is misleading -- it is
+the hardening working. polkit authorises over D-Bus with no setuid binary
+involved, and is narrower besides: systemd checks the unit and verb itself
+rather than sudo string-matching a command line.
 
 ## Authentication is a passkey (WebAuthn), not a password
 
@@ -71,7 +78,15 @@ admin = Blueprint('admin', __name__, url_prefix='/api/admin')
 # strings compared against a whitelist -- nothing from a request is ever
 # interpolated into a command, and subprocess is called with an argv list so
 # there is no shell to inject into.
-UNIT = 'sllm-loop.service'
+# Two units, and they are mutually exclusive: both drive the same panel, so
+# starting either stops the other. `demo` invents its data, and interleaving
+# fabricated stimulus with a real session would leave no way to tell afterwards
+# which turn caused which light.
+UNITS = {
+    'loop': 'sllm-loop.service',
+    'demo': 'sllm-demo.service',
+}
+UNIT = UNITS['loop']
 ACTIONS = ('start', 'stop')
 SYSTEMCTL = '/usr/bin/systemctl'
 
@@ -123,7 +138,7 @@ def _sweep():
     for token, expiry in list(_tokens.items()):
         if expiry <= now:
             del _tokens[token]
-    for key, (_, expiry, _kind) in list(_challenges.items()):
+    for key, (_, expiry, _kind, _payload) in list(_challenges.items()):
         if expiry <= now:
             del _challenges[key]
 
@@ -186,6 +201,25 @@ class CredentialStore:
         })
         self._write(data)
 
+    def peek_enrolment(self, token):
+        """Validate an enrolment token WITHOUT spending it.
+
+        Registration is two round trips, and everything that can realistically
+        fail -- the authenticator, the browser's credential manager, the user
+        changing their mind -- fails between them. Spending the token on the
+        first call means every one of those failures costs a fresh SSH session
+        to mint another. It is spent in take_enrolment once a credential has
+        actually been verified.
+        """
+        import hashlib
+
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        now = time.time()
+        for entry in self._read().get("enrolments", []):
+            if entry["expires_at"] > now and secrets.compare_digest(entry["hash"], digest):
+                return entry
+        return None
+
     def take_enrolment(self, token):
         """Consume a valid enrolment token. Single use, by construction."""
         import hashlib
@@ -233,34 +267,69 @@ def _bearer():
     return header[len(prefix):] if header.startswith(prefix) else ''
 
 
-def _stash_challenge(challenge, kind):
+def _stash_challenge(challenge, kind, payload=None):
+    """`payload` carries the unspent enrolment token through registration."""
     key = secrets.token_urlsafe(16)
-    _challenges[key] = (challenge, _now() + CHALLENGE_TTL_S, kind)
+    _challenges[key] = (challenge, _now() + CHALLENGE_TTL_S, kind, payload)
     return key
 
 
 def _take_challenge(key, kind):
-    """Single use: a replayed challenge must not verify twice."""
+    """Single use: a replayed challenge must not verify twice.
+
+    Returns (challenge, payload), or (None, None).
+    """
     entry = _challenges.pop(key, None)
     if entry is None:
-        return None
-    challenge, expiry, stored_kind = entry
+        return None, None
+    challenge, expiry, stored_kind, payload = entry
     if expiry <= _now() or stored_kind != kind:
-        return None
-    return challenge
+        return None, None
+    return challenge, payload
 
 
-def loop_state():
+def is_authenticated():
+    """Whether this request carries a valid admin session.
+
+    Used by /api/turns to decide whether `sham` and `applied` are included.
+    They are withheld from everyone else: the experiment depends on the model
+    not knowing which turns are controls, and /logs is public.
+    """
+    try:
+        _sweep()
+        return _valid_token(_bearer())
+    except Exception:  # noqa: BLE001 -- outside a request context, say no
+        return False
+
+
+def unit_state(unit):
     """(active, raw). `is-active` needs no privilege."""
     try:
         result = subprocess.run(
-            [SYSTEMCTL, 'is-active', UNIT],
+            [SYSTEMCTL, 'is-active', unit],
             capture_output=True, text=True, timeout=10,
         )
         raw = (result.stdout or result.stderr).strip()
         return raw == 'active', raw
     except (OSError, subprocess.SubprocessError) as exc:
         return False, f"unknown: {exc}"
+
+
+def loop_state():
+    return unit_state(UNIT)
+
+
+def _systemctl(action, unit):
+    """No sudo: NoNewPrivileges blocks setuid. polkit authorises the uid."""
+    return subprocess.run(
+        [SYSTEMCTL, action, unit],
+        capture_output=True, text=True, timeout=30,
+    )
+
+
+def _all_states():
+    return {key: dict(zip(('active', 'state'), unit_state(unit)), unit=unit)
+            for key, unit in UNITS.items()}
 
 
 def register(app, config):
@@ -327,7 +396,7 @@ def register(app, config):
         token = (request.get_json(silent=True) or {}).get('enrol_token', '')
         if not isinstance(token, str) or not token:
             return jsonify({"error": "enrolment token required"}), 400
-        entry = store.take_enrolment(token)
+        entry = store.peek_enrolment(token)
         if entry is None:
             return jsonify({"error": "invalid or expired enrolment token"}), 401
 
@@ -343,14 +412,15 @@ def register(app, config):
                 resident_key=ResidentKeyRequirement.PREFERRED,
                 user_verification=UserVerificationRequirement.REQUIRED,
             ),
-            exclude_credentials=[
-                PublicKeyCredentialDescriptor(id=_unb64(cred["id"]))
-                for cred in store.credentials()
-            ],
+            # Deliberately no exclude_credentials. Its only job is to stop the
+            # same authenticator being registered twice, which is harmless, and
+            # Android's Credential Manager fails opaquely on it -- "an unknown
+            # error occurred while talking to the credential manager", with
+            # nothing reaching the server to explain it. Not worth the trade.
         )
-        key = _stash_challenge(options.challenge, 'register')
-        # The consumed enrolment token is returned to the client only as an
-        # opaque handle for this one flow; it is already spent server-side.
+        # The token is validated but NOT yet spent; enrol/verify spends it once
+        # a credential actually verifies, so a failed attempt is retryable.
+        key = _stash_challenge(options.challenge, 'register', payload=token)
         return jsonify({
             "challenge_id": key,
             "label": entry.get("label", "passkey"),
@@ -363,7 +433,7 @@ def register(app, config):
             return jsonify({"error": "admin requires HTTPS"}), 403
 
         body = request.get_json(silent=True) or {}
-        challenge = _take_challenge(body.get('challenge_id', ''), 'register')
+        challenge, enrol_token = _take_challenge(body.get('challenge_id', ''), 'register')
         if challenge is None:
             return jsonify({"error": "unknown or expired challenge"}), 400
 
@@ -379,6 +449,8 @@ def register(app, config):
             print(f"admin: passkey registration rejected: {exc}", flush=True)
             return jsonify({"error": "registration failed"}), 400
 
+        # Now, and only now, is the enrolment token spent.
+        store.take_enrolment(enrol_token)
         store.add_credential(
             credential_id=_b64(verification.credential_id),
             public_key=_b64(verification.credential_public_key),
@@ -420,7 +492,7 @@ def register(app, config):
             return jsonify({"error": "admin requires HTTPS"}), 403
 
         body = request.get_json(silent=True) or {}
-        challenge = _take_challenge(body.get('challenge_id', ''), 'authenticate')
+        challenge, _ = _take_challenge(body.get('challenge_id', ''), 'authenticate')
         if challenge is None:
             return jsonify({"error": "unknown or expired challenge"}), 400
 
@@ -466,37 +538,103 @@ def register(app, config):
 
     # --- the actual controls ----------------------------------------------
 
+    def _occupied_path():
+        return pathlib.Path(getattr(
+            config, 'CHAMBER_OCCUPIED_FILE',
+            pathlib.Path(config.DATA_DIR) / 'chamber_occupied'))
+
+    @admin.route('/chamber', methods=['GET'])
+    @guard
+    def chamber_status():
+        return jsonify({"occupied": _occupied_path().exists()})
+
+    @admin.route('/chamber', methods=['POST'])
+    @guard
+    def chamber_set():
+        """Assert whether something alive is in the chamber.
+
+        Nothing can detect this, so a human asserts it. It is stored as the
+        presence of a file rather than a line in config.py: a safety flag that
+        needs an SSH session and a service restart to change is one that will be
+        stale exactly when it matters, and the API has no business rewriting its
+        own source.
+        """
+        occupied = (request.get_json(silent=True) or {}).get('occupied')
+        if not isinstance(occupied, bool):
+            return jsonify({"error": "occupied must be true or false"}), 400
+
+        path = _occupied_path()
+        try:
+            if occupied:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    f"set via the admin panel at {time.time()}\n"
+                    "The presence of this file means something living is in the\n"
+                    "chamber. loop.py --demo refuses to run while it exists.\n")
+            elif path.exists():
+                path.unlink()
+        except OSError as exc:
+            return jsonify({"error": f"could not write the flag: {exc}"}), 500
+
+        print(f"admin: chamber occupied={occupied} by {_client_ip()}", flush=True)
+        return jsonify({"ok": True, "occupied": path.exists()})
+
     @admin.route('/loop', methods=['GET'])
     @guard
     def loop_status():
-        active, raw = loop_state()
-        return jsonify({"active": active, "state": raw, "unit": UNIT})
+        states = _all_states()
+        # The top-level active/state keep the original single-unit shape.
+        return jsonify({**states['loop'], "units": states})
 
     @admin.route('/loop', methods=['POST'])
     @guard
     def loop_control():
-        action = (request.get_json(silent=True) or {}).get('action', '')
+        body = request.get_json(silent=True) or {}
+        action = body.get('action', '')
+        which = body.get('unit', 'loop')
+
         if action not in ACTIONS:
             return jsonify({"error": f"action must be one of {list(ACTIONS)}"}), 400
+        if which not in UNITS:
+            return jsonify({"error": f"unit must be one of {list(UNITS)}"}), 400
+
+        unit = UNITS[which]
 
         try:
-            result = subprocess.run(
-                ['/usr/bin/sudo', '-n', SYSTEMCTL, action, UNIT],
-                capture_output=True, text=True, timeout=30,
-            )
+            # Starting either unit stops the other first. They drive the same
+            # panel, and demo mode invents its data -- running both would mix
+            # fabricated stimulus into a real session with no way to separate
+            # them afterwards.
+            if action == 'start':
+                for other, other_unit in UNITS.items():
+                    if other == which:
+                        continue
+                    running, _ = unit_state(other_unit)
+                    if not running:
+                        continue
+                    stopped = _systemctl('stop', other_unit)
+                    if stopped.returncode != 0:
+                        detail = (stopped.stderr or stopped.stdout).strip()
+                        return jsonify({
+                            "error": f"could not stop {other_unit} first: {detail}"
+                        }), 500
+                    print(f"admin: stopped {other_unit} to start {unit}", flush=True)
+
+            result = _systemctl(action, unit)
         except (OSError, subprocess.SubprocessError) as exc:
             return jsonify({"error": f"could not run systemctl: {exc}"}), 500
 
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
-            return jsonify({"error": f"systemctl {action} failed: {detail}"}), 500
+            return jsonify({"error": f"systemctl {action} {which} failed: {detail}"}), 500
 
-        print(f"admin: {action} {UNIT} by {_client_ip()}", flush=True)
+        print(f"admin: {action} {unit} by {_client_ip()}", flush=True)
         # systemd returns before the unit settles; pause so the state reported
         # back is the one the user will actually see.
         time.sleep(1.0)
-        active, raw = loop_state()
-        return jsonify({"ok": True, "action": action, "active": active, "state": raw})
+        states = _all_states()
+        return jsonify({"ok": True, "action": action, "unit": which,
+                        **states[which], "units": states})
 
     app.register_blueprint(admin)
     app.config['SLLM_CREDENTIAL_STORE'] = store

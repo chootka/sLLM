@@ -173,3 +173,15 @@ ADMIN_ORIGIN = 'https://sllm.visceral.systems'
 # first enrolment, mode 0600. Contains no secrets that would let anyone log in
 # -- public keys are public -- but it is the list of what may.
 ADMIN_CREDENTIALS_FILE = os.path.join(DATA_DIR, 'admin_credentials.json')
+
+# --- chamber occupancy ------------------------------------------------------
+# Whether something alive is in the chamber. Nothing can detect this, so it is
+# asserted by a human -- but NOT by editing this file, because a safety flag
+# that requires an SSH session and a service restart is one that will be wrong
+# exactly when it matters. It is the presence of a file, toggled from the admin
+# panel, and read fresh on every check.
+#
+# Its one job today is to refuse `loop.py --demo`, which invents data and puts
+# real light on the panel. Treat it as the general "there is a living organism
+# in here" interlock and hang future safeties off it.
+CHAMBER_OCCUPIED_FILE = os.path.join(DATA_DIR, 'chamber_occupied')
