@@ -41,6 +41,45 @@
                 @click="setLoop('start')">Start loop</button>
         <button class="admin-action" :disabled="busy || !loopActive"
                 @click="setLoop('stop')">Stop loop</button>
+
+        <hr class="admin-rule" />
+
+        <p class="admin-status">
+          Demo mode:
+          <strong :class="demoActive ? 'demo' : 'off'">
+            {{ demoActive ? 'RUNNING' : 'stopped' }}
+          </strong>
+        </p>
+        <button class="admin-action"
+                :disabled="busy || demoActive || occupied"
+                @click="setUnit('demo', 'start')">Start demo</button>
+        <button class="admin-action" :disabled="busy || !demoActive"
+                @click="setUnit('demo', 'stop')">Stop demo</button>
+        <p class="admin-hint">
+          Demo invents data and drives the real panel, fast, so the hardware can
+          be watched. Starting it stops the model loop, and vice versa — they
+          share the panel.
+        </p>
+
+        <hr class="admin-rule" />
+
+        <p class="admin-status">
+          Chamber:
+          <strong :class="occupied ? 'occupied' : 'off'">
+            {{ occupied ? 'OCCUPIED' : 'empty' }}
+          </strong>
+        </p>
+        <button class="admin-action" :disabled="busy"
+                @click="setChamber(!occupied)">
+          {{ occupied ? 'Mark chamber empty' : 'Mark chamber occupied' }}
+        </button>
+        <p class="admin-hint">
+          Nothing can detect this — you assert it. While occupied, demo mode
+          refuses to run so invented stimulus never reaches a living organism.
+        </p>
+
+        <hr class="admin-rule" />
+
         <button class="admin-action subtle" @click="logout">Sign out</button>
         <p class="admin-hint">
           The session is held in memory only, so reloading this page signs you
@@ -84,6 +123,8 @@ export default {
       enrolled: false,
       authenticated: false,
       loopActive: false,
+      demoActive: false,
+      occupied: false,
       // The session token lives here and nowhere else. Not a cookie (no CSRF
       // surface) and not localStorage (an XSS would have to run while the
       // session is live rather than harvest it later).
@@ -224,9 +265,57 @@ export default {
           return
         }
         const data = await response.json()
-        this.loopActive = data.active
+        this.loopActive = data.units ? data.units.loop.active : data.active
+        this.demoActive = data.units ? data.units.demo.active : false
+        await this.refreshChamber()
       } catch (e) {
         this.error = 'Could not read loop state.'
+      }
+    },
+
+    async refreshChamber() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/admin/chamber`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.occupied = data.occupied
+      } catch (e) {
+        // Non-fatal: the loop controls still work without this.
+      }
+    },
+
+    async setChamber(occupied) {
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const data = await this.post('chamber', { occupied }, true)
+        this.occupied = data.occupied
+        this.notice = `Chamber marked ${data.occupied ? 'occupied' : 'empty'}.`
+      } catch (e) {
+        this.error = e.message || 'Could not set the chamber flag.'
+      } finally {
+        this.busy = false
+      }
+    },
+
+    async setUnit(unit, action) {
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const data = await this.post('loop', { action, unit }, true)
+        if (data.units) {
+          this.loopActive = data.units.loop.active
+          this.demoActive = data.units.demo.active
+        }
+        this.notice = `${unit} ${data.state}.`
+      } catch (e) {
+        this.error = e.message || `Could not ${action} ${unit}.`
+      } finally {
+        this.busy = false
       }
     },
 
@@ -235,8 +324,13 @@ export default {
       this.error = ''
       this.notice = ''
       try {
-        const data = await this.post('loop', { action }, true)
-        this.loopActive = data.active
+        const data = await this.post('loop', { action, unit: 'loop' }, true)
+        if (data.units) {
+          this.loopActive = data.units.loop.active
+          this.demoActive = data.units.demo.active
+        } else {
+          this.loopActive = data.active
+        }
         this.notice = `Loop ${data.state}.`
       } catch (e) {
         this.error = e.message || `Could not ${action} the loop.`
@@ -289,6 +383,9 @@ export default {
 .admin-action.subtle { border-color: #333; color: #888; }
 
 .admin-status .on { color: #6ec46e; }
+.admin-status .demo { color: #d9b26a; }
+.admin-status .occupied { color: #e0a0a0; }
+.admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
 .admin-status .off { color: #999; }
 .admin-error { color: #e08080; }
 .admin-notice { color: #7fb5d5; }

@@ -1,5 +1,13 @@
 <template>
-  <div>
+  <!-- /logs is its own view rather than a panel on the dashboard. No router
+       library: nginx already serves index.html for any path (try_files), so
+       matching on the pathname is the whole routing story. -->
+  <div v-if="isLogsRoute" class="logs-route">
+    <TurnLog :api-url="apiUrl" />
+    <AdminPanel :api-url="apiUrl" />
+  </div>
+
+  <div v-else>
     <div class="video-background-container">
       <iframe 
         src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0&responsive=1"
@@ -129,12 +137,13 @@ import { io } from 'socket.io-client'
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
 import AdminPanel from './components/AdminPanel.vue'
+import TurnLog from './components/TurnLog.vue'
 
 Chart.register(...registerables)
 
 export default {
   name: 'App',
-  components: { AdminPanel },
+  components: { AdminPanel, TurnLog },
   data() {
     return {
       // App version - increment on each deployment
@@ -142,6 +151,7 @@ export default {
       
       // API configuration
       apiUrl: window.location.origin,
+      isLogsRoute: window.location.pathname.replace(/\/+$/, '') === '/logs',
       socket: null,
       
       // Electrical readings
@@ -215,6 +225,16 @@ export default {
   
   async mounted() {
     console.log(`🦠 sLLM Frontend v${this.appVersion}`)
+
+    // /logs renders TurnLog instead of the dashboard, so none of the dashboard
+    // machinery should start: there is no canvas to attach a chart to, and the
+    // socket and image archive would be work done for a view nobody is looking
+    // at. TurnLog polls /api/turns on its own.
+    if (this.isLogsRoute) {
+      console.log('📜 Log view')
+      return
+    }
+
     this.initializeChart()
     this.connectSocket()
     this.loadImages()
