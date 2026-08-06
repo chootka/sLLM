@@ -579,6 +579,43 @@ def register(app, config):
         print(f"admin: chamber occupied={occupied} by {_client_ip()}", flush=True)
         return jsonify({"ok": True, "occupied": path.exists()})
 
+    @admin.route('/run', methods=['GET'])
+    @guard
+    def run_status():
+        import run as run_state
+
+        return jsonify({
+            "run": run_state.current(config),
+            "modes": list(run_state.MODES),
+            "history": run_state.history(config, limit=10),
+        })
+
+    @admin.route('/run', methods=['POST'])
+    @guard
+    def run_switch():
+        """Switch recording mode. Ends one run, starts another.
+
+        Nothing stops recording. A mode that is not `experiment` writes to a
+        subdirectory and tags every row, so a demo or a maintenance window is
+        excluded by a filter rather than by a hole in the series.
+        """
+        import run as run_state
+
+        body = request.get_json(silent=True) or {}
+        mode = body.get('mode', '')
+        note = body.get('note', '') or ''
+        if mode not in run_state.MODES:
+            return jsonify({"error": f"mode must be one of {list(run_state.MODES)}"}), 400
+
+        try:
+            new_run = run_state.switch(config, mode, note)
+        except (OSError, ValueError) as exc:
+            return jsonify({"error": f"could not switch run: {exc}"}), 500
+
+        print(f"admin: run mode -> {mode} ({new_run['id']}) by {_client_ip()}",
+              flush=True)
+        return jsonify({"ok": True, "run": new_run})
+
     @admin.route('/loop', methods=['GET'])
     @guard
     def loop_status():
@@ -619,6 +656,21 @@ def register(app, config):
                             "error": f"could not stop {other_unit} first: {detail}"
                         }), 500
                     print(f"admin: stopped {other_unit} to start {unit}", flush=True)
+
+            # Starting a demo puts the recorders into demo mode, so the samples
+            # taken while invented light is on the panel are labelled and routed
+            # away from the experiment record.
+            #
+            # Stopping a demo deliberately does NOT switch back. Only a human
+            # knows when the organism is actually back in the chamber and the
+            # lid is closed, and the two failure directions are not equal: real
+            # data mislabelled `demo` is merely excluded from analysis, while
+            # demo data mislabelled `experiment` is contamination that looks
+            # exactly like signal.
+            if action == 'start' and which == 'demo':
+                import run as run_state
+
+                run_state.switch(config, 'demo', note='demo mode started')
 
             result = _systemctl(action, unit)
         except (OSError, subprocess.SubprocessError) as exc:

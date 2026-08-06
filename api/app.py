@@ -214,9 +214,22 @@ def get_config():
 def get_status():
     """System status and what hardware is actually present"""
     env = environment.snapshot()
+
+    # Public on purpose. Anyone looking at the dashboard should be able to see
+    # that what they are watching is a demo rather than the organism -- and
+    # more importantly, so should anyone who later finds a screenshot of it.
+    try:
+        import run as run_state
+
+        active_run = run_state.current(config)
+        run_info = {"id": active_run["id"], "mode": active_run["mode"]}
+    except Exception:
+        run_info = None
+
     return jsonify({
         "status": "online",
         "timestamp": datetime.now().isoformat(),
+        "run": run_info,
         "readings_count": len(electrodes.buffer),
         "exposure_light": "on" if _stimulus_active() else "off",
         "sensors": {

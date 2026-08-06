@@ -64,6 +64,24 @@
         <hr class="admin-rule" />
 
         <p class="admin-status">
+          Recording:
+          <strong :class="mode === 'experiment' ? 'on' : 'demo'">{{ mode }}</strong>
+        </p>
+        <button v-for="m in modes" :key="m" class="admin-action"
+                :disabled="busy || mode === m" @click="setMode(m)">
+          {{ m }}
+        </button>
+        <p class="admin-hint">
+          Nothing stops recording. Anything but <em>experiment</em> is tagged
+          and written to its own directory, so it is excluded by a filter rather
+          than by a hole in the series. Starting a demo switches this
+          automatically; coming back is deliberate, because only you know when
+          the organism is actually back in.
+        </p>
+
+        <hr class="admin-rule" />
+
+        <p class="admin-status">
           Chamber:
           <strong :class="occupied ? 'occupied' : 'off'">
             {{ occupied ? 'OCCUPIED' : 'empty' }}
@@ -125,6 +143,8 @@ export default {
       loopActive: false,
       demoActive: false,
       occupied: false,
+      mode: '',
+      modes: [],
       // The session token lives here and nowhere else. Not a cookie (no CSRF
       // surface) and not localStorage (an XSS would have to run while the
       // session is live rather than harvest it later).
@@ -268,6 +288,7 @@ export default {
         this.loopActive = data.units ? data.units.loop.active : data.active
         this.demoActive = data.units ? data.units.demo.active : false
         await this.refreshChamber()
+        await this.refreshRun()
       } catch (e) {
         this.error = 'Could not read loop state.'
       }
@@ -283,6 +304,35 @@ export default {
         this.occupied = data.occupied
       } catch (e) {
         // Non-fatal: the loop controls still work without this.
+      }
+    },
+
+    async refreshRun() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/admin/run`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.mode = data.run.mode
+        this.modes = data.modes
+      } catch (e) {
+        // Non-fatal.
+      }
+    },
+
+    async setMode(mode) {
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const data = await this.post('run', { mode }, true)
+        this.mode = data.run.mode
+        this.notice = `Recording as ${data.run.mode}.`
+      } catch (e) {
+        this.error = e.message || 'Could not switch mode.'
+      } finally {
+        this.busy = false
       }
     },
 
