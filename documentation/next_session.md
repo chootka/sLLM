@@ -66,7 +66,37 @@ of several minutes.
 
 ---
 
-## 2. Other open items, none blocking
+## 2. Review the 2026-08-05 changes — you have not read most of them
+
+15 commits went in that evening, ~3500 lines across 22 files, and very little of
+it was reviewed at the time. `llm/filters/` was **not** touched — `harness.py`,
+`reducer.py` and `prompts.md` are exactly as they were. Everything else is new
+or changed.
+
+Read these two first, in this order. They are the ones that change what the
+experiment *is*, rather than how it is operated:
+
+1. **`gpio/store.py`** — the shape of the data files changed. Every row now
+   carries `run_id` and `mode`, non-live modes write to their own subdirectory,
+   and existing files were migrated in place. Confirm the migration did what you
+   want and that the columns are the ones you would have chosen.
+2. **`llm/loop.py`** — the model's requested `duration_s` is now applied. It used
+   to be parsed, logged and ignored, so a request for a 30s pulse became a 600s
+   one. This changes what actually happens to the organism, and therefore what
+   the turn records mean.
+
+Then, as time allows:
+
+- `gpio/matrixd.py` and `gpio/matrix_client.py` — the root-owned panel daemon
+- `api/admin.py` — passkey auth and the loop/demo/chamber controls
+- `gpio/run.py` — run and mode state
+- `gpio/sensor.py` — fan controller, rewritten around air exchange not humidity
+- `deploy/*.service` — four unit files, and the hardening on them
+
+Worth asking of each: is this doing something you actually asked for, and would
+you have built it this way?
+
+## 3. Other open items, none blocking
 
 - **Timelapse gets stuck.** Captures stop, `last_error` stays `null`, so it is
   blocking rather than failing — probably inside `capture_flash`. This is the
@@ -81,7 +111,7 @@ of several minutes.
 
 ---
 
-## 3. What works (built and verified 2026-08-05)
+## 4. What works (built and verified 2026-08-05)
 
 - **Fan** — BCM 23 relay (active-high) + BCM 12 PWM held high. 60s in every 300s.
 - **Matrix behind a root-owned helper** — `sllm-matrixd` owns the panel; the API
@@ -92,7 +122,7 @@ of several minutes.
 - **Run labelling** — every reading carries `run_id` and `mode` (`test`/`live`);
   non-live modes write to their own directory.
 
-## 4. Commands
+## 5. Commands
 
 ```bash
 # state
@@ -116,6 +146,6 @@ sudo -u sllm ./scripts/py scripts/enrol_passkey.py --list
 `active_zones()` excludes the barrier, so `{}` means "barrier only" — the
 correct resting state.
 
-## 5. Not pushed
+## 6. Repo state
 
-19 commits sit on `main`, local only. Nothing has been pushed to GitHub.
+Everything from 2026-08-05 is pushed. `main` matches `origin/main`.
