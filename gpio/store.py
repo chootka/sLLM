@@ -53,11 +53,11 @@ class ReadingLog:
 
     def _run(self):
         if self.run_provider is None:
-            return {'id': '', 'mode': 'experiment'}
+            return {'id': '', 'mode': 'test'}
         try:
             return self.run_provider()
         except Exception:  # noqa: BLE001 -- recording must not stop for this
-            return {'id': '', 'mode': 'experiment'}
+            return {'id': '', 'mode': 'test'}
 
     def directory_for(self, mode):
         import run as run_state
@@ -65,7 +65,7 @@ class ReadingLog:
         sub = run_state.subdirectory(mode)
         return os.path.join(self.directory, sub) if sub else self.directory
 
-    def path_for(self, day, mode='experiment'):
+    def path_for(self, day, mode='test'):
         return os.path.join(self.directory_for(mode),
                             f"{self.prefix}_{day:%Y%m%d}.csv")
 
@@ -76,7 +76,7 @@ class ReadingLog:
         eight fields under a six-name header, which is silently malformed --
         every reader would mis-parse it and nothing would complain.
 
-        Historical rows are filled with mode `dev`, not `experiment`. That is
+        Historical rows are filled with mode `test`, not `live`. That is
         not a guess: nothing had been run for real at the point the labelling
         was added -- the rig was still being built, and those readings include
         demo runs written before routing existed. Calling them `experiment`
@@ -115,7 +115,7 @@ class ReadingLog:
                     # run. Marking it `dev` is not a guess -- nothing had been
                     # run for real yet -- and it is the label that keeps it out
                     # of any analysis filtering for `experiment`.
-                    record['mode'] = 'dev'
+                    record['mode'] = 'test'
                 writer.writerow(record)
         os.replace(tmp, path)
         print(f"store: migrated {os.path.basename(path)} to include "
@@ -145,7 +145,7 @@ class ReadingLog:
         moment = datetime.fromtimestamp(row["timestamp"], timezone.utc)
         active = self._run()
         row = dict(row, run_id=active.get('id', ''),
-                   mode=active.get('mode', 'experiment'))
+                   mode=active.get('mode', 'test'))
         with self._lock:
             self._ensure_open(moment.date(), row['mode'])
             self._writer.writerow(row)
@@ -164,7 +164,7 @@ class ReadingLog:
         can never end up in an experimental turn.
         """
         if mode is None:
-            mode = self._run().get('mode', 'experiment')
+            mode = self._run().get('mode', 'test')
         now = now or datetime.now(timezone.utc)
         cutoff = (now - timedelta(seconds=seconds)).timestamp()
 

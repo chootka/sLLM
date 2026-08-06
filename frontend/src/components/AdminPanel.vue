@@ -65,36 +65,26 @@
 
         <p class="admin-status">
           Recording:
-          <strong :class="mode === 'experiment' ? 'on' : 'demo'">{{ mode }}</strong>
+          <strong :class="mode === 'live' ? 'on' : 'demo'">{{ mode }}</strong>
         </p>
         <button v-for="m in modes" :key="m" class="admin-action"
                 :disabled="busy || mode === m" @click="setMode(m)">
           {{ m }}
         </button>
         <p class="admin-hint">
-          Nothing stops recording. Anything but <em>experiment</em> is tagged
-          and written to its own directory, so it is excluded by a filter rather
+          Nothing stops recording. Anything but <em>live</em> is tagged and
+          written to its own directory, so it is excluded by a filter rather
           than by a hole in the series. Starting a demo switches this
-          automatically; coming back is deliberate, because only you know when
-          the organism is actually back in.
+          automatically; coming back is deliberate.
         </p>
 
         <hr class="admin-rule" />
 
-        <p class="admin-status">
-          Chamber:
-          <strong :class="occupied ? 'occupied' : 'off'">
-            {{ occupied ? 'OCCUPIED' : 'empty' }}
-          </strong>
-        </p>
-        <button class="admin-action" :disabled="busy"
-                @click="setChamber(!occupied)">
-          {{ occupied ? 'Mark chamber empty' : 'Mark chamber occupied' }}
-        </button>
-        <p class="admin-hint">
-          Nothing can detect this — you assert it. While occupied, demo mode
-          refuses to run so invented stimulus never reaches a living organism.
-        </p>
+        <label class="admin-toggle-row">
+          <span>Chamber occupied</span>
+          <input type="checkbox" :checked="occupied" :disabled="busy"
+                 @change="setChamber($event.target.checked)" />
+        </label>
 
         <hr class="admin-rule" />
 
@@ -435,6 +425,9 @@ export default {
 .admin-status .on { color: #6ec46e; }
 .admin-status .demo { color: #d9b26a; }
 .admin-status .occupied { color: #e0a0a0; }
+.admin-toggle-row { display: flex; justify-content: space-between;
+  align-items: center; padding: 0.35rem 0; cursor: pointer; }
+.admin-toggle-row input { cursor: pointer; }
 .admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
 .admin-status .off { color: #999; }
 .admin-error { color: #e08080; }

@@ -25,7 +25,9 @@ WorkingDirectory=/var/www/sllm
 # So this invents data and puts real light on the panel. loop.py refuses to
 # start it if CHAMBER_OCCUPIED is set in config.py, and its turns are written to
 # data/logs/replay/ where they cannot be confused with a real session.
-ExecStart=/var/www/sllm/api/venv/bin/python -u /var/www/sllm/llm/loop.py --demo
+# --sham-rate 0: a demo has nothing to control for, and a sham turn lights
+# nothing, which reads as broken hardware to whoever is watching.
+ExecStart=/var/www/sllm/api/venv/bin/python -u /var/www/sllm/llm/loop.py --demo --sham-rate 0
 
 KillSignal=SIGTERM
 TimeoutStopSec=30

@@ -320,7 +320,8 @@ def open_matrix(dry_run):
 _stimulus_timer = None
 
 
-def apply_action(matrix, action, speed=1.0, min_duration=0.0):
+def apply_action(matrix, action, speed=1.0, min_duration=0.0,
+                 hold_until_next=False):
     """Light the zone, and take it off again after the duration requested.
 
     `speed` compresses the duration alongside the turn interval, so a demo run
@@ -344,6 +345,14 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0):
 
     matrix.clear_stimulus()
     matrix.set_zone(action["zone"], action["intensity"])
+
+    # In a demo the zone stays lit until the model chooses the next one, so the
+    # panel always shows the current choice and visibly moves. Scaling the
+    # duration instead gave a 13% duty cycle -- six seconds lit out of the ~45
+    # between turns, because model latency dominates the compressed interval --
+    # which is not something a person watching can be expected to catch.
+    if hold_until_next:
+        return
 
     duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
     if duration <= 0:
@@ -451,6 +460,12 @@ def main():
             # 60x turns a 600s interval into 10s, which is watchable.
             args.speed = 60.0
         args.dry_run = False
+        # No shams in a demo. A sham is a control condition and a demonstration
+        # has nothing to control for -- all it does is make a quarter of the
+        # turns light nothing, which reads as broken hardware to whoever is
+        # watching. That is the opposite of what this mode is for.
+        if args.sham_rate is None:
+            args.sham_rate = 0.0
     elif args.replay:
         args.dry_run = True
 
@@ -461,6 +476,12 @@ def main():
     min_stimulus_s = 0.0
     if args.demo:
         min_stimulus_s = max(6.0, (args.interval / max(args.speed, 1e-9)) * 0.5)
+
+    # sham_rate is computed above, before the --demo block ran, so force it
+    # here. A demo has nothing to control for and a sham just makes a quarter of
+    # the turns light nothing, which reads as broken hardware to a viewer.
+    if args.demo and args.sham_rate is None:
+        sham_rate = 0.0
 
     prompts = load_prompts()
     if args.prompt not in prompts:
@@ -571,7 +592,8 @@ def main():
             if action and not is_sham and not args.dry_run:
                 try:
                     apply_action(matrix, action, speed=args.speed,
-                                 min_duration=min_stimulus_s)
+                                 min_duration=min_stimulus_s,
+                                 hold_until_next=args.demo)
                     record["applied"] = True
                 except Exception as exc:
                     record["apply_error"] = str(exc)

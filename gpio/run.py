@@ -8,16 +8,17 @@ labelled, and analysis filters on the label.
 
 A run is `{id, mode, started_at, note}`. Modes:
 
-    experiment    the real thing. Nothing has run in this mode yet.
-    dev           building and testing the rig. The default, because that is
-                  what this has been so far and mislabelling it `experiment`
-                  would put development noise into the scientific record.
-    demo          invented data driving the panel, for showing people. The
-                  organism is out of the chamber.
-    maintenance   lid off, electrodes being handled, calibrating. Data is real
-                  but is about the rig rather than about an organism.
+    live    the real run. Nothing has been recorded in this mode yet.
+    test    building, bench work, anything that is not the real run. The
+            default, because mislabelling development as `live` would put
+            bench noise into the scientific record.
+    demo    invented data driving the panel, for showing people.
 
-Two things follow from a mode that is not `experiment`:
+Three is the whole vocabulary. A finer taxonomy would be guessing at
+distinctions nobody will maintain -- and a label nobody keeps accurate is worse
+than no label, because it is trusted.
+
+Two things follow from a mode that is not `live`:
 
 1. Every row carries `run_id` and `mode`, so a filter can exclude it.
 2. Readings are written to a subdirectory. This is the part that matters more
@@ -38,8 +39,8 @@ import threading
 import time
 from datetime import datetime, timezone
 
-MODES = ('experiment', 'dev', 'demo', 'maintenance')
-DEFAULT_MODE = 'dev'
+MODES = ('live', 'test', 'demo')
+DEFAULT_MODE = 'test'
 
 _lock = threading.Lock()
 
@@ -141,8 +142,8 @@ def history(config, limit=50):
 def subdirectory(mode):
     """Where a mode's readings live, relative to the readings directory.
 
-    `experiment` writes at the top level -- it is the record everything else is
-    a deviation from. Every other mode gets its own directory, including `dev`,
-    so the top level stays empty until something real is actually running.
+    `live` writes at the top level -- it is the record everything else is a
+    deviation from. Every other mode gets its own directory, so the top level
+    stays empty until something real is actually running.
     """
-    return '' if mode == 'experiment' else mode
+    return '' if mode == 'live' else mode
