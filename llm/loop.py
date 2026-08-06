@@ -320,7 +320,7 @@ def open_matrix(dry_run):
 _stimulus_timer = None
 
 
-def apply_action(matrix, action, speed=1.0):
+def apply_action(matrix, action, speed=1.0, min_duration=0.0):
     """Light the zone, and take it off again after the duration requested.
 
     `speed` compresses the duration alongside the turn interval, so a demo run
@@ -348,6 +348,11 @@ def apply_action(matrix, action, speed=1.0):
     duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
     if duration <= 0:
         return
+    # Scaling the duration alongside the interval keeps the on/off ratio honest,
+    # but at 60x a 60s pulse becomes a one-second blink -- below the threshold of
+    # being seeable, which defeats the point of a mode that exists to be watched.
+    # min_duration is the visibility floor, and is only set in demo.
+    duration = max(duration, min_duration)
 
     def _expire():
         try:
@@ -448,6 +453,14 @@ def main():
         args.dry_run = False
     elif args.replay:
         args.dry_run = True
+
+    # In demo, hold each zone for a visible fraction of the effective turn
+    # interval -- long enough to see, short enough to still go off before the
+    # next turn. Zero outside demo: a real run must apply exactly what the model
+    # asked for and nothing else.
+    min_stimulus_s = 0.0
+    if args.demo:
+        min_stimulus_s = max(6.0, (args.interval / max(args.speed, 1e-9)) * 0.5)
 
     prompts = load_prompts()
     if args.prompt not in prompts:
@@ -557,7 +570,8 @@ def main():
 
             if action and not is_sham and not args.dry_run:
                 try:
-                    apply_action(matrix, action, speed=args.speed)
+                    apply_action(matrix, action, speed=args.speed,
+                                 min_duration=min_stimulus_s)
                     record["applied"] = True
                 except Exception as exc:
                     record["apply_error"] = str(exc)

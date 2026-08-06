@@ -94,6 +94,160 @@ The red imaging flash is required for the capture sequence to mean anything,
 so this has to be settled before the timelapse is scientifically useful. It
 does not block attaching the camera or checking focus.
 
+## The admin page, and how a passkey gets enrolled
+
+`https://sllm.visceral.systems` has a **⚙** button in the bottom-right corner.
+Signed in, it starts and stops the model loop, starts and stops demo mode, and
+sets whether the chamber is occupied.
+
+Authentication is a **passkey**, not a password. There is no shared secret in
+this system at all: the private key stays in your device's secure element and
+the server holds only a public key. Nothing to brute-force, nothing to leak out
+of config.py, and nothing phishable -- the credential is cryptographically
+bound to the origin, so a lookalike domain cannot elicit a usable assertion.
+`user_verification` is REQUIRED, so an unlocked device is not enough; the
+authenticator must check the human.
+
+### Enrolling a device
+
+The first passkey cannot be authorised by a passkey, so enrolment is gated on
+being able to get a shell on the Pi. **That SSH access is the root of trust,
+and it is also the recovery path** if every registered device is lost.
+
+```bash
+cd /var/www/sllm
+sudo -u sllm ./scripts/py scripts/enrol_passkey.py --label laptop
+```
+
+It prints a URL of the form `https://sllm.visceral.systems/?enrol=<token>`.
+Open that **on the device being registered**, the admin panel opens itself,
+click *Register this device*, approve the prompt. The token is single-use,
+expires in ten minutes, and is stored only as a SHA-256 hash -- the printed
+value is the only time it exists in the clear. It is spent when a credential
+actually verifies, not when the page loads, so a failed attempt can be retried
+with the same URL.
+
+Register **at least two devices**. One passkey means one lost phone locks you
+out of the web controls.
+
+```bash
+sudo -u sllm ./scripts/py scripts/enrol_passkey.py --list
+sudo -u sllm ./scripts/py scripts/enrol_passkey.py --relabel 0 laptop
+sudo -u sllm ./scripts/py scripts/enrol_passkey.py --revoke 1
+```
+
+**Android note.** Registering on a Samsung phone failed with "an unknown error
+occurred while talking to the credential manager", with nothing reaching the
+server to explain it. The cause was `excludeCredentials` in the registration
+options, which Android's Credential Manager handles badly. It has been removed:
+its only job was to stop the same authenticator registering twice, which is
+harmless. If a device fails to enrol, the error is generated entirely on the
+device -- check the screen lock and Play Services before looking at the Pi.
+
+### Sessions
+
+A successful login returns a bearer token held **in browser memory only**. Not
+a cookie, because a cookie is attached to every request to this origin and that
+is what makes CSRF possible; an Authorization header cannot be set by
+cross-origin script, so CSRF is structurally impossible rather than mitigated.
+Not localStorage either, because that survives the tab and any XSS could
+harvest it later.
+
+The practical consequence: **reloading the page signs you out.** That is the
+intended trade for a control that puts light into a chamber.
+
+## Why the API is not root, and what runs as what
+
+```
+sllm-matrixd   root    owns the WS2812B panel. The ONLY privileged process.
+sllm-api       sllm    web API. No shell, no home, not in sudo.
+sllm-loop      sllm    the model loop.
+sllm-demo      sllm    invented data driving the panel. Never enabled at boot.
+```
+
+`sllm` is a dedicated system account, not a human login. The API is reachable
+from the internet, so whatever it runs as is what an attacker gets on a bad
+day. It used to run as `chootka`: SSH keys, git credentials, sudo group
+membership, and a shell profile that could be rewritten to capture a sudo
+password the next time you typed one. As `sllm` the blast radius is the data
+directory and two systemd units. `chootka` is a member of the `sllm` group so
+the standalone tools still work by hand; `chootka`'s own sudo is unchanged.
+
+The panel needs `/dev/mem`, which needs root -- so it lives behind
+`gpio/matrixd.py`, a small daemon speaking a fixed vocabulary over a unix
+socket at `/run/sllm/matrix.sock` (root:sllm 0660). `gpio/matrix_client.py`
+presents the same methods as `leds.Matrix`, so nothing else knows the
+difference.
+
+Starting and stopping units from the web goes through **polkit**, not sudo.
+This is not a preference: `sllm-api.service` sets `NoNewPrivileges=true` and
+sudo is setuid, so the kernel refuses it outright. sudo reports that as a
+container misconfiguration, which is misleading -- it is the hardening working.
+`deploy/50-sllm-loop.rules` grants the `sllm` uid exactly `start` and `stop` on
+exactly `sllm-loop.service` and `sllm-demo.service`. Everything else returns
+"Interactive authentication required".
+
+### The network is not what it looks like
+
+`sllm.visceral.systems` does **not** resolve to this Pi. It resolves to a
+DigitalOcean droplet (`77.42.69.156`, tailnet name `sllm-reverse-proxy`) which
+terminates TLS and forwards plain HTTP/1.0 to this box over Tailscale, arriving
+from `100.75.40.22`.
+
+Two consequences that cost time to discover:
+
+1. **Port 80 here is the production path.** Redirecting it to HTTPS produces an
+   infinite redirect loop for every public visitor. I did that and had to
+   revert it inside a minute.
+2. **The proxy sends no `X-Forwarded-Proto` and no `X-Forwarded-For`**, so this
+   box cannot otherwise tell a request that arrived over public HTTPS from a
+   plaintext one on the studio LAN. nginx now synthesises the header from a
+   `geo`/`map` keyed on that tailnet address, which cannot be spoofed from
+   outside the WireGuard tunnel. Admin routes reject anything not marked https,
+   so plain LAN access to them returns 403.
+
+Note also that the droplet terminates TLS, which puts it inside the trust
+boundary: it sees admin traffic in the clear and serves the frontend JS. It
+cannot obtain a passkey or forge a login, but it could steal a live session
+token. That is inherent to any TLS-terminating proxy.
+
+## Demo mode: watching the hardware without waiting
+
+The live loop cannot be sped up without being made meaningless. The 30 minute
+window and the 10 minute turn come from Physarum's contraction period, not from
+caution. `--replay` is fast but deliberately refuses to actuate. So there was
+no way to watch a zone go on and off.
+
+`--demo` is the exception: invented data, real light, fast.
+
+```bash
+sudo systemctl start sllm-demo     # or the admin panel
+sudo systemctl stop sllm-demo
+```
+
+It refuses to start while the chamber is marked occupied, and its turns are
+written to `data/logs/replay/` where they cannot be confused with a real
+session. Starting it stops `sllm-loop`, and vice versa -- they share the panel.
+
+**Chamber occupancy** is asserted by a human, because nothing can detect it. It
+is the presence of a file (`data/chamber_occupied`), toggled from the admin
+panel and read fresh on every check -- deliberately not a line in config.py,
+because a safety flag that needs an SSH session and a service restart is one
+that will be stale exactly when it matters.
+
+## /logs
+
+`https://sllm.visceral.systems/logs` is a live, scrollable, timestamped view of
+what the model is thinking: its full note per turn, the action it asked for,
+the reduced per-channel state, and any refusal. It polls `/api/turns`.
+
+**`sham` and `applied` are withheld from anyone not signed in as admin**, and
+the redaction happens in the endpoint rather than the template, so the fields
+never reach a public browser at all. This is not tidiness: the experiment
+depends on the model not knowing which turns are controls, and a public list of
+which turns were shams is a channel straight back into the loop the moment it
+is quoted at the model or scraped into something the model later reads.
+
 ## Diagnosing the panel over a chat session: read this first
 
 A large part of the night of 2026-08-05 was spent chasing a hardware fault on
