@@ -173,6 +173,12 @@ h1 {
     cursor: default;
 }
 
+.preload-status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #888;
+}
+
 /* The scrubber's own width:100% and margin-top are for when it stands alone;
    in the controls row it flexes into the space the button leaves. */
 .timeline-controls .timeline-scrubber {

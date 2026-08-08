@@ -88,10 +88,10 @@
               @click="togglePlayback"
               class="play-button"
               :disabled="images.length < 2"
-              :title="isPlaying ? 'Pause' : 'Play timelapse'"
-              :aria-label="isPlaying ? 'Pause' : 'Play timelapse'"
+              :title="playButtonLabel"
+              :aria-label="playButtonLabel"
             >
-              {{ isPlaying ? '❚❚' : '▶' }}
+              {{ isPreloading ? '■' : (isPlaying ? '❚❚' : '▶') }}
             </button>
             <input
               type="range"
@@ -101,6 +101,9 @@
               class="timeline-scrubber"
               @input="onTimelineScrub"
             >
+          </div>
+          <div v-if="isPreloading" class="preload-status">
+            Loading frames… {{ preloadLoaded }} / {{ preloadTotal }}
           </div>
           <div class="timeline-footer">
             <div class="timestamp">
@@ -166,7 +169,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.14',
+      appVersion: '1.0.15',
       
       // API configuration
       apiUrl: window.location.origin,
@@ -202,7 +205,15 @@ export default {
       isPlaying: false, // Timelapse playback, advances the scrubber on a timer
       playbackTimer: null,
       playbackIntervalMs: 200, // 5 frames/sec -- slow enough to read growth
-      
+      // Frames are ~135KB each, so at 200ms the browser cannot fetch them as
+      // fast as the timer advances and playback sits on whatever is decoded.
+      // They are warmed into the browser cache before play starts.
+      loadedUrls: markRaw(new Set()),
+      isPreloading: false,
+      preloadCancelled: false,
+      preloadLoaded: 0,
+      preloadTotal: 0,
+
       // System status
       isOnline: false,
       exposureLightOn: false,
@@ -227,6 +238,10 @@ export default {
       const minutesPerDay = 24 * 60
       const intervalMinutes = this.imageCaptureInterval / 60000
       return Math.floor(minutesPerDay / intervalMinutes)
+    },
+    playButtonLabel() {
+      if (this.isPreloading) return 'Cancel loading'
+      return this.isPlaying ? 'Pause' : 'Play timelapse'
     },
     currentImageTime() {
       const image = this.images[this.timelinePosition]
@@ -631,8 +646,39 @@ export default {
       }
     },
     
-    togglePlayback() {
-      if (this.isPlaying) {
+    preloadFrame(url) {
+      // Resolves once the browser holds the frame, so the <img> swap during
+      // playback is a cache hit. An error resolves too: one unreachable frame
+      // must not wedge the whole preload.
+      if (this.loadedUrls.has(url)) return Promise.resolve()
+      return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => { this.loadedUrls.add(url); resolve() }
+        img.onerror = () => resolve()
+        img.src = url
+      })
+    },
+
+    async preloadAll(urls) {
+      // Browsers cap concurrent connections per host at around six anyway;
+      // firing all 100 at once just queues them somewhere less visible.
+      const CONCURRENCY = 6
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < urls.length && !this.preloadCancelled) {
+          await this.preloadFrame(urls[cursor++])
+          this.preloadLoaded++
+        }
+      }
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, urls.length) }, () => worker()
+      )
+      await Promise.all(workers)
+    },
+
+    async togglePlayback() {
+      // A press during either preload or playback means stop.
+      if (this.isPlaying || this.isPreloading) {
         this.stopPlayback()
         return
       }
@@ -643,6 +689,18 @@ export default {
       if (this.timelinePosition >= this.images.length - 1) {
         this.timelinePosition = 0
         this.onTimelineScrub()
+      }
+
+      const urls = this.images.map(image => image.url)
+      if (urls.some(url => !this.loadedUrls.has(url))) {
+        this.preloadCancelled = false
+        this.isPreloading = true
+        this.preloadLoaded = 0
+        this.preloadTotal = urls.length
+        await this.preloadAll(urls)
+        this.isPreloading = false
+        // Stopped by a second press, or the view moved on while we waited.
+        if (this.preloadCancelled || this.viewMode !== 'timelapse') return
       }
 
       this.isPlaying = true
@@ -657,6 +715,8 @@ export default {
     },
 
     stopPlayback() {
+      this.preloadCancelled = true
+      this.isPreloading = false
       this.isPlaying = false
       if (this.playbackTimer) {
         clearInterval(this.playbackTimer)
