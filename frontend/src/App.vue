@@ -25,13 +25,7 @@
       </iframe>
     </div>
     <div class="container">
-      <div class="app-header">
-        <h1>🦠 Slime Mould Monitor</h1>
-        <!-- Plain href, not a click handler: /logs is a real path that nginx
-             serves index.html for, so it works pasted, bookmarked or opened in
-             a new tab. There is no router to push to. -->
-        <a href="/logs" class="logs-link">To logs &rarr;</a>
-      </div>
+      <h1>🦠 Slime Mould Monitor</h1>
 
       <div class="grid">
         <!-- Electrical Readings Panel -->
@@ -48,6 +42,10 @@
         
         <!-- Live Stream / Timelapse Panel -->
         <div class="panel timeline-panel">
+          <!-- Floats just above the panel's top-right corner. Plain href, not a
+               click handler: /logs is a real path that nginx serves index.html
+               for, so it works pasted, bookmarked or opened in a new tab. -->
+          <a href="/logs" class="logs-link">To logs &rarr;</a>
           <div class="timeline-header">
             <h2>{{ viewMode === 'livestream' ? 'Live Stream' : 'Timelapse' }}</h2>
             <div class="status-indicator-wrapper">
@@ -169,7 +167,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.15',
+      appVersion: '1.0.16',
       
       // API configuration
       apiUrl: window.location.origin,

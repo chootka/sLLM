@@ -115,20 +115,16 @@ h1 {
     display: block;
 }
 
-.app-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 20px;
-    flex-wrap: wrap;
-}
-
-/* h1 carries the header's bottom margin, so the row does not add its own */
-.app-header h1 {
-    margin-bottom: 0;
-}
-
+/* Floats outside the timeline panel, against its top-right corner. bottom:100%
+   sits it on the panel's top edge; the margin lifts it clear. .timeline-panel
+   is already position:relative, so this anchors to the panel and follows it
+   when the grid stacks on mobile. */
 .logs-link {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 10px;
+    font-size: 14px;
     color: #000000;
     text-decoration: none;
     font-weight: 600;
