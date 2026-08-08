@@ -538,46 +538,12 @@ def register(app, config):
 
     # --- the actual controls ----------------------------------------------
 
-    def _occupied_path():
-        return pathlib.Path(getattr(
-            config, 'CHAMBER_OCCUPIED_FILE',
-            pathlib.Path(config.DATA_DIR) / 'chamber_occupied'))
-
-    @admin.route('/chamber', methods=['GET'])
-    @guard
-    def chamber_status():
-        return jsonify({"occupied": _occupied_path().exists()})
-
-    @admin.route('/chamber', methods=['POST'])
-    @guard
-    def chamber_set():
-        """Assert whether something alive is in the chamber.
-
-        Nothing can detect this, so a human asserts it. It is stored as the
-        presence of a file rather than a line in config.py: a safety flag that
-        needs an SSH session and a service restart to change is one that will be
-        stale exactly when it matters, and the API has no business rewriting its
-        own source.
-        """
-        occupied = (request.get_json(silent=True) or {}).get('occupied')
-        if not isinstance(occupied, bool):
-            return jsonify({"error": "occupied must be true or false"}), 400
-
-        path = _occupied_path()
-        try:
-            if occupied:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(
-                    f"set via the admin panel at {time.time()}\n"
-                    "The presence of this file means something living is in the\n"
-                    "chamber. loop.py --demo refuses to run while it exists.\n")
-            elif path.exists():
-                path.unlink()
-        except OSError as exc:
-            return jsonify({"error": f"could not write the flag: {exc}"}), 500
-
-        print(f"admin: chamber occupied={occupied} by {_client_ip()}", flush=True)
-        return jsonify({"ok": True, "occupied": path.exists()})
+    # There is no chamber empty/occupied control. It said the same thing as the
+    # recording mode -- test means nothing is in there, live means something is
+    # -- and of the two, the mode is the one that stays accurate, because
+    # getting it wrong sends a real session to the test subdirectory where
+    # analysis filters it out. An occupancy flag with no such consequence went
+    # stale instead. llm/loop.py refuses --demo while the mode is live.
 
     @admin.route('/run', methods=['GET'])
     @guard

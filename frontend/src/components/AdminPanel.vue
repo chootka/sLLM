@@ -46,13 +46,14 @@
           <button :class="{ active: !demoActive }" :disabled="busy"
                   @click="setUnit('demo', 'stop')">stopped</button>
           <button :class="{ active: demoActive, demo: demoActive }"
-                  :disabled="busy || occupied"
+                  :disabled="busy || mode === 'live'"
                   @click="setUnit('demo', 'start')">running</button>
         </div>
         <p class="admin-hint">
           Demo invents data and drives the real panel, fast, so the hardware can
           be watched. Starting it stops the model loop, and vice versa — they
-          share the panel.
+          share the panel. Unavailable while recording is <em>live</em>, which
+          is taken to mean something is in the chamber.
         </p>
 
         <hr class="admin-rule" />
@@ -67,18 +68,9 @@
         <p class="admin-hint">
           Anything but <em>live</em> is tagged and written to its own directory,
           so it is excluded by a filter. Starting a demo switches this
-          automatically.
+          automatically. <em>live</em> also means something is in the chamber,
+          which is what blocks demo.
         </p>
-
-        <hr class="admin-rule" />
-
-        <p class="admin-label">Chamber</p>
-        <div class="pill" :class="{ busy }">
-          <button :class="{ active: !occupied }" :disabled="busy"
-                  @click="setChamber(false)">empty</button>
-          <button :class="{ active: occupied, occupied }" :disabled="busy"
-                  @click="setChamber(true)">occupied</button>
-        </div>
 
         <hr class="admin-rule" />
 
@@ -126,7 +118,6 @@ export default {
       authenticated: false,
       loopActive: false,
       demoActive: false,
-      occupied: false,
       mode: '',
       modes: [],
       // The session token lives here and nowhere else. Not a cookie (no CSRF
@@ -271,23 +262,9 @@ export default {
         const data = await response.json()
         this.loopActive = data.units ? data.units.loop.active : data.active
         this.demoActive = data.units ? data.units.demo.active : false
-        await this.refreshChamber()
         await this.refreshRun()
       } catch (e) {
         this.error = 'Could not read loop state.'
-      }
-    },
-
-    async refreshChamber() {
-      try {
-        const response = await fetch(`${this.apiUrl}/api/admin/chamber`, {
-          headers: { Authorization: `Bearer ${this.token}` },
-        })
-        if (!response.ok) return
-        const data = await response.json()
-        this.occupied = data.occupied
-      } catch (e) {
-        // Non-fatal: the loop controls still work without this.
       }
     },
 
@@ -315,21 +292,6 @@ export default {
         this.notice = `Recording as ${data.run.mode}.`
       } catch (e) {
         this.error = e.message || 'Could not switch mode.'
-      } finally {
-        this.busy = false
-      }
-    },
-
-    async setChamber(occupied) {
-      this.busy = true
-      this.error = ''
-      this.notice = ''
-      try {
-        const data = await this.post('chamber', { occupied }, true)
-        this.occupied = data.occupied
-        this.notice = `Chamber marked ${data.occupied ? 'occupied' : 'empty'}.`
-      } catch (e) {
-        this.error = e.message || 'Could not set the chamber flag.'
       } finally {
         this.busy = false
       }
@@ -418,7 +380,6 @@ export default {
 
 .admin-status .on { color: #6ec46e; }
 .admin-status .demo { color: #d9b26a; }
-.admin-status .occupied { color: #e0a0a0; }
 .admin-label { color: #888; font-size: 0.75rem; text-transform: uppercase;
   letter-spacing: 0.06em; margin: 0.2rem 0 0.35rem; }
 .pill { display: flex; border: 1px solid #444; border-radius: 999px;
@@ -431,7 +392,6 @@ export default {
 .pill button.active { background: #2f3f2f; color: #cfe6cf; }
 .pill button.active.live { background: #3f2f2f; color: #ffd0d0; }
 .pill button.active.demo { background: #3d3524; color: #e6d3a0; }
-.pill button.active.occupied { background: #3f2f2f; color: #ffd0d0; }
 .pill button:disabled { cursor: default; }
 .admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
 .admin-status .off { color: #999; }

@@ -175,13 +175,12 @@ ADMIN_ORIGIN = 'https://sllm.visceral.systems'
 ADMIN_CREDENTIALS_FILE = os.path.join(DATA_DIR, 'admin_credentials.json')
 
 # --- chamber occupancy ------------------------------------------------------
-# Whether something alive is in the chamber. Nothing can detect this, so it is
-# asserted by a human -- but NOT by editing this file, because a safety flag
-# that requires an SSH session and a service restart is one that will be wrong
-# exactly when it matters. It is the presence of a file, toggled from the admin
-# panel, and read fresh on every check.
+# Not stored separately: it is the recording mode. `live` means a real session
+# is being recorded, which means something is in the chamber; `test` means there
+# is not. There used to be a second flag saying the same thing, and of the two
+# the mode is the one that stays accurate -- set it wrong and a real session
+# lands in the test subdirectory where analysis filters it out, so it is
+# corrected within a turn. A flag with no such consequence just went stale.
 #
 # Its one job today is to refuse `loop.py --demo`, which invents data and puts
-# real light on the panel. Treat it as the general "there is a living organism
-# in here" interlock and hang future safeties off it.
-CHAMBER_OCCUPIED_FILE = os.path.join(DATA_DIR, 'chamber_occupied')
+# real light on the panel. Hang future organism-present safeties off the mode.

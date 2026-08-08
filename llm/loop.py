@@ -40,8 +40,8 @@ so live, a zone changes once every ten minutes. Replay is fast but refuses to
 actuate. Between them there was no way to watch a zone go on and off.
 
 --demo therefore invents data and puts real light on the panel, which is only
-acceptable when the chamber is empty. It refuses to start if CHAMBER_OCCUPIED
-is set in config.py, and its turns are written to data/logs/replay/ so they can
+acceptable when the chamber is empty. It refuses to start while the recording
+mode is `live`, and its turns are written to data/logs/replay/ so they can
 never be confused with a real session.
 
 Synthetic sessions carry a planted event at a known turn and log it alongside
@@ -488,17 +488,26 @@ def main():
     # chamber being empty, and its turns are written to data/logs/replay/ where
     # they can never be mistaken for the record of a real session.
     if args.demo:
-        # Read fresh, every start. The flag is the presence of a file so it can
-        # be toggled from the admin panel without editing code or restarting
-        # anything -- a safety that needs an SSH session is one that will be
-        # stale exactly when it matters.
-        occupied_file = getattr(config, 'CHAMBER_OCCUPIED_FILE', None)
-        occupied = bool(occupied_file and os.path.exists(occupied_file))
-        if occupied or getattr(config, 'CHAMBER_OCCUPIED', False):
-            print("refusing --demo: the chamber is marked as occupied.\n"
-                  "This mode invents data and puts real light on the panel.\n"
-                  "Clear the flag in the admin panel only when there is\n"
-                  "nothing alive in the chamber.")
+        # Read fresh, every start, from the recording mode -- which is the same
+        # assertion a separate occupancy flag used to make, one flag later.
+        #
+        # There used to be two: recording test/live, and chamber empty/occupied.
+        # Two controls for one fact, and the occupancy one was the weaker of the
+        # pair, because nothing goes wrong when it is stale. It therefore went
+        # stale, which is exactly the failure it existed to prevent. The mode is
+        # the flag that stays honest: set it wrong and a real session is written
+        # to the test subdirectory where analysis filters it out, so it gets
+        # corrected within a turn.
+        #
+        # `live` now means a real session is being recorded, which means there is
+        # something in the chamber.
+        import run as run_state  # noqa: PLC0415 -- gpio/ is on the path above
+
+        if run_state.current(config).get('mode') == 'live':
+            print("refusing --demo: recording is live, so the chamber is taken\n"
+                  "to be occupied. This mode invents data and puts real light on\n"
+                  "the panel. Switch recording to test in the admin panel, and\n"
+                  "only when there is nothing alive in the chamber.")
             return 1
         if not args.replay:
             args.replay = 'synthetic'
