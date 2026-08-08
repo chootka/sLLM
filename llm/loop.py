@@ -532,11 +532,19 @@ def main():
     if args.demo:
         min_stimulus_s = max(6.0, (args.interval / max(args.speed, 1e-9)) * 0.5)
 
-    # sham_rate is computed above, before the --demo block ran, so force it
-    # here. A demo has nothing to control for and a sham just makes a quarter of
-    # the turns light nothing, which reads as broken hardware to a viewer.
-    if args.demo and args.sham_rate is None:
-        sham_rate = 0.0
+    # sham_rate is computed above, before the --demo block ran, so it still
+    # holds the config default. The --demo block has since set args.sham_rate to
+    # 0 unless one was passed explicitly, so take it from there. A demo has
+    # nothing to control for, and a sham just makes a quarter of the turns light
+    # nothing, which reads as broken hardware to a viewer.
+    #
+    # This used to test `args.sham_rate is None` -- which the --demo block had
+    # just made false by setting it to 0.0, so the override never fired and a
+    # hand-run demo ran the full 25%. sllm-demo.service hid it by passing
+    # --sham-rate 0 on the command line, so only a demo started by hand was
+    # affected, which is the one the documentation tells you to run.
+    if args.demo:
+        sham_rate = args.sham_rate
 
     prompts = load_prompts()
     if args.prompt not in prompts:
