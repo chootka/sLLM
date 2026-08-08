@@ -25,8 +25,14 @@
       </iframe>
     </div>
     <div class="container">
-      <h1>🦠 Slime Mould Monitor</h1>
-      
+      <div class="app-header">
+        <h1>🦠 Slime Mould Monitor</h1>
+        <!-- Plain href, not a click handler: /logs is a real path that nginx
+             serves index.html for, so it works pasted, bookmarked or opened in
+             a new tab. There is no router to push to. -->
+        <a href="/logs" class="logs-link">To logs &rarr;</a>
+      </div>
+
       <div class="grid">
         <!-- Electrical Readings Panel -->
         <div class="panel">
@@ -73,16 +79,29 @@
               <p style="font-size: 1.2em; color: #ecddb1;">No images captured yet</p>
             </div>
           </div>
-          <!-- Timeline Scrubber (only shown in timelapse mode) -->
-          <input 
+          <!-- Timeline Scrubber + playback (only shown in timelapse mode) -->
+          <div
             v-if="viewMode === 'timelapse' && images.length > 0"
-            type="range" 
-            v-model.number="timelinePosition" 
-            :max="images.length - 1" 
-            min="0" 
-            class="timeline-scrubber"
-            @input="onTimelineScrub"
+            class="timeline-controls"
           >
+            <button
+              @click="togglePlayback"
+              class="play-button"
+              :disabled="images.length < 2"
+              :title="isPlaying ? 'Pause' : 'Play timelapse'"
+              :aria-label="isPlaying ? 'Pause' : 'Play timelapse'"
+            >
+              {{ isPlaying ? '❚❚' : '▶' }}
+            </button>
+            <input
+              type="range"
+              v-model.number="timelinePosition"
+              :max="images.length - 1"
+              min="0"
+              class="timeline-scrubber"
+              @input="onTimelineScrub"
+            >
+          </div>
           <div class="timeline-footer">
             <div class="timestamp">
               <span v-if="viewMode === 'livestream'">
@@ -147,7 +166,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.13',
+      appVersion: '1.0.14',
       
       // API configuration
       apiUrl: window.location.origin,
@@ -180,6 +199,9 @@ export default {
       totalImagesOnServer: 0, // Full archive size reported by /api/images
       cameraAvailable: null, // null until /api/status reports; false hides livestream
       viewModeChosenByUser: false, // Don't override an explicit toggle
+      isPlaying: false, // Timelapse playback, advances the scrubber on a timer
+      playbackTimer: null,
+      playbackIntervalMs: 200, // 5 frames/sec -- slow enough to read growth
       
       // System status
       isOnline: false,
@@ -251,6 +273,7 @@ export default {
     }
     if (this.imageInterval) clearInterval(this.imageInterval)
     if (this.fallbackInterval) clearInterval(this.fallbackInterval)
+    this.stopPlayback()
     if (this.chart) this.chart.destroy()
   },
   
@@ -558,20 +581,27 @@ export default {
       
       this.images.push(imageData)
       this.totalImagesOnServer++
-      // Update timeline position
-      this.timelinePosition = this.images.length - 1
-      
-      // Force complete re-render by clearing image first, then setting it
-      this.currentImage = null
-      this.imageError = false
-      this.imageKey++ // Increment key to force Vue to create new img element
-      
-      // Use nextTick to ensure DOM updates after clearing
-      this.$nextTick(() => {
-        // Now set the new image - Vue will create a fresh img element
-        this.currentImage = uniqueUrl
-        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename, 'URL:', uniqueUrl.substring(0, 80) + '...')
-      })
+
+      // A frame landing mid-playback must not yank the view to the live end.
+      // The backend captures every 300s, so a long timelapse will have several
+      // arrive while it plays; jumping each time would make playback unusable.
+      // The frame is still appended -- playback simply reaches it in order.
+      if (!this.isPlaying) {
+        // Update timeline position
+        this.timelinePosition = this.images.length - 1
+
+        // Force complete re-render by clearing image first, then setting it
+        this.currentImage = null
+        this.imageError = false
+        this.imageKey++ // Increment key to force Vue to create new img element
+
+        // Use nextTick to ensure DOM updates after clearing
+        this.$nextTick(() => {
+          // Now set the new image - Vue will create a fresh img element
+          this.currentImage = uniqueUrl
+          console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename, 'URL:', uniqueUrl.substring(0, 80) + '...')
+        })
+      }
       
       // Keep only the most recent images to prevent memory issues
       if (this.images.length > this.maxImages) {
@@ -580,7 +610,12 @@ export default {
         if (oldImage.url && oldImage.url.startsWith('blob:')) {
           URL.revokeObjectURL(oldImage.url)
         }
-        this.timelinePosition = this.images.length - 1
+        // Every index shifted down by one. Mid-playback the playhead has to
+        // follow its frame down rather than snap to the end, or evicting the
+        // oldest image would silently skip playback to the newest.
+        this.timelinePosition = this.isPlaying
+          ? Math.max(0, this.timelinePosition - 1)
+          : this.images.length - 1
         console.log(`Removed oldest image (keeping max ${this.maxImages})`)
       }
     },
@@ -596,8 +631,43 @@ export default {
       }
     },
     
+    togglePlayback() {
+      if (this.isPlaying) {
+        this.stopPlayback()
+        return
+      }
+      if (this.images.length < 2) return
+
+      // Pressing play while parked on the last frame replays from the start,
+      // rather than appearing to do nothing.
+      if (this.timelinePosition >= this.images.length - 1) {
+        this.timelinePosition = 0
+        this.onTimelineScrub()
+      }
+
+      this.isPlaying = true
+      this.playbackTimer = setInterval(() => {
+        if (this.timelinePosition >= this.images.length - 1) {
+          this.stopPlayback()
+          return
+        }
+        this.timelinePosition++
+        this.onTimelineScrub()
+      }, this.playbackIntervalMs)
+    },
+
+    stopPlayback() {
+      this.isPlaying = false
+      if (this.playbackTimer) {
+        clearInterval(this.playbackTimer)
+        this.playbackTimer = null
+      }
+    },
+
     toggleViewMode() {
       this.viewModeChosenByUser = true
+      // Leaving timelapse leaves the timer running over a hidden scrubber.
+      this.stopPlayback()
       if (this.viewMode === 'livestream') {
         // Switch to timelapse mode
         this.viewMode = 'timelapse'
