@@ -55,18 +55,28 @@
           </div>
           <div class="timelapse-container">
             <!-- Live Stream View -->
-            <img 
+            <img
               v-if="viewMode === 'livestream'"
-              :src="streamUrl" 
+              key="livestream"
+              :src="streamUrl"
               class="timelapse-image"
               alt="Live slime mould stream"
               @error="imageError = true"
               @load="imageError = false"
             >
             <!-- Timelapse View -->
-            <img 
-              v-else-if="viewMode === 'timelapse' && currentImage && !imageError" 
-              :key="imageKey"
+            <!-- Keyed on the frame URL, not imageKey. Both branches here are
+                 <img>, so Vue patched one long-lived element -- and the
+                 livestream branch is an MJPEG multipart response, which keeps
+                 painting into the element it owns even after src is reassigned.
+                 Playback moved the src and the picture never followed. A key
+                 that changes per frame forces a fresh element each time.
+                 Frames are preloaded so the swap is a cache hit, and
+                 .timelapse-container reserves a 16:9 box so nothing collapses
+                 while a new element mounts. -->
+            <img
+              v-else-if="viewMode === 'timelapse' && currentImage && !imageError"
+              :key="currentImage"
               :src="currentImage"
               class="timelapse-image"
               alt="Slime mould timelapse"
@@ -100,8 +110,9 @@
               @input="onTimelineScrub"
             >
           </div>
-          <div v-if="isPreloading" class="preload-status">
-            Loading frames… {{ preloadLoaded }} / {{ preloadTotal }}
+          <div v-if="isPreloading || isPlaying" class="preload-status">
+            <span v-if="isPreloading">Loading frames… {{ preloadLoaded }} / {{ preloadTotal }}</span>
+            <span v-else>Frame {{ timelinePosition + 1 }} / {{ images.length }}</span>
           </div>
           <div class="timeline-footer">
             <div class="timestamp">
@@ -167,7 +178,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.16',
+      appVersion: '1.0.19',
       
       // API configuration
       apiUrl: window.location.origin,
@@ -703,12 +714,23 @@ export default {
 
       this.isPlaying = true
       this.playbackTimer = setInterval(() => {
-        if (this.timelinePosition >= this.images.length - 1) {
+        const next = this.timelinePosition + 1
+        if (next > this.images.length - 1) {
           this.stopPlayback()
           return
         }
-        this.timelinePosition++
-        this.onTimelineScrub()
+        const frame = this.images[next]
+        if (!frame) {
+          this.stopPlayback()
+          return
+        }
+        // Assigned here rather than through onTimelineScrub. The position was
+        // advancing while the frame stayed put, which is what it looks like
+        // when the helper throws inside the timer: setInterval swallows the
+        // error, so the counter moves and the <img> never hears about it.
+        this.timelinePosition = next
+        this.currentImage = frame.url
+        this.imageError = false
       }, this.playbackIntervalMs)
     },
 
