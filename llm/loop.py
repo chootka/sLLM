@@ -256,15 +256,16 @@ class TurnLog:
     have to guess which rows were about an organism at all.
     """
 
-    def __init__(self, directory, replay=False):
+    def __init__(self, directory, replay=False, prefix='turns'):
         if replay:
             directory = os.path.join(directory, 'replay')
         os.makedirs(directory, exist_ok=True)
         self.directory = directory
+        self.prefix = prefix
 
     def append(self, record):
         day = datetime.now(timezone.utc).strftime('%Y%m%d')
-        path = os.path.join(self.directory, f'turns_{day}.jsonl')
+        path = os.path.join(self.directory, f'{self.prefix}_{day}.jsonl')
         with open(path, 'a', encoding='utf-8') as handle:
             handle.write(json.dumps(record) + '\n')
         return path
@@ -321,7 +322,7 @@ _stimulus_timer = None
 
 
 def apply_action(matrix, action, speed=1.0, min_duration=0.0,
-                 hold_until_next=False, full_intensity=False):
+                 hold_until_next=False, full_intensity=False, on_switch=None):
     """Light the zone, and take it off again after the duration requested.
 
     `speed` compresses the duration alongside the turn interval, so a demo run
@@ -338,6 +339,20 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
     about its own action.
     """
     global _stimulus_timer
+
+    def _switch(event):
+        """Record that light actually started or stopped, if anyone is listening.
+
+        Never lets a logging failure reach the caller: this runs on the timer
+        thread as well as the turn thread, and a broken log must not take the
+        stimulus with it.
+        """
+        if on_switch is None:
+            return
+        try:
+            on_switch(event, action)
+        except Exception as exc:  # noqa: BLE001 -- a record is not worth the run
+            print(f"could not record {event} switch: {exc}")
 
     if _stimulus_timer is not None:
         _stimulus_timer.cancel()
@@ -380,6 +395,7 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
 
     matrix.clear_stimulus()
     matrix.set_zone(action["zone"], intensity)
+    _switch('on')
 
     # In a demo the zone stays lit until the model chooses the next one, so the
     # panel always shows the current choice and visibly moves. Scaling the
@@ -394,6 +410,10 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
             matrix.clear_stimulus()
         except Exception as exc:  # noqa: BLE001 -- a timer thread must not die
             print(f"could not clear stimulus after {duration}s: {exc}")
+        else:
+            # Only on success. A failed clear means the zone is still lit, and
+            # a row claiming it went dark would be worse than no row at all.
+            _switch('off')
 
     _stimulus_timer = threading.Timer(duration, _expire)
     _stimulus_timer.daemon = True
@@ -518,6 +538,36 @@ def main():
     ollama = Ollama(args.host, args.model)
     turns_log = TurnLog(config.LOG_DIR, replay=bool(args.replay) or args.dry_run)
 
+    # When the light actually moved, which the turn record cannot say: it is
+    # written while the stimulus is still on, so the off time does not exist yet.
+    #
+    # These rows are what let an analysis drop ADC samples that sat inside a
+    # switching transient. bus.SwitchGate keeps conversions away from switches
+    # within the API process, but llm/loop.py drives zones through matrixd,
+    # which is a separate process and outside that lock -- so a zone change can
+    # land mid-conversion and be measured instead of the organism. At
+    # ADC_SWITCH_SETTLE of 0.25s against one sample a second, that is well under
+    # one sample per turn, and excluding samples near these timestamps costs
+    # almost nothing while closing the gap completely.
+    switch_log = TurnLog(config.LOG_DIR, replay=bool(args.replay) or args.dry_run,
+                         prefix='switches')
+
+    def switch_recorder(turn_index):
+        """Build the on_switch callback for one turn."""
+        def record(event, act):
+            switch_log.append({
+                "turn": turn_index,
+                "event": event,
+                "datetime": datetime.now(timezone.utc).astimezone().isoformat(),
+                # Epoch seconds too: matching these against ADC sample times is
+                # the whole point, and that is arithmetic, not string parsing.
+                "timestamp": time.time(),
+                "zone": act["zone"],
+                "intensity": act["intensity"],
+                "requested_s": act.get("duration_s"),
+            })
+        return record
+
     # Zone geometry comes from leds.py so there is one definition of how many
     # zones exist and which one is the barrier.
     import leds
@@ -620,7 +670,8 @@ def main():
                     apply_action(matrix, action, speed=args.speed,
                                  min_duration=min_stimulus_s,
                                  hold_until_next=args.demo,
-                                 full_intensity=args.demo)
+                                 full_intensity=args.demo,
+                                 on_switch=switch_recorder(turn))
                     record["applied"] = True
                 except Exception as exc:
                     record["apply_error"] = str(exc)
