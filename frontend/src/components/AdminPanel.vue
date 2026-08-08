@@ -64,8 +64,9 @@
                   :disabled="busy || demoActive" @click="setMode('live')">live</button>
         </div>
         <p class="admin-hint">
-          Test data is tagged and filtered out. Live means something is in the
-          chamber.
+          Test data is written to its own directory. Starting a demo
+          automatically selects &ldquo;test&rdquo;. While live is selected, demo
+          mode is blocked.
         </p>
 
         <hr class="admin-rule" />
