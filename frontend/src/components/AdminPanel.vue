@@ -50,10 +50,8 @@
                   @click="setUnit('demo', 'start')">running</button>
         </div>
         <p class="admin-hint">
-          Demo invents data and drives the real panel, fast, so the hardware can
-          be watched. Starting it stops the model loop, and vice versa — they
-          share the panel. Unavailable while recording is <em>live</em>, which
-          is taken to mean something is in the chamber.
+          Demo invents data and drives the real panel. Model and Demo mode
+          toggle each other. Unavailable while recording live data.
         </p>
 
         <hr class="admin-rule" />
@@ -66,20 +64,14 @@
                   :disabled="busy || demoActive" @click="setMode('live')">live</button>
         </div>
         <p class="admin-hint">
-          Anything but <em>live</em> is tagged and written to its own directory,
-          so it is excluded by a filter. Starting a demo switches this
-          automatically. <em>live</em> also means something is in the chamber,
-          which is what blocks demo — and why it cannot be selected while a demo
-          is running.
+          Test data is tagged and filtered out. Live means something is in the
+          chamber.
         </p>
 
         <hr class="admin-rule" />
 
         <button class="admin-action subtle" @click="logout">Sign out</button>
-        <p class="admin-hint">
-          The session is held in memory only, so reloading this page signs you
-          out.
-        </p>
+        <p class="admin-hint">Reloading the page signs you out.</p>
       </div>
     </div>
   </div>
