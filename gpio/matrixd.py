@@ -72,6 +72,22 @@ FLASH_TIMEOUT_S = 15.0
 
 RECV_LIMIT = 64 * 1024  # a request is a few dozen bytes; this is a sanity cap
 
+# How often the panel is re-sent its current frame.
+#
+# leds.Matrix only writes on a state change, which during a live run is once
+# per ten minute turn. A frame that does not arrive intact -- or a chain that
+# latches a bad state -- therefore persists for the whole turn, because nothing
+# ever writes again to correct it. That is what made demo mode look dead: the
+# daemon held the right state, and the panel did not show it.
+#
+# This re-sends the SAME frame, which matters for the electrode measurements.
+# bus.SwitchGate exists because changing panel state pulls amps through grounds
+# shared with the electrode reference, and a conversion taken across that edge
+# measures the switching. An identical frame changes no LED's current, so it
+# creates no such edge -- it is 256*24 bits of data-line activity and nothing
+# more. Set to 0 to disable the refresh entirely.
+REFRESH_INTERVAL_S = 2.0
+
 
 class MatrixService:
     """The panel plus the flash state machine. All access is serialised.
@@ -94,24 +110,50 @@ class MatrixService:
     # --- flash watchdog -----------------------------------------------------
 
     def _watch(self):
-        """Restore the panel if a flash outlives its client."""
+        """Restore the panel if a flash outlives its client, and refresh it.
+
+        Two jobs on one timer because both are "put the panel back the way it
+        should be", and a second thread would need the same lock anyway.
+
+        The refresh never runs during a flash. Mid-flash the panel is red at
+        IMAGING_BRIGHTNESS and `_render` would repaint it blue, blanking the
+        backlight in the middle of somebody's exposure.
+        """
+        last_refresh = 0.0
         while not self._stop.wait(0.25):
             with self._lock:
-                if not self._flashing or time.monotonic() < self._flash_deadline:
+                if self._flashing:
+                    if time.monotonic() < self._flash_deadline:
+                        continue
+                    # Do not call _end_flash's bookkeeping twice; restore and mark.
+                    self._flashing = False
+                    self._flash_expired = True
+                    try:
+                        self._matrix._render()
+                    except Exception as exc:  # noqa: BLE001 -- must not kill the thread
+                        print(f"flash watchdog restore failed: {exc}", flush=True)
+                    else:
+                        print(
+                            f"flash watchdog fired after {FLASH_TIMEOUT_S}s; "
+                            "panel restored without a flash_end",
+                            flush=True,
+                        )
+                    last_refresh = time.monotonic()
                     continue
-                # Do not call _end_flash's bookkeeping twice; restore and mark.
-                self._flashing = False
-                self._flash_expired = True
+
+                if REFRESH_INTERVAL_S <= 0:
+                    continue
+                now = time.monotonic()
+                if now - last_refresh < REFRESH_INTERVAL_S:
+                    continue
+                last_refresh = now
                 try:
                     self._matrix._render()
                 except Exception as exc:  # noqa: BLE001 -- must not kill the thread
-                    print(f"flash watchdog restore failed: {exc}", flush=True)
-                else:
-                    print(
-                        f"flash watchdog fired after {FLASH_TIMEOUT_S}s; "
-                        "panel restored without a flash_end",
-                        flush=True,
-                    )
+                    # Not fatal and not worth a line every two seconds; the next
+                    # tick tries again. A permanently broken panel shows up as a
+                    # failing set_zone, which the client already reports.
+                    print(f"panel refresh failed: {exc}", flush=True)
 
     # --- commands -----------------------------------------------------------
 

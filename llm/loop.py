@@ -352,6 +352,32 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
         # it asked for it is not.
         intensity = 1.0
 
+    # Worked out before the zone is lit, because a zero-length request must not
+    # light it at all. This used to be computed after set_zone and to simply
+    # `return` on duration <= 0, which left the zone on with nothing armed to
+    # take it off again: a request for zero seconds of light lasted until the
+    # next turn overwrote it, up to a full 600s interval on an organism that is
+    # photophobic. That is the same failure the docstring above describes -- a
+    # duration parsed, validated, logged and not applied -- in its other
+    # direction.
+    #
+    # Scaling the duration alongside the interval keeps the on/off ratio honest,
+    # but at 60x a 60s pulse becomes a one-second blink -- below the threshold of
+    # being seeable, which defeats the point of a mode that exists to be watched.
+    # min_duration is the visibility floor, and is only set in demo.
+    duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
+    if duration > 0:
+        duration = max(duration, min_duration)
+
+    # Clearing rather than lighting-then-clearing: the zone is already dark, and
+    # a set/clear pair would spend a switching edge saying so. bus.SwitchGate
+    # exists to keep exactly those edges away from the electrode reference.
+    # hold_until_next is exempt because it ignores the duration by design -- a
+    # demo still shows the model's choice, whatever length it asked for.
+    if not hold_until_next and duration <= 0:
+        matrix.clear_stimulus()
+        return
+
     matrix.clear_stimulus()
     matrix.set_zone(action["zone"], intensity)
 
@@ -362,15 +388,6 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
     # which is not something a person watching can be expected to catch.
     if hold_until_next:
         return
-
-    duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
-    if duration <= 0:
-        return
-    # Scaling the duration alongside the interval keeps the on/off ratio honest,
-    # but at 60x a 60s pulse becomes a one-second blink -- below the threshold of
-    # being seeable, which defeats the point of a mode that exists to be watched.
-    # min_duration is the visibility floor, and is only set in demo.
-    duration = max(duration, min_duration)
 
     def _expire():
         try:
