@@ -178,7 +178,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.20',
+      appVersion: '1.0.21',
       
       // API configuration
       apiUrl: window.location.origin,

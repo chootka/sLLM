@@ -573,6 +573,25 @@ def register(app, config):
         if mode not in run_state.MODES:
             return jsonify({"error": f"mode must be one of {list(run_state.MODES)}"}), 400
 
+        # `live` asserts that something is in the chamber. A demo is inventing
+        # data and putting real light on the panel, so the two cannot both be
+        # true -- and the demo interlock only runs at start, so without this the
+        # panel would keep driving invented stimulus onto a chamber that had
+        # just been declared occupied.
+        #
+        # Refused rather than stopping the demo for you. Which of the two is
+        # wrong depends on something only a human can see: whether the organism
+        # is actually in there yet. Guessing either way silently is worse than
+        # asking.
+        if mode == 'live':
+            demo_running, _ = unit_state(UNITS['demo'])
+            if demo_running:
+                return jsonify({
+                    "error": "stop demo mode first — it is driving invented "
+                             "light on the panel, and live means the chamber "
+                             "is occupied"
+                }), 409
+
         try:
             new_run = run_state.switch(config, mode, note)
         except (OSError, ValueError) as exc:

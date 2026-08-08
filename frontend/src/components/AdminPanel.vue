@@ -63,13 +63,14 @@
           <button :class="{ active: mode === 'test' }" :disabled="busy"
                   @click="setMode('test')">test</button>
           <button :class="{ active: mode === 'live', live: mode === 'live' }"
-                  :disabled="busy" @click="setMode('live')">live</button>
+                  :disabled="busy || demoActive" @click="setMode('live')">live</button>
         </div>
         <p class="admin-hint">
           Anything but <em>live</em> is tagged and written to its own directory,
           so it is excluded by a filter. Starting a demo switches this
           automatically. <em>live</em> also means something is in the chamber,
-          which is what blocks demo.
+          which is what blocks demo — and why it cannot be selected while a demo
+          is running.
         </p>
 
         <hr class="admin-rule" />
