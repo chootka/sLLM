@@ -301,29 +301,10 @@ export default {
           this.loopActive = data.units.loop.active
           this.demoActive = data.units.demo.active
         }
-        this.notice = `${unit} ${data.state}.`
+        // No notice: the pill already shows which side is active, and a
+        // line saying "demo inactive" underneath it is the same fact twice.
       } catch (e) {
         this.error = e.message || `Could not ${action} ${unit}.`
-      } finally {
-        this.busy = false
-      }
-    },
-
-    async setLoop(action) {
-      this.busy = true
-      this.error = ''
-      this.notice = ''
-      try {
-        const data = await this.post('loop', { action, unit: 'loop' }, true)
-        if (data.units) {
-          this.loopActive = data.units.loop.active
-          this.demoActive = data.units.demo.active
-        } else {
-          this.loopActive = data.active
-        }
-        this.notice = `Loop ${data.state}.`
-      } catch (e) {
-        this.error = e.message || `Could not ${action} the loop.`
       } finally {
         this.busy = false
       }
