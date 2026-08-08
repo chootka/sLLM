@@ -334,8 +334,24 @@ def get_image(filename):
     if not os.path.exists(filepath):
         return jsonify({"error": "Image not found"}), 404
 
-    response = send_file(filepath, mimetype='image/jpeg')
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    # Cached hard, because these never change: the filename carries the capture
+    # timestamp and the bytes behind it are written once.
+    #
+    # They used to be served `no-store`, which forbids the browser from keeping
+    # the response at all. Scrubbing survived that -- one frame at a time, each
+    # with time to arrive. Playback did not: every frame was a fresh ~145KB
+    # download, five a second, and each new frame cancelled the one still in
+    # flight, so nothing after the first ever finished decoding. The preloader
+    # made it worse by downloading a hundred frames and being allowed to keep
+    # none of them.
+    #
+    # A newly captured frame is requested with a cache-busting query string by
+    # the frontend, so freshness is already handled where it actually matters.
+    response = send_file(filepath, mimetype='image/jpeg', max_age=31536000)
+    response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    # Werkzeug adds its own Expires alongside Cache-Control; a stale absolute
+    # date next to max-age is just a second opinion for a proxy to misread.
+    response.headers.pop('Expires', None)
     return response
 
 
