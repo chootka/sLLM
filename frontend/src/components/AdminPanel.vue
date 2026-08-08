@@ -56,7 +56,7 @@
 
         <hr class="admin-rule" />
 
-        <p class="admin-label">Recording</p>
+        <p class="admin-label">Data acquisition</p>
         <div class="pill" :class="{ busy }">
           <button :class="{ active: mode === 'test' }" :disabled="busy"
                   @click="setMode('test')">test</button>
@@ -64,9 +64,8 @@
                   :disabled="busy || demoActive" @click="setMode('live')">live</button>
         </div>
         <p class="admin-hint">
-          Test data is written to its own directory. Starting a demo
-          automatically selects &ldquo;test&rdquo;. While live is selected, demo
-          mode is blocked.
+          Test data is written to its own directory. While live is
+          selected, demo mode is blocked.
         </p>
 
         <hr class="admin-rule" />
@@ -283,7 +282,6 @@ export default {
       try {
         const data = await this.post('run', { mode }, true)
         this.mode = data.run.mode
-        this.notice = `Recording as ${data.run.mode}.`
       } catch (e) {
         this.error = e.message || 'Could not switch mode.'
       } finally {
@@ -353,8 +351,6 @@ export default {
 .admin-action:disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-action.subtle { border-color: #333; color: #888; }
 
-.admin-status .on { color: #6ec46e; }
-.admin-status .demo { color: #d9b26a; }
 .admin-label { color: #888; font-size: 0.75rem; text-transform: uppercase;
   letter-spacing: 0.06em; margin: 0.2rem 0 0.35rem; }
 .pill { display: flex; border: 1px solid #444; border-radius: 999px;
@@ -364,12 +360,13 @@ export default {
   background: #1a1a1a; color: #777; font-size: 0.8rem; }
 .pill button + button { border-left: 1px solid #444; }
 .pill button:hover:not(:disabled):not(.active) { background: #242424; color: #bbb; }
-.pill button.active { background: #2f3f2f; color: #cfe6cf; }
-.pill button.active.live { background: #3f2f2f; color: #ffd0d0; }
-.pill button.active.demo { background: #3d3524; color: #e6d3a0; }
+/* Selected-but-idle is neutral: only a running loop, a running demo or
+   live acquisition earns the highlight, so the panel reads at a glance. */
+.pill button.active { background: #262626; color: #b4b4b4; }
+.pill button.active.live,
+.pill button.active.demo { background: #1d3a4d; color: #9ad4f7; }
 .pill button:disabled { cursor: default; }
 .admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
-.admin-status .off { color: #999; }
 .admin-error { color: #e08080; }
 .admin-notice { color: #7fb5d5; }
 .admin-hint { color: #666; font-size: 0.75rem; }

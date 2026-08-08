@@ -622,6 +622,28 @@ def register(app, config):
 
         unit = UNITS[which]
 
+        # A demo invents data and puts real light on the panel, and `live`
+        # asserts something is in the chamber. Checked here as well as in the
+        # page, because this endpoint is reachable without it.
+        #
+        # This used to switch the mode to `test` instead, so samples taken under
+        # invented light were routed away from the experiment record. That
+        # silently defeated the interlock it looks like it supports: loop.py
+        # refuses --demo while the mode is live, and the mode had already been
+        # changed by the time it looked. The routing is not lost -- a demo can
+        # now only start from `test`, which is where those samples already go.
+        #
+        # Before the stop-the-other-unit step below, so a refusal does not leave
+        # the model loop stopped for a demo that never started.
+        if action == 'start' and which == 'demo':
+            import run as run_state
+
+            if run_state.current(config).get('mode') == 'live':
+                return jsonify({
+                    "error": "switch data acquisition to test first — live "
+                             "means the chamber is occupied"
+                }), 409
+
         try:
             # Starting either unit stops the other first. They drive the same
             # panel, and demo mode invents its data -- running both would mix
@@ -641,21 +663,6 @@ def register(app, config):
                             "error": f"could not stop {other_unit} first: {detail}"
                         }), 500
                     print(f"admin: stopped {other_unit} to start {unit}", flush=True)
-
-            # Starting a demo puts the recorders into demo mode, so the samples
-            # taken while invented light is on the panel are labelled and routed
-            # away from the experiment record.
-            #
-            # Stopping a demo deliberately does NOT switch back. Only a human
-            # knows when the organism is actually back in the chamber and the
-            # lid is closed, and the two failure directions are not equal: real
-            # data mislabelled `demo` is merely excluded from analysis, while
-            # demo data mislabelled `experiment` is contamination that looks
-            # exactly like signal.
-            if action == 'start' and which == 'demo':
-                import run as run_state
-
-                run_state.switch(config, 'test', note='demo mode started')
 
             result = _systemctl(action, unit)
         except (OSError, subprocess.SubprocessError) as exc:
