@@ -98,7 +98,7 @@ does not block attaching the camera or checking focus.
 
 `https://sllm.visceral.systems` has a **⚙** button in the bottom-right corner.
 Signed in, it starts and stops the model loop, starts and stops demo mode, and
-sets whether the chamber is occupied.
+switches data acquisition between `test` and `live`.
 
 Authentication is a **passkey**, not a password. There is no shared secret in
 this system at all: the private key stays in your device's secure element and
@@ -225,15 +225,36 @@ sudo systemctl start sllm-demo     # or the admin panel
 sudo systemctl stop sllm-demo
 ```
 
-It refuses to start while the chamber is marked occupied, and its turns are
-written to `data/logs/replay/` where they cannot be confused with a real
-session. Starting it stops `sllm-loop`, and vice versa -- they share the panel.
+It refuses to start while data acquisition is `live`, and its turns are written
+to `data/logs/replay/` where they cannot be confused with a real session.
+Starting it stops `sllm-loop`, and vice versa -- they share the panel.
 
-**Chamber occupancy** is asserted by a human, because nothing can detect it. It
-is the presence of a file (`data/chamber_occupied`), toggled from the admin
-panel and read fresh on every check -- deliberately not a line in config.py,
-because a safety flag that needs an SSH session and a service restart is one
-that will be stale exactly when it matters.
+**Chamber occupancy is the acquisition mode** (2026-08-08). `live` means a real
+session is being recorded, which means something is in the chamber; `test` means
+there is not. There used to be a second flag saying the same thing
+(`data/chamber_occupied`, toggled separately), and it was removed rather than
+kept in sync.
+
+The reasoning, because it is the kind of decision a reviewer will ask about: of
+the two flags, the mode is the one that stays true. Set it wrong and a real
+session is written to the `test` subdirectory where analysis filters it out, so
+it is noticed and corrected within a turn. The occupancy flag had no such
+consequence, so nothing forced it to be accurate, and a safety flag that is
+allowed to go stale has already failed. The user's objection was the decisive
+one: if you can forget to mark the chamber occupied, the guard was never
+load-bearing in the first place.
+
+The interlock is enforced in three places, because the first two are not
+sufficient on their own:
+
+1. The `live` button is disabled while a demo runs, and the demo `running`
+   button is disabled while acquisition is `live`.
+2. `POST /api/admin/run` refuses `live` with a 409 while the demo unit is
+   active, and `POST /api/admin/loop` refuses to start a demo with a 409 while
+   the mode is `live`. The buttons are not the guard -- the endpoints are
+   reachable without the page.
+3. `llm/loop.py` refuses `--demo` outright when it reads the mode as `live`,
+   which also covers a demo started by hand from a shell.
 
 ## /logs
 
@@ -342,14 +363,18 @@ ollama pull qwen2.5:14b
 cd /var/www/sllm
 ./scripts/py llm/loop.py --check       # is the model reachable, is there a window
 ./scripts/py llm/loop.py --dry-run     # full loop, never drives the matrix
-sudo python3 llm/loop.py               # live -- system python, NOT ./scripts/py
+./scripts/py llm/loop.py               # live -- no sudo, matrixd owns the panel
 ```
 
-**A live run must use system `python3`, not `./scripts/py`.** The venv cannot
-drive the panel: it fails with `ws2811_channel_t_gpionum_set, argument 2 of
-type 'int'`, and the loop then refuses to start rather than running as a silent
-permanent sham. The system interpreter has `numpy`, `requests`, `picamera2` and
-`_rpi_ws281x` together, so it can do the whole job.
+**A live run no longer needs sudo or the system interpreter.** It used to: the
+venv could not drive the panel, failing with
+`ws2811_channel_t_gpionum_set, argument 2 of type 'int'`, so the instruction
+here was `sudo python3 llm/loop.py`. `gpio/matrixd.py` removed that -- it is the
+only privileged process, and everything else reaches the panel unprivileged over
+`/run/sllm/matrix.sock`. `sllm-loop.service` runs
+`api/venv/bin/python llm/loop.py` as the `sllm` user with no sudo at all, which
+is the arrangement to copy. Running the loop as root now buys nothing and
+widens what a bug can reach.
 
 For a hardware smoke test, add `--sham-rate 0 --interval 30`. At the default
 sham rate of 0.25 roughly one turn in four is deliberately not applied, which
@@ -403,6 +428,45 @@ Daily files, UTC. The turn record holds the reduced state, the model's full
 reply, the validated action, `sham`, `applied`, and any refusal reason — so a
 run can be re-read afterwards without the model's notes being the only
 account of it.
+
+## Deploying
+
+```bash
+sudo ./scripts/deploy_on_pi.sh              # code + config, restarts sllm-api
+sudo ./scripts/deploy_on_pi.sh --dry-run    # what would change, no side effects
+sudo ./scripts/deploy_on_pi.sh --deps       # also pip install, when requirements moved
+sudo ./scripts/deploy_on_pi.sh --no-restart # stage it, restart nothing
+```
+
+`deploy/` is the source of truth for everything outside the code: the four
+systemd units, the nginx site, and the polkit rule. The script installs each
+only when it differs from what is live, so a routine deploy does not churn them.
+
+Three things it deliberately does not do, each because the previous version did
+and each one silently regressed the box (2026-08-12):
+
+1. **It does not generate unit files.** The old script wrote its own
+   `sllm-api.service` from a heredoc, with `User=chootka` and none of the
+   hardening. Running it would have undone the privilege separation above and
+   put the internet-facing Flask app back on the human login.
+2. **It does not install `etc/nginx.conf`.** That file is deleted. It was the
+   pre-reverse-proxy, HTTP-only config, 145 lines divergent from production, and
+   copying it over the live site removes the `geo`/`map` block that marks
+   tailnet traffic as TLS -- which is the only thing the admin routes have to
+   distinguish public HTTPS from plaintext on the studio LAN. The live config is
+   `deploy/nginx-sllm.visceral.systems.conf` and the script validates with
+   `nginx -t` before reloading.
+3. **It does not restart `sllm-matrixd`, `sllm-loop` or `sllm-demo`.** Bouncing
+   matrixd blanks the panel, barrier zone included; starting the loop puts light
+   into the chamber. Both are things to do on purpose. If a unit file for one of
+   them changed, the script says so and leaves it to you.
+
+`QUICK_DEPLOY.md` and `DEPLOY_NOW.md` were deleted here rather than repaired.
+They predated all of the above -- `pi@` as the login, a `/Users/...` dev
+machine, an `nginx.conf` at the repo root -- and one of them instructed you to
+`cp` that config straight over the live site. A deployment doc that is mostly
+wrong is worse than none, because it reads as authoritative at the exact moment
+you are least inclined to check. This section is the deployment doc now.
 
 ## Picking this up again after a reboot
 

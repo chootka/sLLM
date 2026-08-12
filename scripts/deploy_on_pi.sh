@@ -1,313 +1,314 @@
 #!/bin/bash
-# Deployment script for sLLM on Raspberry Pi 5
-# Run from the git repository root directory
-
-set -e
-
-echo "🦠 Deploying sLLM to Raspberry Pi 5..."
-
-# Get the script directory and project root
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
-
-# Change to project root
-cd "$PROJECT_ROOT"
-
-# Configuration
-# DEPLOY_DIR can be overridden via environment variable (set in config.sh on local machine)
-# When running deploy_to_pi.sh, it will pass this as an environment variable
-DEPLOY_DIR="${DEPLOY_DIR:-/var/www/sllm}"
-FRONTEND_DIR="$DEPLOY_DIR/frontend"
-API_DIR="$DEPLOY_DIR/api"
-NGINX_CONF="/etc/nginx/sites-available/sllm.visceral.systems"
-
-# Detect OS
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    IS_LINUX=true
-    WEB_USER="www-data"
-    WEB_GROUP="www-data"
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    IS_LINUX=false
-    WEB_USER=$(whoami)
-    WEB_GROUP=$(id -gn)
-    echo "⚠️  Running on macOS - this script is designed for Raspberry Pi deployment"
-    echo "   Some operations will be skipped or adapted for macOS"
-else
-    IS_LINUX=false
-    WEB_USER=$(whoami)
-    WEB_GROUP=$(id -gn)
-fi
-
-# Check if running as root or with sudo (only required on Linux)
-if [ "$IS_LINUX" = true ] && [ "$EUID" -ne 0 ]; then 
-    echo "Please run with sudo on Linux"
-    exit 1
-fi
-
-# Check if we're in the right directory
-if [ ! -d "frontend" ] || [ ! -d "api" ]; then
-    echo "❌ Error: frontend/ or api/ directory not found"
-    echo "   Current directory: $(pwd)"
-    echo "   Please run this script from the project root"
-    exit 1
-fi
-
-# Create deployment directories
-echo "Creating deployment directories..."
-mkdir -p $FRONTEND_DIR
-mkdir -p $API_DIR
-
-# Build and copy frontend files
-echo "Building frontend..."
-cd "$PROJECT_ROOT/frontend"
-if [ -f "package.json" ]; then
-    # Install npm dependencies if node_modules doesn't exist
-    if [ ! -d "node_modules" ]; then
-        echo "Installing npm dependencies..."
-        npm install
-    fi
-    # Build the frontend
-    echo "Running Vite build..."
-    npm run build
-    # Copy built files
-    echo "Copying built frontend files..."
-    cp -r dist/* $FRONTEND_DIR/
-else
-    # Fallback: copy frontend files directly if no package.json
-    echo "No package.json found, copying frontend files directly..."
-    cp -r "$PROJECT_ROOT/frontend"/* $FRONTEND_DIR/
-fi
-if [ "$IS_LINUX" = true ]; then
-    chown -R $WEB_USER:$WEB_GROUP $FRONTEND_DIR
-fi
-chmod -R 755 $FRONTEND_DIR
-
-# Copy API files
-echo "Copying API files..."
-cd "$PROJECT_ROOT"
-if [ -d "api" ]; then
-    if ! command -v rsync >/dev/null 2>&1; then
-        echo "❌ rsync is required for deployment"
-        exit 1
-    fi
-    # --delete so files removed from the repo also leave the deployment; that
-    # is the whole point of a deploy step rather than a copy. Excluded paths
-    # are protected from deletion by rsync, so venv and config.py survive it.
-    #
-    # config.py is excluded in BOTH directions: it is per-machine and
-    # untracked, and the deployed copy is the only record of the deployed
-    # settings. Overwriting it from the repo is precisely how the two trees
-    # drifted before -- the repo said /home/pi/sllm/data, the deployment said
-    # /var/www/sllm/data, and a sed further down quietly patched it every
-    # time. config_template.py still ships, so a fresh deployment can seed one.
-    rsync -av --delete \
-        --exclude='__pycache__' \
-        --exclude='*.pyc' \
-        --exclude='venv' \
-        --exclude='config.py' \
-        api/ $API_DIR/
-
-    if [ ! -f "$API_DIR/config.py" ]; then
-        echo "No config.py at $API_DIR - seeding one from config_template.py"
-        cp "$API_DIR/config_template.py" "$API_DIR/config.py"
-        chown chootka:chootka "$API_DIR/config.py"
-    fi
-else
-    echo "⚠️  Warning: api directory not found at $PROJECT_ROOT/api"
-fi
-
-# The hardware modules, the model loop and the interpreter wrapper all live
-# outside api/ and are imported or invoked by path.
+# Deploy the checkout to /var/www/sllm.
 #
-# llm/ and scripts/ are deployed rather than run from the checkout because the
-# loop reads the CSV that the *service* writes, under $DEPLOY_DIR/data. Run
-# from ~/sllm it resolves its own empty data directory and sees no samples at
-# all, which looks exactly like a broken ADC.
-echo "Copying hardware modules, model loop and wrapper..."
+# Run from anywhere; it resolves the project root from its own location.
+#
+#   sudo ./scripts/deploy_on_pi.sh              # code + config, restart the API
+#   sudo ./scripts/deploy_on_pi.sh --deps       # also pip install into the venv
+#   sudo ./scripts/deploy_on_pi.sh --no-restart # stage everything, restart nothing
+#   sudo ./scripts/deploy_on_pi.sh --dry-run    # show what would change
+#
+# WHAT THIS DOES NOT DO, and why, because the previous version did all three and
+# each one silently regressed the box:
+#
+# 1. It does not generate systemd units inline. It installs deploy/*.service
+#    verbatim. The old version wrote its own unit with User=chootka and no
+#    hardening, which undid the privilege separation described in
+#    documentation/bring_up.md -- the internet-facing Flask app went back to
+#    running as the human login, with its SSH keys, git credentials and sudo
+#    group membership. A unit file is configuration; it belongs in the repo,
+#    not in a heredoc inside the thing that installs it.
+#
+# 2. It does not read etc/nginx.conf. That file is the pre-reverse-proxy,
+#    HTTP-only configuration and is 145 lines divergent from what is live.
+#    Copying it over the running config deletes the geo/map block that marks
+#    tailnet traffic as TLS, which is the only thing letting this box tell a
+#    public HTTPS request from a plaintext one on the studio LAN -- and the
+#    admin routes gate on exactly that. deploy/nginx-sllm.visceral.systems.conf
+#    is the live config and the only one this touches.
+#
+# 3. It does not prompt. The old version had an interactive `read -p` for the
+#    nginx reload, which hangs any unattended run.
+#
+# It also never starts or restarts sllm-loop or sllm-demo. Putting light into a
+# chamber is a deliberate act, not a side effect of deploying.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+DEPLOY_DIR="${DEPLOY_DIR:-/var/www/sllm}"
+API_DIR="$DEPLOY_DIR/api"
+FRONTEND_DIR="$DEPLOY_DIR/frontend"
+DATA_DIR="$DEPLOY_DIR/data"
+NGINX_CONF="/etc/nginx/sites-available/sllm.visceral.systems"
+NGINX_SRC="deploy/nginx-sllm.visceral.systems.conf"
+POLKIT_RULE="/etc/polkit-1/rules.d/50-sllm-loop.rules"
+
+# The service account the units run as, and the human who owns the tree. Code is
+# owned by chootka and world-readable; only data/ is writable by the service.
+# That is deliberate -- a compromised API can write readings, not rewrite code.
+CODE_OWNER="chootka:chootka"
+DATA_OWNER="sllm:sllm"
+WEB_OWNER="www-data:www-data"
+
+INSTALL_DEPS=false
+RESTART=true
+DRY_RUN=false
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --deps)       INSTALL_DEPS=true ;;
+        --no-restart) RESTART=false ;;
+        --dry-run)    DRY_RUN=true; RESTART=false ;;
+        -h|--help)    sed -n '2,32p' "$0"; exit 0 ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Run with sudo: sudo $0 $*" >&2
+    exit 1
+fi
+
+if [ ! -d frontend ] || [ ! -d api ]; then
+    echo "frontend/ or api/ not found under $PROJECT_ROOT" >&2
+    exit 1
+fi
+
+# Verbose only under --dry-run: seeing the file list is the entire point there,
+# and noise on a real deploy hides the lines that matter.
+RSYNC_DRY=()
+$DRY_RUN && RSYNC_DRY=(--dry-run --itemize-changes)
+
+run() {
+    # Echo and execute, or just echo under --dry-run. Anything with a side
+    # effect outside rsync goes through here so --dry-run is honest.
+    if $DRY_RUN; then
+        echo "   would run: $*"
+    else
+        "$@"
+    fi
+}
+
+say() { echo; echo "== $*"; }
+
+CHANGED_UNITS=()
+NGINX_CHANGED=false
+
+# --- frontend ----------------------------------------------------------------
+
+say "Frontend"
+if [ -f frontend/package.json ]; then
+    if [ ! -d frontend/node_modules ]; then
+        echo "   installing npm dependencies"
+        run bash -c "cd '$PROJECT_ROOT/frontend' && npm install"
+    fi
+    # Built as the invoking user, not root: a root-owned node_modules or
+    # dist breaks the next non-sudo `npm run build`.
+    BUILD_USER="${SUDO_USER:-root}"
+    echo "   building as $BUILD_USER"
+    run sudo -u "$BUILD_USER" bash -c "cd '$PROJECT_ROOT/frontend' && npm run build"
+fi
+
+if [ -d frontend/dist ]; then
+    mkdir -p "$FRONTEND_DIR"
+    # --delete matters here specifically: Vite emits content-hashed filenames,
+    # so without it every deploy leaves the previous index-<hash>.js behind and
+    # the assets directory grows forever.
+    rsync -a --delete "${RSYNC_DRY[@]}" frontend/dist/ "$FRONTEND_DIR/"
+    run chown -R "$WEB_OWNER" "$FRONTEND_DIR"
+else
+    echo "   no frontend/dist, skipping"
+fi
+
+# --- python code -------------------------------------------------------------
+
+say "Code"
+# config.py is excluded in BOTH directions: it is per-machine and untracked, and
+# the deployed copy is the only record of the deployed settings. Overwriting it
+# from the repo is how the two trees drifted before -- the repo said
+# /home/pi/sllm/data, the deployment said /var/www/sllm/data, and a sed further
+# down quietly patched it on every run. config_template.py still ships so a
+# fresh deployment can seed one.
+rsync -a --delete "${RSYNC_DRY[@]}" \
+    --exclude='__pycache__' --exclude='*.pyc' \
+    --exclude='venv' --exclude='config.py' \
+    --exclude='.lgd-nfy*' \
+    api/ "$API_DIR/"
+
+# gpio/, llm/ and scripts/ are deployed rather than run from the checkout
+# because the loop reads the CSV the *service* writes, under $DEPLOY_DIR/data.
+# Run from ~/sllm it resolves its own empty data directory and reports 0
+# samples, which looks exactly like a dead ADC and is not.
 for component in gpio llm scripts; do
     mkdir -p "$DEPLOY_DIR/$component"
-    rsync -av --delete --exclude='__pycache__' --exclude='*.pyc' \
+    rsync -a --delete "${RSYNC_DRY[@]}" \
+        --exclude='__pycache__' --exclude='*.pyc' --exclude='.lgd-nfy*' \
         "$component/" "$DEPLOY_DIR/$component/"
 done
-if [ "$IS_LINUX" = true ]; then
-    chown -R chootka:chootka "$DEPLOY_DIR/gpio" "$DEPLOY_DIR/llm" "$DEPLOY_DIR/scripts"
+
+if [ ! -f "$API_DIR/config.py" ] && ! $DRY_RUN; then
+    echo "   no config.py at $API_DIR, seeding from config_template.py"
+    cp "$API_DIR/config_template.py" "$API_DIR/config.py"
 fi
-    if [ "$IS_LINUX" = true ]; then
-        # Set ownership to chootka (service runs as chootka, needs write access for GPIO)
-        chown -R chootka:chootka $API_DIR
+
+# Read and traverse for everyone (the service account reads it), write for the
+# owner only. Not 755 on every file -- nothing here needs to be executable
+# except the wrapper, which rsync already carries the bit for.
+#
+# venv/ is pruned rather than walked. It lives inside api/ but rsync never
+# touches it, it holds thousands of files, and rewriting modes across an
+# interpreter's site-packages on every deploy is a slow way to break something
+# subtle. --deps chowns it when it actually changes.
+fix_perms() {
+    local root="$1"
+    run find "$root" -name venv -prune -o -exec chown "$CODE_OWNER" {} +
+    run find "$root" -name venv -prune -o -exec chmod u=rwX,go=rX {} +
+}
+for tree in "$API_DIR" "$DEPLOY_DIR/gpio" "$DEPLOY_DIR/llm" "$DEPLOY_DIR/scripts"; do
+    fix_perms "$tree"
+done
+
+# --- data --------------------------------------------------------------------
+
+say "Data directories"
+for sub in images logs readings; do
+    run mkdir -p "$DATA_DIR/$sub"
+done
+# setgid so files land in the sllm group whoever writes them: the service writes
+# readings, and a human running ./scripts/py by hand writes into the same tree.
+run chown -R "$DATA_OWNER" "$DATA_DIR"
+run chmod -R u=rwX,g=rwXs,o=rX "$DATA_DIR"
+
+# --- dependencies ------------------------------------------------------------
+
+if $INSTALL_DEPS; then
+    say "Python dependencies"
+    VENV_PATH="$API_DIR/venv"
+    if [ ! -d "$VENV_PATH" ]; then
+        echo "   creating venv at $VENV_PATH"
+        run python3 -m venv "$VENV_PATH"
     fi
-chmod -R 755 $API_DIR
-
-# config.py no longer needs patching: config_template.py derives DATA_DIR from
-# the directory the file itself sits in, so a checkout at ~/sllm and a deploy
-# at /var/www/sllm each resolve to their own data directory with no edit.
-
-# Create data directories
-echo "Creating data directories..."
-DATA_DIR="$DEPLOY_DIR/data"
-mkdir -p "$DATA_DIR/images"
-mkdir -p "$DATA_DIR/logs"
-mkdir -p "$DATA_DIR/readings"
-if [ "$IS_LINUX" = true ]; then
-    # Service runs as chootka, so data directory needs to be owned by chootka for write access
-    chown -R chootka:chootka "$DATA_DIR"
-fi
-chmod -R 755 "$DATA_DIR"
-
-# Install Python dependencies in virtual environment
-echo "Installing Python dependencies..."
-cd $API_DIR
-
-# Create virtual environment if it doesn't exist
-VENV_PATH="$API_DIR/venv"
-if [ ! -d "$VENV_PATH" ]; then
-    echo "Creating virtual environment at $VENV_PATH..."
-    python3 -m venv "$VENV_PATH"
-fi
-
-# Activate virtual environment and install dependencies
-echo "Using virtual environment: $VENV_PATH"
-source "$VENV_PATH/bin/activate"
-pip install --upgrade pip
-pip install -r requirements.txt
-deactivate
-
-# Setup nginx configuration
-echo "Setting up nginx configuration..."
-if [ -f "$NGINX_CONF" ]; then
-    echo "Backing up existing nginx configuration..."
-    cp $NGINX_CONF "${NGINX_CONF}.backup.$(date +%Y%m%d_%H%M%S)"
-fi
-
-# Check if nginx config template exists (from project root)
-cd "$PROJECT_ROOT"
-if [ -f "etc/nginx.conf" ]; then
-    cp etc/nginx.conf $NGINX_CONF
-    echo "✅ Nginx configuration copied from etc/nginx.conf"
-elif [ -f "nginx.conf" ]; then
-    cp nginx.conf $NGINX_CONF
-    echo "✅ Nginx configuration copied from nginx.conf"
+    run "$VENV_PATH/bin/pip" install --upgrade pip
+    run "$VENV_PATH/bin/pip" install -r "$API_DIR/requirements.txt"
+    run chown -R "$CODE_OWNER" "$VENV_PATH"
 else
-    echo "⚠️  nginx.conf not found. Please create nginx configuration manually."
-    echo "   Expected location: etc/nginx.conf"
-    echo "   See documentation for nginx configuration example."
-fi
-
-# Enable site if not already enabled
-NGINX_ENABLED="/etc/nginx/sites-enabled/$(basename $NGINX_CONF)"
-if [ ! -L "$NGINX_ENABLED" ]; then
-    ln -s $NGINX_CONF $NGINX_ENABLED
-fi
-
-# Test nginx configuration
-echo "Testing nginx configuration..."
-if nginx -t 2>/dev/null; then
-    echo "✅ Nginx configuration test passed"
-    read -p "Reload nginx now? (y/n) " -n 1 -r
     echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "   (skipping pip; pass --deps when requirements.txt has changed)"
+fi
+
+# --- systemd units -----------------------------------------------------------
+
+say "systemd units"
+# Installed only when they actually differ, so a routine code deploy does not
+# churn unit files or trigger a daemon-reload it does not need.
+for unit_src in deploy/*.service; do
+    unit_name="$(basename "$unit_src")"
+    unit_dst="/etc/systemd/system/$unit_name"
+    if cmp -s "$unit_src" "$unit_dst"; then
+        echo "   $unit_name unchanged"
+        continue
+    fi
+    echo "   $unit_name CHANGED -> installing"
+    run install -m 0644 -o root -g root "$unit_src" "$unit_dst"
+    CHANGED_UNITS+=("$unit_name")
+done
+
+if [ -f deploy/50-sllm-loop.rules ]; then
+    if cmp -s deploy/50-sllm-loop.rules "$POLKIT_RULE" 2>/dev/null; then
+        echo "   polkit rule unchanged"
+    else
+        echo "   polkit rule CHANGED -> installing"
+        run install -m 0644 -o root -g root deploy/50-sllm-loop.rules "$POLKIT_RULE"
+    fi
+fi
+
+if [ ${#CHANGED_UNITS[@]} -gt 0 ]; then
+    run systemctl daemon-reload
+fi
+
+# --- nginx -------------------------------------------------------------------
+
+say "nginx"
+if [ ! -f "$NGINX_SRC" ]; then
+    echo "   $NGINX_SRC not found, leaving nginx alone"
+elif cmp -s "$NGINX_SRC" "$NGINX_CONF"; then
+    echo "   config unchanged"
+else
+    echo "   config CHANGED -> installing (backup alongside)"
+    if [ -f "$NGINX_CONF" ]; then
+        run cp -a "$NGINX_CONF" "${NGINX_CONF}.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
+    run install -m 0644 -o root -g root "$NGINX_SRC" "$NGINX_CONF"
+    enabled="/etc/nginx/sites-enabled/$(basename "$NGINX_CONF")"
+    [ -L "$enabled" ] || run ln -s "$NGINX_CONF" "$enabled"
+    NGINX_CHANGED=true
+fi
+
+if $NGINX_CHANGED && ! $DRY_RUN; then
+    # Validate before reloading. A bad config that is never loaded is a
+    # non-event; a bad config that is reloaded takes the site down.
+    if nginx -t; then
         systemctl reload nginx
-        echo "✅ Nginx reloaded"
+        echo "   nginx reloaded"
+    else
+        echo "   !! nginx -t FAILED -- not reloading. The running config is" >&2
+        echo "      still the old one; the backup is beside $NGINX_CONF." >&2
+        exit 1
+    fi
+fi
+
+# --- restart -----------------------------------------------------------------
+
+say "Services"
+if ! $RESTART; then
+    echo "   not restarting (--no-restart / --dry-run)"
+    if [ ${#CHANGED_UNITS[@]} -gt 0 ]; then
+        echo "   note: these units changed and are not yet in effect:" \
+             "${CHANGED_UNITS[*]}"
     fi
 else
-    echo "⚠️  Nginx configuration test failed or nginx not installed"
-    echo "   Please install nginx and configure manually:"
-    echo "   sudo apt install nginx"
-    echo "   See DEPLOYMENT.md for configuration"
-fi
-
-# Virtual environment path (always use project-local venv)
-VENV_PATH="$API_DIR/venv"
-
-# Detect Python version and site-packages path
-PYTHON_VERSION=$($VENV_PATH/bin/python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "python3")
-VENV_SITE_PACKAGES="$VENV_PATH/lib/$PYTHON_VERSION/site-packages"
-
-# PYTHONNOUSERSITE=1 prevents Python from finding user site-packages
-# PYTHONPATH explicitly set to ONLY venv site-packages to prevent system-wide NumPy conflicts
-# Setup Flask API service
-if [ -f "/etc/systemd/system/sllm-api.service" ]; then
-    echo "Updating Flask API service to use virtual environment..."
-    
-    # Update service file to use venv
-    cat > /tmp/sllm-api.service <<EOF
-[Unit]
-Description=sLLM Flask API Service
-After=network.target
-
-[Service]
-Type=simple
-User=chootka
-Group=chootka
-WorkingDirectory=/home/chootka
-Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
-Environment="PYTHONNOUSERSITE=1"
-Environment="PYTHONPATH=$VENV_SITE_PACKAGES"
-ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    cp /tmp/sllm-api.service /etc/systemd/system/
-    systemctl daemon-reload
-    echo "Restarting Flask API service..."
+    # sllm-api only, by default. Restarting it pauses ADC sampling for a second
+    # or two -- a visible gap in the day's electrode CSV -- and clears whatever
+    # stimulus zone this service had set.
     systemctl restart sllm-api
-else
-    echo "Setting up Flask API systemd service..."
-    
-    # Create service file
-    cat > /tmp/sllm-api.service <<EOF
-[Unit]
-Description=sLLM Flask API Service
-After=network.target
+    echo "   sllm-api restarted"
 
-[Service]
-Type=simple
-User=chootka
-Group=chootka
-WorkingDirectory=/home/chootka
-Environment="PATH=$VENV_PATH/bin:/usr/bin:/usr/local/bin"
-Environment="PYTHONNOUSERSITE=1"
-Environment="PYTHONPATH=$VENV_SITE_PACKAGES"
-ExecStart=$VENV_PATH/bin/python $API_DIR/app.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
-    cp /tmp/sllm-api.service /etc/systemd/system/
-    systemctl daemon-reload
-    systemctl enable sllm-api
-    systemctl start sllm-api
-    echo "✅ Flask API service started"
+    # matrixd is not restarted automatically even when its unit changes: it owns
+    # the panel, and bouncing it blanks the matrix, including the barrier zone
+    # that must stay lit whenever the organism is in the chamber.
+    for unit in "${CHANGED_UNITS[@]}"; do
+        case "$unit" in
+            sllm-matrixd.service)
+                echo "   !! sllm-matrixd.service changed but was NOT restarted."
+                echo "      It owns the panel and a restart blanks it, barrier"
+                echo "      zone included. Restart it deliberately:"
+                echo "        sudo systemctl restart sllm-matrixd"
+                ;;
+            sllm-loop.service|sllm-demo.service)
+                echo "   note: $unit changed; it takes effect the next time you"
+                echo "      start it. Neither is started by a deploy."
+                ;;
+        esac
+    done
 fi
 
-echo ""
-echo "✅ Deployment complete!"
-echo ""
-echo "Next steps:"
-echo "1. Verify Tailscale is working:"
-echo "   sudo tailscale status"
-echo "   Your Tailscale IP: 100.85.144.126"
-echo "   (If not set up, see TAILSCALE_SETUP.md)"
-echo "2. For public web access, choose one:"
-echo "   - Option A: Use Tailscale Funnel (sudo tailscale funnel 80)"
-echo "   - Option B: Use regular DNS + port forwarding"
-echo "3. Setup SSL certificate:"
-echo "   - If using Tailscale Funnel: SSL is automatic!"
-echo "   - If using regular DNS: sudo certbot --nginx -d sllm.visceral.systems"
-echo "   - OR copy existing cert from other server"
-echo "4. Configure API:"
-echo "   sudo nano $API_DIR/config.py"
-echo "5. Check services:"
-echo "   sudo systemctl status sllm-api"
-echo "   sudo systemctl status nginx"
-echo "6. Test:"
-echo "   Via Tailscale IP: curl http://100.85.144.126/api/status"
-echo "   Via domain: curl https://sllm.visceral.systems/api/status"
+# --- report ------------------------------------------------------------------
 
+say "State"
+if $DRY_RUN; then
+    echo "   dry run, nothing was changed"
+    exit 0
+fi
+
+systemctl is-active sllm-matrixd sllm-api sllm-loop sllm-demo \
+    | paste -d' ' <(printf '%s\n' matrixd api loop demo) - \
+    | sed 's/^/   /'
+
+echo
+echo "   curl -s localhost/api/status | python3 -m json.tool"
+echo "   tail -3 $DATA_DIR/readings/electrodes_*.csv"
