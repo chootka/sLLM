@@ -265,6 +265,28 @@ h1 {
     margin: 20px 0;
 }
 
+/* One column per differential channel. Tabular figures so the digits do not
+   shuffle sideways as values change at 1Hz. */
+.channel-readout {
+    display: flex;
+    gap: 24px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.channel-readout .value {
+    font-size: 1.6em;
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    color: #ecddb1;
+}
+
+.channel-readout .label {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 2px;
+}
+
 .timestamp {
     font-size: 0.9em;
     color: #666;
@@ -358,7 +380,16 @@ canvas + canvas {
     .readings-display {
         font-size: 1.4em;
     }
-    
+
+    /* Three channels do not fit across a phone at the desktop size. */
+    .channel-readout {
+        gap: 14px;
+    }
+
+    .channel-readout .value {
+        font-size: 1.1em;
+    }
+
     .env-metric .value {
         font-size: 1.4em;
     }

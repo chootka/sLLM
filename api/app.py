@@ -206,6 +206,11 @@ def get_config():
         "websockets_enabled": config.ENABLE_WEBSOCKETS,
         "server_port": config.SERVER_PORT,
         "adc_sample_rate": getattr(config, 'ADC_SAMPLE_RATE', 1.0),
+        # The dashboard labels each trace with the pair it came from, so it
+        # needs to know which electrode is the reference rather than assuming
+        # A3 -- true today, but it is config, not a constant.
+        "adc_channels": list(getattr(config, 'ADC_CHANNELS', (0, 1, 2))),
+        "adc_reference_channel": getattr(config, 'ADC_REFERENCE_CHANNEL', 3),
         "max_stimulus_duration": getattr(config, 'MAX_STIMULUS_DURATION', 300),
     })
 

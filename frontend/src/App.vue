@@ -31,8 +31,24 @@
         <!-- Electrical Readings Panel -->
         <div class="panel">
           <h2>Electrical Activity</h2>
-          <div class="readings-display">
-            {{ currentReading.toFixed(1) }} mV
+          <!-- Three differential channels against the reference electrode, not
+               one. The panel used to show channel 0 alone at one decimal, which
+               renders a real 0.03 mV sample as "0.0" and looks like dead
+               hardware. Surface potentials here are sub-millivolt; the ADC
+               resolves 7.8 uV per count at gain 16, so three decimals is real
+               precision rather than decoration. -->
+          <div class="channel-readout">
+            <div
+              v-for="channel in channelKeys"
+              :key="channel"
+              class="channel-metric"
+            >
+              <div class="value" :style="{ color: channelColour(channel) }">
+                {{ formatMv(channels[channel]) }}
+              </div>
+              <div class="label">ch{{ channel }}&ndash;{{ referenceChannel }} mV</div>
+            </div>
+            <div v-if="!channelKeys.length" class="value">-- mV</div>
           </div>
           <canvas ref="chart"></canvas>
           <div class="timestamp">
@@ -178,7 +194,7 @@ export default {
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.25',
+      appVersion: '1.0.26',
       
       // API configuration
       apiUrl: window.location.origin,
@@ -187,6 +203,9 @@ export default {
       
       // Electrical readings
       currentReading: 0,
+      channels: {},              // channel id -> mV, straight from the ADC
+      referenceChannel: 3,       // ADS1115 mux: 0,1,2 are read against A3
+      lastReadingTimestamp: 0,   // dedupe, see updateChart
       readingsHistory: [],
       chart: null,
       
@@ -248,6 +267,11 @@ export default {
       const intervalMinutes = this.imageCaptureInterval / 60000
       return Math.floor(minutesPerDay / intervalMinutes)
     },
+    channelKeys() {
+      // Numeric sort: object key order is insertion order from JSON, which is
+      // whatever the ADC dict happened to yield.
+      return Object.keys(this.channels).sort((a, b) => Number(a) - Number(b))
+    },
     playButtonLabel() {
       if (this.isPreloading) return 'Cancel loading'
       return this.isPlaying ? 'Pause' : 'Play timelapse'
@@ -282,6 +306,13 @@ export default {
     }
 
     this.initializeChart()
+    // Seed before the socket, not alongside it. initializeChart defers to
+    // $nextTick for the canvas, so wait for the chart to exist -- and finish
+    // the history fetch before any live sample can arrive, or a reading landing
+    // mid-fetch would be appended first and the older history drawn to the
+    // right of it.
+    await this.$nextTick()
+    await this.loadReadingsHistory()
     this.connectSocket()
     this.loadImages()
     // Resolve camera availability before starting capture, so we don't poll a
@@ -319,7 +350,15 @@ export default {
       
       // Real-time data events
       this.socket.on('reading_update', (data) => {
-        this.currentReading = data.value
+        // The server emits every SOCKET_EMIT_INTERVAL (0.5s) but the ADC only
+        // samples at ADC_SAMPLE_RATE (1Hz), so the same sample arrives twice.
+        // Charting both halves the real span of the 50-point window and puts a
+        // stair-step on every edge. The sample timestamp is the identity.
+        if (data.timestamp && data.timestamp === this.lastReadingTimestamp) return
+        this.lastReadingTimestamp = data.timestamp
+
+        this.currentReading = data.value ?? 0
+        this.channels = data.channels || {}
         const date = new Date(data.datetime)
         this.lastUpdateTime = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
         this.updateChart(data)
@@ -371,27 +410,24 @@ export default {
         
         const chart = new Chart(ctx, {
           type: 'line',
-          data: {
-            labels: [],
-            datasets: [{
-              label: 'Voltage (mV)',
-              data: [],
-              borderColor: '#a0d468',
-              backgroundColor: 'rgba(160, 212, 104, 0.1)',
-              borderWidth: 2,
-              tension: 0.4,
-              pointRadius: 0
-            }]
-          },
+          // Datasets are added per channel as readings arrive -- the ADC's
+          // channel set comes from api/config.py (ADC_CHANNELS), so the chart
+          // follows the hardware rather than hardcoding three traces.
+          data: { labels: [], datasets: [] },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
               legend: {
-                display: false
+                display: true,
+                labels: { color: '#aaa', boxWidth: 12, usePointStyle: true }
               },
               tooltip: {
-                enabled: false
+                enabled: true,
+                callbacks: {
+                  label: (item) =>
+                    `${item.dataset.label}: ${item.parsed.y.toFixed(3)} mV`
+                }
               },
               decimation: {
                 enabled: false
@@ -417,13 +453,25 @@ export default {
               },
               y: {
                 display: true,
-                min: -10,
-                max: 10,
+                // Autoscaled with a floor, replacing a hard min/max of -10..10.
+                // suggestedMin/Max are not a clamp: the axis still expands for
+                // anything larger, so nothing can be cut off. They only fix the
+                // resting scale, and +/-5 mV is it -- plasmodium surface
+                // potentials run to single-digit millivolts (see gpio/adc.py),
+                // so this is the range the signal actually lives in and the
+                // axis stays still instead of rescaling as activity picks up.
+                //
+                // The hard -10..10 was the reason this panel looked dead: an
+                // empty-chamber noise floor of a few hundred microvolts drew as
+                // a flat line on the zero gridline.
+                suggestedMin: -5,
+                suggestedMax: 5,
                 grid: {
                   color: 'rgba(255, 255, 255, 0.1)'
                 },
                 ticks: {
-                  color: '#aaa'
+                  color: '#aaa',
+                  callback: (value) => Number(value).toFixed(2)
                 },
                 title: {
                   color: '#ddd'
@@ -495,7 +543,10 @@ export default {
         // Update local settings from server config
         this.imageCaptureInterval = config.image_capture_interval * 1000 // Convert to ms
         this.maxExposureDuration = config.max_exposure_duration
-        
+        if (typeof config.adc_reference_channel === 'number') {
+          this.referenceChannel = config.adc_reference_channel
+        }
+
       } catch (error) {
         console.warn('Could not fetch config, using defaults')
         this.imageCaptureInterval = 60 * 1000 // Default 1 minute for livestream still captures
@@ -503,23 +554,100 @@ export default {
       }
     },
     
-    updateChart(reading) {
-      if (!this.chart || !this.chart.data || !this.chart.data.datasets || !this.chart.data.datasets[0]) return
-      
-      const time = new Date(reading.datetime).toLocaleTimeString()
-      this.chart.data.labels.push(time)
-      this.chart.data.datasets[0].data.push(reading.value)
-      
-      // Keep only last 50 points
-      if (this.chart.data.labels.length > 50) {
-        this.chart.data.labels.shift()
-        this.chart.data.datasets[0].data.shift()
+    channelColour(channel) {
+      // Distinct per channel and stable across reloads, so a trace means the
+      // same electrode every time you look at it.
+      const palette = ['#a0d468', '#5aa9e6', '#e6a15a', '#c58fe6']
+      return palette[Number(channel) % palette.length]
+    },
+
+    formatMv(value) {
+      // Three decimals is 1 uV, and the ADS1115 at gain 16 resolves 7.8 uV per
+      // count -- so this shows everything the hardware can actually distinguish
+      // and no more.
+      return typeof value === 'number' ? value.toFixed(3) : '--'
+    },
+
+    datasetFor(channel) {
+      const label = `ch${channel}`
+      let dataset = this.chart.data.datasets.find(d => d.label === label)
+      if (!dataset) {
+        const colour = this.channelColour(channel)
+        dataset = {
+          label,
+          // Backfilled with nulls so a channel that appears late still lines up
+          // with the existing labels instead of being drawn shifted left.
+          data: new Array(this.chart.data.labels.length).fill(null),
+          borderColor: colour,
+          backgroundColor: colour,
+          borderWidth: 2,
+          tension: 0.4,
+          pointRadius: 0,
+          spanGaps: true
+        }
+        this.chart.data.datasets.push(dataset)
       }
-      
+      return dataset
+    },
+
+    appendSample(reading) {
+      // One column per sample: push the label first, then give every dataset
+      // exactly one point (null where that channel had no reading), so the
+      // series never drift out of step with the x axis.
+      const channels = reading.channels || {}
+      this.chart.data.labels.push(new Date(reading.datetime).toLocaleTimeString())
+      Object.keys(channels).forEach(channel => this.datasetFor(channel))
+      for (const dataset of this.chart.data.datasets) {
+        const channel = dataset.label.slice(2)
+        const value = channels[channel]
+        dataset.data.push(typeof value === 'number' ? value : null)
+      }
+    },
+
+    trimChart(maxPoints = 300) {
+      // 300 samples at 1Hz is five minutes of trace -- enough to see a
+      // contraction, since Physarum's period is around 90 to 140 seconds.
+      while (this.chart.data.labels.length > maxPoints) {
+        this.chart.data.labels.shift()
+        for (const dataset of this.chart.data.datasets) dataset.data.shift()
+      }
+    },
+
+    updateChart(reading) {
+      if (!this.chart || !this.chart.data) return
+
+      this.appendSample(reading)
+      this.trimChart()
+
       try {
         this.chart.update('none')
       } catch (error) {
         console.log('Chart update error:', error)
+      }
+    },
+
+    async loadReadingsHistory() {
+      // The chart used to start empty and fill one sample per second, so the
+      // first few minutes after a page load showed a near-empty panel whatever
+      // the ADC was doing. The API already keeps a rolling buffer; use it.
+      try {
+        const response = await axios.get(`${this.apiUrl}/api/readings/history`, {
+          params: { limit: 300 }
+        })
+        const samples = response.data
+        if (!Array.isArray(samples) || !samples.length || !this.chart) return
+
+        for (const sample of samples) this.appendSample(sample)
+        this.trimChart()
+        this.chart.update('none')
+
+        const newest = samples[samples.length - 1]
+        this.lastReadingTimestamp = newest.timestamp || 0
+        this.currentReading = newest.value ?? 0
+        this.channels = newest.channels || {}
+        console.log(`📈 Seeded chart with ${samples.length} archived samples`)
+      } catch (error) {
+        console.warn('Could not load readings history:', error.message)
       }
     },
     
