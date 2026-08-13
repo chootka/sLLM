@@ -1,0 +1,69 @@
+[Unit]
+Description=sLLM Flask API Service
+Documentation=file:///var/www/sllm/documentation/bring_up.md
+After=network.target sllm-matrixd.service
+Wants=sllm-matrixd.service
+
+[Service]
+Type=simple
+# A dedicated system account: no shell, no home, not in sudo. This service is
+# reachable from the public internet through nginx, so whatever it runs as is
+# what an attacker gets on a bad day. As a human login that would mean SSH
+# keys, git credentials, and a shell profile that can be rewritten to capture a
+# sudo password the next time the human types one. As `sllm` it means the data
+# directory and one systemd unit.
+User=sllm
+Group=sllm
+
+WorkingDirectory=/var/www/sllm
+Environment="PATH=/var/www/sllm/api/venv/bin:/usr/bin:/usr/local/bin"
+Environment="PYTHONNOUSERSITE=1"
+Environment="PYTHONPATH=/var/www/sllm/api/venv/lib/python3.13/site-packages"
+
+# lgpio (under the rpi-lgpio shim, which is how RPi.GPIO works on a Pi 5)
+# creates a notification FIFO named .lgd-nfy<n> in its working directory. With
+# ProtectSystem=strict that directory is read-only, so the fan relay fails to
+# open with a bare ENOENT that looks nothing like a permissions problem. LG_WD
+# points it at a runtime directory of its own instead of widening ReadWritePaths.
+RuntimeDirectory=sllm-api
+RuntimeDirectoryMode=0750
+Environment="LG_WD=/run/sllm-api"
+ExecStart=/var/www/sllm/api/venv/bin/python /var/www/sllm/api/app.py
+
+Restart=always
+RestartSec=10
+
+# --- hardening ---------------------------------------------------------------
+# Possible only because nothing here needs root any more: the panel lives behind
+# matrixd, and the one privileged action (systemctl start/stop sllm-loop) goes
+# through a sudoers rule that permits exactly those two argv vectors.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/sllm/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# Device access is narrowed to what the hardware actually needs: I2C for the
+# SHT31 and ADS1115, gpiochip for the fan relay, and the camera pipeline. Note
+# there is no /dev/mem here -- that is matrixd's alone.
+DevicePolicy=closed
+DeviceAllow=/dev/i2c-1 rw
+DeviceAllow=char-gpiochip rw
+DeviceAllow=char-video4linux rw
+DeviceAllow=/dev/media0 rw
+DeviceAllow=/dev/media1 rw
+DeviceAllow=/dev/media2 rw
+DeviceAllow=/dev/dma_heap/system rw
+DeviceAllow=/dev/dma_heap/linux,cma rw
+DeviceAllow=/dev/dma_heap/default_cma_region rw
+DeviceAllow=char-vchiq rw
+
+[Install]
+WantedBy=multi-user.target

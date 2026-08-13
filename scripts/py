@@ -1,0 +1,27 @@
+#!/bin/bash
+# Run a project script under the same interpreter the service uses.
+#
+# The venv at /var/www/sllm/api/venv is the only environment with the full set
+# (numpy, picamera2, the adafruit stack), and it is what sllm-api.service runs.
+# Testing under /usr/bin/python3 instead means testing a different program than
+# the one the installation runs.
+#
+#   ./scripts/py gpio/adc.py watch
+#   ./scripts/py gpio/sensor.py watch
+#   ./scripts/py llm/loop.py --replay synthetic --speed 600 --turns 24
+#
+# The matrix needs root, so anything touching it goes through sudo:
+#   sudo ./scripts/py gpio/leds.py zones
+
+set -e
+
+VENV_PYTHON="${SLLM_PYTHON:-/var/www/sllm/api/venv/bin/python}"
+
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo "No interpreter at $VENV_PYTHON" >&2
+    echo "Set SLLM_PYTHON, or recreate it with scripts/deploy_on_pi.sh" >&2
+    exit 1
+fi
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec "$VENV_PYTHON" "$@"

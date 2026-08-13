@@ -1,0 +1,41 @@
+[Unit]
+Description=sLLM matrix helper (root-owned WS2812B panel, unix socket)
+Documentation=file:///var/www/sllm/documentation/bring_up.md
+After=network.target
+# The API is a client. It starts fine without the panel -- it just reports
+# matrix:false and captures without the red backlight -- so this is Wants, not
+# Requires, on the API side. Ordering only.
+Before=sllm-api.service
+
+[Service]
+Type=simple
+# Root is the entire point of this unit: rpi_ws281x drives the PWM peripheral
+# through /dev/mem. This is the only privileged process in the system, it
+# speaks a fixed vocabulary of eight commands over a unix socket, and it
+# evaluates nothing a client sends. The API stays unprivileged behind it.
+User=root
+Group=root
+
+# System python, not the venv. The venv's Blinka disagrees with the system
+# _rpi_ws281x C extension and fails with
+# 'ws2811_channel_t_gpionum_set, argument 2 of type int'.
+WorkingDirectory=/var/www/sllm
+ExecStart=/usr/bin/python3 -u /var/www/sllm/gpio/matrixd.py
+
+# /run/sllm, created and torn down by systemd. The socket inside it is chowned
+# root:chootka 0660 by the daemon, which is the whole access control story.
+RuntimeDirectory=sllm
+RuntimeDirectoryMode=0755
+
+Restart=always
+RestartSec=5
+
+# Modest hardening. This process must keep /dev/mem, so the strong isolation
+# knobs do not apply here -- that is exactly why it is kept this small.
+NoNewPrivileges=false
+ProtectHome=true
+ProtectSystem=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

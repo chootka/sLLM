@@ -43,8 +43,16 @@ source venv/bin/activate
 
 # Run the API
 python app.py
-# or
-python app_minimal.py
+```
+
+The hardware itself lives in `../gpio/`, and each module there runs standalone
+for bring-up without starting the API:
+
+```bash
+python3 gpio/sensor.py watch    # temperature and humidity
+python3 gpio/adc.py watch       # electrode millivolts
+python3 gpio/camera.py info     # what camera is attached
+sudo python3 gpio/leds.py zones # matrix zones (needs root)
 ```
 
 ## Configuration

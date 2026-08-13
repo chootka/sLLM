@@ -1,5 +1,13 @@
 <template>
-  <div>
+  <!-- /logs is its own view rather than a panel on the dashboard. No router
+       library: nginx already serves index.html for any path (try_files), so
+       matching on the pathname is the whole routing story. -->
+  <div v-if="isLogsRoute" class="logs-route">
+    <TurnLog :api-url="apiUrl" />
+    <AdminPanel :api-url="apiUrl" />
+  </div>
+
+  <div v-else>
     <div class="video-background-container">
       <iframe 
         src="https://player.vimeo.com/video/1134023587?autoplay=1&loop=1&muted=1&controls=0&background=1&autopause=0&responsive=1"
@@ -18,13 +26,29 @@
     </div>
     <div class="container">
       <h1>🦠 Slime Mould Monitor</h1>
-      
+
       <div class="grid">
         <!-- Electrical Readings Panel -->
         <div class="panel">
           <h2>Electrical Activity</h2>
-          <div class="readings-display">
-            {{ currentReading.toFixed(1) }} mV
+          <!-- Three differential channels against the reference electrode, not
+               one. The panel used to show channel 0 alone at one decimal, which
+               renders a real 0.03 mV sample as "0.0" and looks like dead
+               hardware. Surface potentials here are sub-millivolt; the ADC
+               resolves 7.8 uV per count at gain 16, so three decimals is real
+               precision rather than decoration. -->
+          <div class="channel-readout">
+            <div
+              v-for="channel in channelKeys"
+              :key="channel"
+              class="channel-metric"
+            >
+              <div class="value" :style="{ color: channelColour(channel) }">
+                {{ formatMv(channels[channel]) }}
+              </div>
+              <div class="label">ch{{ channel }}&ndash;{{ referenceChannel }} mV</div>
+            </div>
+            <div v-if="!channelKeys.length" class="value">-- mV</div>
           </div>
           <canvas ref="chart"></canvas>
           <div class="timestamp">
@@ -34,6 +58,10 @@
         
         <!-- Live Stream / Timelapse Panel -->
         <div class="panel timeline-panel">
+          <!-- Floats just above the panel's top-right corner. Plain href, not a
+               click handler: /logs is a real path that nginx serves index.html
+               for, so it works pasted, bookmarked or opened in a new tab. -->
+          <a href="/logs" class="logs-link">To logs &rarr;</a>
           <div class="timeline-header">
             <h2>{{ viewMode === 'livestream' ? 'Live Stream' : 'Timelapse' }}</h2>
             <div class="status-indicator-wrapper">
@@ -43,37 +71,65 @@
           </div>
           <div class="timelapse-container">
             <!-- Live Stream View -->
-            <img 
+            <img
               v-if="viewMode === 'livestream'"
-              :src="streamUrl" 
+              key="livestream"
+              :src="streamUrl"
               class="timelapse-image"
               alt="Live slime mould stream"
               @error="imageError = true"
               @load="imageError = false"
             >
             <!-- Timelapse View -->
-            <img 
-              v-else-if="viewMode === 'timelapse' && currentImage && !imageError" 
-              :key="imageKey"
-              :src="currentImage" 
+            <!-- Keyed on the frame URL, not imageKey. Both branches here are
+                 <img>, so Vue patched one long-lived element -- and the
+                 livestream branch is an MJPEG multipart response, which keeps
+                 painting into the element it owns even after src is reassigned.
+                 Playback moved the src and the picture never followed. A key
+                 that changes per frame forces a fresh element each time.
+                 Frames are preloaded so the swap is a cache hit, and
+                 .timelapse-container reserves a 16:9 box so nothing collapses
+                 while a new element mounts. -->
+            <img
+              v-else-if="viewMode === 'timelapse' && currentImage && !imageError"
+              :key="currentImage"
+              :src="currentImage"
               class="timelapse-image"
               alt="Slime mould timelapse"
               @error="imageError = true"
+              @load="imageError = false"
             >
-            <div v-else-if="viewMode === 'timelapse'" style="height: 300px; display: flex; align-items: center; justify-content: center;">
+            <div v-else-if="viewMode === 'timelapse'" style="height: 100%; display: flex; align-items: center; justify-content: center;">
               <p style="font-size: 1.2em; color: #ecddb1;">No images captured yet</p>
             </div>
           </div>
-          <!-- Timeline Scrubber (only shown in timelapse mode) -->
-          <input 
+          <!-- Timeline Scrubber + playback (only shown in timelapse mode) -->
+          <div
             v-if="viewMode === 'timelapse' && images.length > 0"
-            type="range" 
-            v-model.number="timelinePosition" 
-            :max="images.length - 1" 
-            min="0" 
-            class="timeline-scrubber"
-            @input="onTimelineScrub"
+            class="timeline-controls"
           >
+            <button
+              @click="togglePlayback"
+              class="play-button"
+              :disabled="images.length < 2"
+              :title="playButtonLabel"
+              :aria-label="playButtonLabel"
+            >
+              {{ isPreloading ? '■' : (isPlaying ? '❚❚' : '▶') }}
+            </button>
+            <input
+              type="range"
+              v-model.number="timelinePosition"
+              :max="images.length - 1"
+              min="0"
+              class="timeline-scrubber"
+              @input="onTimelineScrub"
+            >
+          </div>
+          <div v-if="isPreloading || isPlaying" class="preload-status">
+            <span v-if="isPreloading">Loading frames… {{ preloadLoaded }} / {{ preloadTotal }}</span>
+            <span v-else>Frame {{ timelinePosition + 1 }} / {{ images.length }}</span>
+          </div>
           <div class="timeline-footer">
             <div class="timestamp">
               <span v-if="viewMode === 'livestream'">
@@ -81,12 +137,18 @@
                 <small style="color: #666;">Capturing {{ imagesPerDay }} images/day ({{ estimatedStoragePerDay }})</small>
               </span>
               <span v-else>
-                {{ images.length }} images captured
+                {{ images.length }} of {{ totalImagesOnServer }} images<br>
+                <small v-if="currentImageTime" style="color: #666;">{{ currentImageTime }}</small>
               </span>
             </div>
-            <button @click="toggleViewMode" class="control-button capture-button">
+            <button
+              v-if="cameraAvailable !== false"
+              @click="toggleViewMode"
+              class="control-button capture-button"
+            >
               {{ viewMode === 'livestream' ? 'View Timelapse' : 'View Livestream' }}
             </button>
+            <small v-else style="color: #666;">No camera connected</small>
           </div>
         </div>
       </div>
@@ -96,11 +158,12 @@
         <h2>Environmental Conditions</h2>
         <div class="environment-display">
           <div class="env-metric">
-            <div class="value">{{ temperature ? temperature.toFixed(1) : '--' }}°C</div>
+            <div class="value">{{ temperature !== null ? temperature.toFixed(1) : '--' }}°C</div>
+            <div class="sub-value">{{ temperatureF !== null ? temperatureF.toFixed(1) : '--' }}°F</div>
             <div class="label">Temperature</div>
           </div>
           <div class="env-metric">
-            <div class="value">{{ humidity ? humidity.toFixed(1) : '--' }}%</div>
+            <div class="value">{{ humidity !== null ? humidity.toFixed(1) : '--' }}%</div>
             <div class="label">Humidity</div>
           </div>
         </div>
@@ -108,8 +171,10 @@
           {{ environmentUpdateTime || 'No data yet' }}
         </div>
       </div>
-      
+
     </div>
+
+    <AdminPanel :api-url="apiUrl" />
   </div>
 </template>
 
@@ -118,27 +183,35 @@ import { markRaw } from 'vue'
 import { io } from 'socket.io-client'
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
+import AdminPanel from './components/AdminPanel.vue'
+import TurnLog from './components/TurnLog.vue'
 
 Chart.register(...registerables)
 
 export default {
   name: 'App',
+  components: { AdminPanel, TurnLog },
   data() {
     return {
       // App version - increment on each deployment
-      appVersion: '1.0.13',
+      appVersion: '1.0.26',
       
       // API configuration
       apiUrl: window.location.origin,
+      isLogsRoute: window.location.pathname.replace(/\/+$/, '') === '/logs',
       socket: null,
       
       // Electrical readings
       currentReading: 0,
+      channels: {},              // channel id -> mV, straight from the ADC
+      referenceChannel: 3,       // ADS1115 mux: 0,1,2 are read against A3
+      lastReadingTimestamp: 0,   // dedupe, see updateChart
       readingsHistory: [],
       chart: null,
       
       // Environmental data
       temperature: null,
+      temperatureF: null,
       humidity: null,
       temperatureHistory: [],
       humidityHistory: [],
@@ -153,7 +226,22 @@ export default {
       imageKey: 0, // Used to force img element re-render
       capturingImage: false, // Prevent concurrent captures
       viewMode: 'livestream', // 'livestream' or 'timelapse'
-      
+      maxImages: 100, // Max images held in memory at once
+      totalImagesOnServer: 0, // Full archive size reported by /api/images
+      cameraAvailable: null, // null until /api/status reports; false hides livestream
+      viewModeChosenByUser: false, // Don't override an explicit toggle
+      isPlaying: false, // Timelapse playback, advances the scrubber on a timer
+      playbackTimer: null,
+      playbackIntervalMs: 200, // 5 frames/sec -- slow enough to read growth
+      // Frames are ~135KB each, so at 200ms the browser cannot fetch them as
+      // fast as the timer advances and playback sits on whatever is decoded.
+      // They are warmed into the browser cache before play starts.
+      loadedUrls: markRaw(new Set()),
+      isPreloading: false,
+      preloadCancelled: false,
+      preloadLoaded: 0,
+      preloadTotal: 0,
+
       // System status
       isOnline: false,
       exposureLightOn: false,
@@ -179,6 +267,20 @@ export default {
       const intervalMinutes = this.imageCaptureInterval / 60000
       return Math.floor(minutesPerDay / intervalMinutes)
     },
+    channelKeys() {
+      // Numeric sort: object key order is insertion order from JSON, which is
+      // whatever the ADC dict happened to yield.
+      return Object.keys(this.channels).sort((a, b) => Number(a) - Number(b))
+    },
+    playButtonLabel() {
+      if (this.isPreloading) return 'Cancel loading'
+      return this.isPlaying ? 'Pause' : 'Play timelapse'
+    },
+    currentImageTime() {
+      const image = this.images[this.timelinePosition]
+      if (!image) return null
+      return new Date(image.timestamp).toLocaleString()
+    },
     estimatedStoragePerDay() {
       // Estimate storage: assume ~500KB per image (1920x1080 JPEG)
       const avgImageSizeKB = 500
@@ -191,11 +293,31 @@ export default {
     }
   },
   
-  mounted() {
+  async mounted() {
     console.log(`🦠 sLLM Frontend v${this.appVersion}`)
+
+    // /logs renders TurnLog instead of the dashboard, so none of the dashboard
+    // machinery should start: there is no canvas to attach a chart to, and the
+    // socket and image archive would be work done for a view nobody is looking
+    // at. TurnLog polls /api/turns on its own.
+    if (this.isLogsRoute) {
+      console.log('📜 Log view')
+      return
+    }
+
     this.initializeChart()
+    // Seed before the socket, not alongside it. initializeChart defers to
+    // $nextTick for the canvas, so wait for the chart to exist -- and finish
+    // the history fetch before any live sample can arrive, or a reading landing
+    // mid-fetch would be appended first and the older history drawn to the
+    // right of it.
+    await this.$nextTick()
+    await this.loadReadingsHistory()
     this.connectSocket()
-    this.loadExistingImages()
+    this.loadImages()
+    // Resolve camera availability before starting capture, so we don't poll a
+    // camera that isn't there (and can open straight into timelapse instead)
+    await this.checkStatus()
     this.startImageCapture()
   },
   
@@ -206,6 +328,7 @@ export default {
     }
     if (this.imageInterval) clearInterval(this.imageInterval)
     if (this.fallbackInterval) clearInterval(this.fallbackInterval)
+    this.stopPlayback()
     if (this.chart) this.chart.destroy()
   },
   
@@ -227,7 +350,15 @@ export default {
       
       // Real-time data events
       this.socket.on('reading_update', (data) => {
-        this.currentReading = data.value
+        // The server emits every SOCKET_EMIT_INTERVAL (0.5s) but the ADC only
+        // samples at ADC_SAMPLE_RATE (1Hz), so the same sample arrives twice.
+        // Charting both halves the real span of the 50-point window and puts a
+        // stair-step on every edge. The sample timestamp is the identity.
+        if (data.timestamp && data.timestamp === this.lastReadingTimestamp) return
+        this.lastReadingTimestamp = data.timestamp
+
+        this.currentReading = data.value ?? 0
+        this.channels = data.channels || {}
         const date = new Date(data.datetime)
         this.lastUpdateTime = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()} ${date.toLocaleTimeString()}`
         this.updateChart(data)
@@ -235,6 +366,7 @@ export default {
       
       this.socket.on('environment_update', (data) => {
         this.temperature = data.temperature
+        this.temperatureF = data.temperature_f
         this.humidity = data.humidity
         this.hasEnvironmentalData = true
         const date = new Date(data.datetime)
@@ -278,27 +410,24 @@ export default {
         
         const chart = new Chart(ctx, {
           type: 'line',
-          data: {
-            labels: [],
-            datasets: [{
-              label: 'Voltage (mV)',
-              data: [],
-              borderColor: '#a0d468',
-              backgroundColor: 'rgba(160, 212, 104, 0.1)',
-              borderWidth: 2,
-              tension: 0.4,
-              pointRadius: 0
-            }]
-          },
+          // Datasets are added per channel as readings arrive -- the ADC's
+          // channel set comes from api/config.py (ADC_CHANNELS), so the chart
+          // follows the hardware rather than hardcoding three traces.
+          data: { labels: [], datasets: [] },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
               legend: {
-                display: false
+                display: true,
+                labels: { color: '#aaa', boxWidth: 12, usePointStyle: true }
               },
               tooltip: {
-                enabled: false
+                enabled: true,
+                callbacks: {
+                  label: (item) =>
+                    `${item.dataset.label}: ${item.parsed.y.toFixed(3)} mV`
+                }
               },
               decimation: {
                 enabled: false
@@ -324,13 +453,25 @@ export default {
               },
               y: {
                 display: true,
-                min: -10,
-                max: 10,
+                // Autoscaled with a floor, replacing a hard min/max of -10..10.
+                // suggestedMin/Max are not a clamp: the axis still expands for
+                // anything larger, so nothing can be cut off. They only fix the
+                // resting scale, and +/-5 mV is it -- plasmodium surface
+                // potentials run to single-digit millivolts (see gpio/adc.py),
+                // so this is the range the signal actually lives in and the
+                // axis stays still instead of rescaling as activity picks up.
+                //
+                // The hard -10..10 was the reason this panel looked dead: an
+                // empty-chamber noise floor of a few hundred microvolts drew as
+                // a flat line on the zero gridline.
+                suggestedMin: -5,
+                suggestedMax: 5,
                 grid: {
                   color: 'rgba(255, 255, 255, 0.1)'
                 },
                 ticks: {
-                  color: '#aaa'
+                  color: '#aaa',
+                  callback: (value) => Number(value).toFixed(2)
                 },
                 title: {
                   color: '#ddd'
@@ -343,53 +484,55 @@ export default {
       })
     },
     
-    async loadExistingImages() {
+    async loadImages() {
+      // Populate the timeline with images already on disk, so the timelapse
+      // isn't limited to whatever this browser session happens to capture
       try {
-        console.log('📸 Loading existing images from server...')
-        const response = await axios.get(`${this.apiUrl}/api/images`)
-        const imageList = response.data.images || []
-        
-        console.log(`Found ${imageList.length} existing images`)
-        
-        // Keep only newest 100 images, then reverse to chronological order (oldest to newest)
-        const imagesToLoad = imageList.slice(0, 100).reverse()
-        
-        // Add images to timeline in chronological order (oldest first)
-        for (const img of imagesToLoad) {
-          const imageUrl = `${this.apiUrl}${img.url}?t=${Date.now()}`
-          this.images.push({
-            url: imageUrl,
-            filename: img.filename,
-            timestamp: img.timestamp
-          })
-        }
-        
-        // Set timeline position to latest image
+        const response = await axios.get(`${this.apiUrl}/api/images`, {
+          params: { page: 1, per_page: this.maxImages, order: 'desc' }
+        })
+
+        // Server returns newest first; reverse so the timeline runs oldest → newest
+        this.images = response.data.images.reverse().map(image => ({
+          url: `${this.apiUrl}${image.url}`,
+          filename: image.filename,
+          timestamp: image.datetime
+        }))
+        this.totalImagesOnServer = response.data.total
+
         if (this.images.length > 0) {
+          // Park the scrubber on the newest frame and show it, so timelapse mode
+          // has something to display without waiting for a fresh capture
           this.timelinePosition = this.images.length - 1
-          if (imageList.length > 100) {
-            console.log(`Loaded newest 100 images (${imageList.length - 100} older images not loaded)`)
-          }
+          this.currentImage = this.images[this.timelinePosition].url
+          this.imageError = false
         }
-        
-        console.log(`✅ Loaded ${this.images.length} images into timeline`)
+        console.log(`🎞️  Loaded ${this.images.length} of ${this.totalImagesOnServer} archived images`)
       } catch (error) {
-        console.warn('Could not load existing images:', error)
-        // Not a critical error, continue anyway
+        console.warn('Could not load image archive:', error.message)
       }
     },
-    
+
     startImageCapture() {
-      // Get capture interval from API config
-      this.fetchConfig().then(() => {
-        // Capture image at configured interval
-        this.imageInterval = setInterval(() => {
-          this.captureImage()
-        }, this.imageCaptureInterval)
-        
-        // Initial capture
-        this.captureImage()
-      })
+      // The page is a VIEWER. It must never drive a capture on its own.
+      //
+      // It used to POST /api/capture-image on page load and then on its own
+      // timer, so the real capture rate was one stream per open browser tab on
+      // top of the backend timelapse. Every capture fires the red imaging flash
+      // over the organism, which means uncontrolled optical stimulus timed by
+      // human web traffic -- and the model is never told a flash happened. The
+      // backend timelapse is the single source of captures; this listens for
+      // the image_captured socket event and renders what arrives.
+      //
+      // The Capture Image button still works: that is a deliberate human
+      // action, not a side effect of loading a web page.
+      this.fetchConfig()
+
+      if (this.cameraAvailable === false) {
+        console.log('📷 No camera detected - showing archive only')
+        return
+      }
+      console.log('👁️  Viewer mode: frames arrive from the backend timelapse')
     },
     
     async fetchConfig() {
@@ -400,7 +543,10 @@ export default {
         // Update local settings from server config
         this.imageCaptureInterval = config.image_capture_interval * 1000 // Convert to ms
         this.maxExposureDuration = config.max_exposure_duration
-        
+        if (typeof config.adc_reference_channel === 'number') {
+          this.referenceChannel = config.adc_reference_channel
+        }
+
       } catch (error) {
         console.warn('Could not fetch config, using defaults')
         this.imageCaptureInterval = 60 * 1000 // Default 1 minute for livestream still captures
@@ -408,23 +554,100 @@ export default {
       }
     },
     
-    updateChart(reading) {
-      if (!this.chart || !this.chart.data || !this.chart.data.datasets || !this.chart.data.datasets[0]) return
-      
-      const time = new Date(reading.datetime).toLocaleTimeString()
-      this.chart.data.labels.push(time)
-      this.chart.data.datasets[0].data.push(reading.value)
-      
-      // Keep only last 50 points
-      if (this.chart.data.labels.length > 50) {
-        this.chart.data.labels.shift()
-        this.chart.data.datasets[0].data.shift()
+    channelColour(channel) {
+      // Distinct per channel and stable across reloads, so a trace means the
+      // same electrode every time you look at it.
+      const palette = ['#a0d468', '#5aa9e6', '#e6a15a', '#c58fe6']
+      return palette[Number(channel) % palette.length]
+    },
+
+    formatMv(value) {
+      // Three decimals is 1 uV, and the ADS1115 at gain 16 resolves 7.8 uV per
+      // count -- so this shows everything the hardware can actually distinguish
+      // and no more.
+      return typeof value === 'number' ? value.toFixed(3) : '--'
+    },
+
+    datasetFor(channel) {
+      const label = `ch${channel}`
+      let dataset = this.chart.data.datasets.find(d => d.label === label)
+      if (!dataset) {
+        const colour = this.channelColour(channel)
+        dataset = {
+          label,
+          // Backfilled with nulls so a channel that appears late still lines up
+          // with the existing labels instead of being drawn shifted left.
+          data: new Array(this.chart.data.labels.length).fill(null),
+          borderColor: colour,
+          backgroundColor: colour,
+          borderWidth: 2,
+          tension: 0.4,
+          pointRadius: 0,
+          spanGaps: true
+        }
+        this.chart.data.datasets.push(dataset)
       }
-      
+      return dataset
+    },
+
+    appendSample(reading) {
+      // One column per sample: push the label first, then give every dataset
+      // exactly one point (null where that channel had no reading), so the
+      // series never drift out of step with the x axis.
+      const channels = reading.channels || {}
+      this.chart.data.labels.push(new Date(reading.datetime).toLocaleTimeString())
+      Object.keys(channels).forEach(channel => this.datasetFor(channel))
+      for (const dataset of this.chart.data.datasets) {
+        const channel = dataset.label.slice(2)
+        const value = channels[channel]
+        dataset.data.push(typeof value === 'number' ? value : null)
+      }
+    },
+
+    trimChart(maxPoints = 300) {
+      // 300 samples at 1Hz is five minutes of trace -- enough to see a
+      // contraction, since Physarum's period is around 90 to 140 seconds.
+      while (this.chart.data.labels.length > maxPoints) {
+        this.chart.data.labels.shift()
+        for (const dataset of this.chart.data.datasets) dataset.data.shift()
+      }
+    },
+
+    updateChart(reading) {
+      if (!this.chart || !this.chart.data) return
+
+      this.appendSample(reading)
+      this.trimChart()
+
       try {
         this.chart.update('none')
       } catch (error) {
         console.log('Chart update error:', error)
+      }
+    },
+
+    async loadReadingsHistory() {
+      // The chart used to start empty and fill one sample per second, so the
+      // first few minutes after a page load showed a near-empty panel whatever
+      // the ADC was doing. The API already keeps a rolling buffer; use it.
+      try {
+        const response = await axios.get(`${this.apiUrl}/api/readings/history`, {
+          params: { limit: 300 }
+        })
+        const samples = response.data
+        if (!Array.isArray(samples) || !samples.length || !this.chart) return
+
+        for (const sample of samples) this.appendSample(sample)
+        this.trimChart()
+        this.chart.update('none')
+
+        const newest = samples[samples.length - 1]
+        this.lastReadingTimestamp = newest.timestamp || 0
+        this.currentReading = newest.value ?? 0
+        this.channels = newest.channels || {}
+        console.log(`📈 Seeded chart with ${samples.length} archived samples`)
+      } catch (error) {
+        console.warn('Could not load readings history:', error.message)
       }
     },
     
@@ -484,6 +707,14 @@ export default {
     },
     
     addImageToTimeline(imageUrl, filename) {
+      // A manual capture arrives twice: once as the POST response, once as the
+      // image_captured socket event for the same file. Without this the same
+      // frame is appended twice, which double-counts the archive and evicts a
+      // real frame off the front of the 100-image window.
+      if (filename && this.images.some(image => image.filename === filename)) {
+        return
+      }
+
       // Revoke old blob URLs if they exist (cleanup)
       if (this.currentImage && this.currentImage.startsWith('blob:')) {
         URL.revokeObjectURL(this.currentImage)
@@ -501,42 +732,150 @@ export default {
       }
       
       this.images.push(imageData)
-      // Update timeline position
-      this.timelinePosition = this.images.length - 1
+      this.totalImagesOnServer++
+
+      // A frame landing mid-playback must not yank the view to the live end.
+      // The backend captures every 300s, so a long timelapse will have several
+      // arrive while it plays; jumping each time would make playback unusable.
+      // The frame is still appended -- playback simply reaches it in order.
+      if (!this.isPlaying) {
+        // Update timeline position
+        this.timelinePosition = this.images.length - 1
+
+        // Force complete re-render by clearing image first, then setting it
+        this.currentImage = null
+        this.imageError = false
+        this.imageKey++ // Increment key to force Vue to create new img element
+
+        // Use nextTick to ensure DOM updates after clearing
+        this.$nextTick(() => {
+          // Now set the new image - Vue will create a fresh img element
+          this.currentImage = uniqueUrl
+          console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename, 'URL:', uniqueUrl.substring(0, 80) + '...')
+        })
+      }
       
-      // Force complete re-render by clearing image first, then setting it
-      this.currentImage = null
-      this.imageError = false
-      this.imageKey++ // Increment key to force Vue to create new img element
-      
-      // Use nextTick to ensure DOM updates after clearing
-      this.$nextTick(() => {
-        // Now set the new image - Vue will create a fresh img element
-        this.currentImage = uniqueUrl
-        console.log('✅ Image displayed. Total images:', this.images.length, 'Position:', this.timelinePosition, 'Key:', this.imageKey, 'Filename:', filename, 'URL:', uniqueUrl.substring(0, 80) + '...')
-      })
-      
-      // Keep only last 100 images to prevent memory issues
-      if (this.images.length > 100) {
+      // Keep only the most recent images to prevent memory issues
+      if (this.images.length > this.maxImages) {
         const oldImage = this.images.shift()
         // Revoke blob URLs if they exist
         if (oldImage.url && oldImage.url.startsWith('blob:')) {
           URL.revokeObjectURL(oldImage.url)
         }
-        console.log('Removed oldest image (keeping max 100)')
+        // Every index shifted down by one. Mid-playback the playhead has to
+        // follow its frame down rather than snap to the end, or evicting the
+        // oldest image would silently skip playback to the newest.
+        this.timelinePosition = this.isPlaying
+          ? Math.max(0, this.timelinePosition - 1)
+          : this.images.length - 1
+        console.log(`Removed oldest image (keeping max ${this.maxImages})`)
       }
     },
     
     onTimelineScrub() {
       if (this.images.length > 0 && this.timelinePosition < this.images.length) {
-        // Force re-render when scrubbing timeline
-        this.imageKey++
+        // Swap the src without touching imageKey: recreating the <img> element
+        // would blank it out and collapse the container until the new frame
+        // loads. Scrubbed frames always have distinct filenames, so the
+        // cache-busting re-render that live captures need doesn't apply here.
         this.currentImage = this.images[this.timelinePosition].url
         this.imageError = false
       }
     },
     
+    preloadFrame(url) {
+      // Resolves once the browser holds the frame, so the <img> swap during
+      // playback is a cache hit. An error resolves too: one unreachable frame
+      // must not wedge the whole preload.
+      if (this.loadedUrls.has(url)) return Promise.resolve()
+      return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => { this.loadedUrls.add(url); resolve() }
+        img.onerror = () => resolve()
+        img.src = url
+      })
+    },
+
+    async preloadAll(urls) {
+      // Browsers cap concurrent connections per host at around six anyway;
+      // firing all 100 at once just queues them somewhere less visible.
+      const CONCURRENCY = 6
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < urls.length && !this.preloadCancelled) {
+          await this.preloadFrame(urls[cursor++])
+          this.preloadLoaded++
+        }
+      }
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, urls.length) }, () => worker()
+      )
+      await Promise.all(workers)
+    },
+
+    async togglePlayback() {
+      // A press during either preload or playback means stop.
+      if (this.isPlaying || this.isPreloading) {
+        this.stopPlayback()
+        return
+      }
+      if (this.images.length < 2) return
+
+      // Pressing play while parked on the last frame replays from the start,
+      // rather than appearing to do nothing.
+      if (this.timelinePosition >= this.images.length - 1) {
+        this.timelinePosition = 0
+        this.onTimelineScrub()
+      }
+
+      const urls = this.images.map(image => image.url)
+      if (urls.some(url => !this.loadedUrls.has(url))) {
+        this.preloadCancelled = false
+        this.isPreloading = true
+        this.preloadLoaded = 0
+        this.preloadTotal = urls.length
+        await this.preloadAll(urls)
+        this.isPreloading = false
+        // Stopped by a second press, or the view moved on while we waited.
+        if (this.preloadCancelled || this.viewMode !== 'timelapse') return
+      }
+
+      this.isPlaying = true
+      this.playbackTimer = setInterval(() => {
+        const next = this.timelinePosition + 1
+        if (next > this.images.length - 1) {
+          this.stopPlayback()
+          return
+        }
+        const frame = this.images[next]
+        if (!frame) {
+          this.stopPlayback()
+          return
+        }
+        // Assigned here rather than through onTimelineScrub. The position was
+        // advancing while the frame stayed put, which is what it looks like
+        // when the helper throws inside the timer: setInterval swallows the
+        // error, so the counter moves and the <img> never hears about it.
+        this.timelinePosition = next
+        this.currentImage = frame.url
+        this.imageError = false
+      }, this.playbackIntervalMs)
+    },
+
+    stopPlayback() {
+      this.preloadCancelled = true
+      this.isPreloading = false
+      this.isPlaying = false
+      if (this.playbackTimer) {
+        clearInterval(this.playbackTimer)
+        this.playbackTimer = null
+      }
+    },
+
     toggleViewMode() {
+      this.viewModeChosenByUser = true
+      // Leaving timelapse leaves the timer running over a hidden scrubber.
+      this.stopPlayback()
       if (this.viewMode === 'livestream') {
         // Switch to timelapse mode
         this.viewMode = 'timelapse'
@@ -571,10 +910,17 @@ export default {
         
         this.isOnline = true
         this.exposureLightOn = status.exposure_light === 'on'
-        
+
+        // With no camera the livestream is a dead image, so open into timelapse
+        this.cameraAvailable = status.sensors?.camera === true
+        if (!this.cameraAvailable && !this.viewModeChosenByUser) {
+          this.viewMode = 'timelapse'
+        }
+
         // Update environmental data if available
         if (status.environment) {
           this.temperature = status.environment.temperature
+          this.temperatureF = status.environment.temperature_f
           this.humidity = status.environment.humidity
           this.hasEnvironmentalData = true
           const date = new Date(status.environment.datetime)

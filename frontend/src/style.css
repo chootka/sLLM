@@ -103,12 +103,85 @@ h1 {
     background: #000;
     border-radius: 8px;
     overflow: hidden;
+    /* Reserve the camera's 16:9 box so the layout holds its dimensions while a
+       scrubbed-to frame is still loading, instead of collapsing to zero height */
+    aspect-ratio: 16 / 9;
 }
 
 .timelapse-image {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: contain;
     display: block;
+}
+
+/* Floats outside the timeline panel, against its top-right corner. bottom:100%
+   sits it on the panel's top edge; the margin lifts it clear. .timeline-panel
+   is already position:relative, so this anchors to the panel and follows it
+   when the grid stacks on mobile. */
+.logs-link {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #000000;
+    text-decoration: none;
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.3s ease;
+}
+
+.logs-link:hover {
+    border-bottom-color: #95f33c;
+}
+
+/* Play button and scrubber share a row so the scrubber keeps its full width
+   minus the button, rather than the button sitting on its own line. */
+.timeline-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.play-button {
+    background: #ecddb1;
+    color: #0a0a0a;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.play-button:hover:not(:disabled) {
+    background: #95f33c;
+}
+
+.play-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.preload-status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #888;
+}
+
+/* The scrubber's own width:100% and margin-top are for when it stands alone;
+   in the controls row it flexes into the space the button leaves. */
+.timeline-controls .timeline-scrubber {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
 }
 
 .timeline-scrubber {
@@ -192,6 +265,28 @@ h1 {
     margin: 20px 0;
 }
 
+/* One column per differential channel. Tabular figures so the digits do not
+   shuffle sideways as values change at 1Hz. */
+.channel-readout {
+    display: flex;
+    gap: 24px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.channel-readout .value {
+    font-size: 1.6em;
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    color: #ecddb1;
+}
+
+.channel-readout .label {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 2px;
+}
+
 .timestamp {
     font-size: 0.9em;
     color: #666;
@@ -225,6 +320,17 @@ canvas + canvas {
     font-size: 2em;
     font-weight: 300;
     color: #ecddb1;
+}
+
+/* Fahrenheit, under the Celsius reading. Same colour at reduced opacity
+   rather than a grey, so it reads as the same measurement in another unit
+   and not as a separate, dimmer metric. */
+.env-metric .sub-value {
+    font-size: 1.1em;
+    font-weight: 300;
+    color: #ecddb1;
+    opacity: 0.6;
+    margin-top: 2px;
 }
 
 .env-metric .label {
@@ -274,7 +380,16 @@ canvas + canvas {
     .readings-display {
         font-size: 1.4em;
     }
-    
+
+    /* Three channels do not fit across a phone at the desktop size. */
+    .channel-readout {
+        gap: 14px;
+    }
+
+    .channel-readout .value {
+        font-size: 1.1em;
+    }
+
     .env-metric .value {
         font-size: 1.4em;
     }
@@ -304,14 +419,12 @@ canvas + canvas {
     }
     
     .timelapse-container {
-        min-height: 180px;
         width: 100%;
     }
-    
+
     .timelapse-image {
         width: 100%;
         max-width: 100%;
-        height: auto;
     }
     
     .control-button {
