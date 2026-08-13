@@ -112,14 +112,15 @@ its central risk. The work is in telling those two apart.
 ## TECHNICAL COMPONENTS
 
 ```
-llm/filters/     the model-side instrument (the part under active development)
-api/             Flask + Socket.IO server, runs on the Pi inside the enclosure
-frontend/        Vue 3 + Vite interface — live video, readings, timelapse
-arduino/         ADS1118 ADC read over SPI, streamed to the Pi over serial
-processing/      earlier Processing sketches for graphing voltage and FFT
-scripts/         deployment and monitoring for the Raspberry Pi
-documentation/   hardware setup, deployment, Tailscale networking
-etc/             nginx config
+llm/             the model-side instrument, and the live loop that runs on the Pi
+gpio/            every piece of hardware: ADC, sensor, camera, matrix, matrixd
+api/             Flask + Socket.IO server and admin backend, runs on the Pi
+frontend/        Vue 3 + Vite interface: live video, readings, timelapse, admin
+deploy/          systemd units, udev rules, nginx config for the Pi
+scripts/         deployment, monitoring, and passkey enrolment
+documentation/   bring-up checklist, hardware setup, deployment, LED matrix
+arduino/         legacy: ADS1118 over SPI, superseded by the ADS1115 in gpio/
+processing/      legacy: Processing sketches for graphing voltage and FFT
 ```
 
 ### `llm/filters/` — the model-side instrument
@@ -149,51 +150,82 @@ python harness.py --no-history      # ablation: does history change anything?
 python noise_floor.py blind         # model noise floor
 ```
 
+### `llm/loop.py` — the live loop
+
+The same shape as `harness.py`, but against real electrodes: the window comes
+off the CSV that `gpio/adc.py` writes, so a restart picks up mid-run, and the
+action is applied to the matrix. Reduction and prompts are imported from
+`llm/filters/` rather than reimplemented, so the replay harness stays evidence
+about what the live loop actually does.
+
+Some fraction of turns are sham blocks, logged as actions and never applied. The
+model is never told which turn it is in. Every turn is appended to a JSONL log
+whether or not anything happened.
+
+```sh
+./scripts/py llm/loop.py --check    # connectivity and window, no turns
+```
+
 ### The enclosure
 
-A modular compartmented enclosure with stackable boxes and sliding trays, with
-separate sections for camera and lighting, the slime mould habitat, and the
-electronics. Ports are sealed with rubber stoppers for power, ethernet, and
-electrode wires.
+A single sealed tub with a clear lid, holding only what has to be wet. All the
+electronics live outside it, on a PVC backplane mounted below the chamber, so
+bare boards never sit in the humid volume.
 
-Inside it: a Raspberry Pi 5, Ag/AgCl electrodes, an ADS1118 ADC read by an
-Arduino over SPI, an SHT31 temperature and humidity sensor, a macro camera, an
-adjustable ring light, and a repurposed fish feeder for oats.
+Inside: a 100 mm petri dish on a thin agar sheet, with three Ag/AgCl electrodes
+in a line and a reference in the deep corner. A 16x16 WS2812B matrix sits
+face-up directly under the dish, sealed in a clear moisture pouch behind a
+diffuser. A jar and wick hold humidity
+passively. An SHT31 temperature and humidity sensor hangs from a sealed hole
+high on the wall, above the mist line and out of both the intake stream and the
+camera's view. A wall-mounted Noctua fan blows in through a filter to keep the
+chamber at positive pressure, exhausting through filtered vents on the far wall.
 
-`api/app.py` serves electrical readings, environmental data, still capture and
-an MJPEG stream, and light control, pushing live data to the frontend over
-Socket.IO. See `documentation/hardware_setup.md` and
-`documentation/DEPLOYMENT.md`.
+Outside: a Pi NoIR camera with 850 nm illumination looks down through the clear
+lid from a gantry. On the backplane, the three electrodes and the reference
+arrive over shielded Cat6 into four MCP604 unity-gain followers biased to
+mid-rail, and from there into an ADS1115. The SHT31 shares that I2C bus. A
+74AHCT125 on a second board lifts the Pi's data line to 5 V to drive the matrix,
+and a relay switches fan power while a separate PWM line sets its speed. Then
+the Raspberry Pi 5 and a 5 V supply.
+
+The matrix brightness cap is a power constraint, not an aesthetic one: 256 LEDs
+at full white would draw roughly four times what the supply can deliver, so the
+rail would sag and the panel would brown out.
+
+Two rules organise the rest of it, both about keeping switched current away from
+a microvolt front end. The two cable runs leave the chamber through grommets at
+opposite ends of the wall, signal to the left and power and light to the right,
+so the electrode run and the switching harness never share an exit. And the
+grounds meet at a single point rather than daisy-chaining, with the Cat6 shield
+and the Faraday layer outside the tub both landing at the buffer board.
+
+Full build documentation is in the parent project directory, outside this repo:
+`enclosure/physarum-chamber-layout.html` for the section, plan, and drilling
+templates, and `schematics/0_physarum-full-schematic.html` for the wiring, pin
+map, and design notes.
+
+`api/app.py` is the web layer only, serving electrode readings, chamber
+environment, camera, and matrix stimulus, and pushing live data to the frontend
+over Socket.IO. Every device it touches lives in `gpio/`. Nothing fabricates
+data: if a device is absent its readings are null and the frontend shows dashes.
+See `documentation/bring_up.md` for the current build and
+`documentation/DEPLOYMENT.md` for deployment.
 
 ### Not in this repo
 
-The CMOS oscillator circuits. They exist and they work — they came out of an
-earlier *Physarum* practice, where the organism sits in the circuit as a living
-wire — but they are analog hardware with no code, and they have not yet been
+The CMOS oscillator circuits. They exist and they work, and they came out of an
+earlier *Physarum* practice where the organism sits in the circuit as a living
+wire. But they are analog hardware with no code, and they have not yet been
 integrated into the sLLM enclosure. Doing that integration, and building the
 sonic loop on top of it, is the next substantial piece of work.
 
-## WHERE IT STANDS
-
-Working: the enclosure, electrode readings from the Pi, the live stream and
-timelapse, the web interface, and remote deployment.
-
-Working separately: the *Physarum* oscillator circuits, as an independent
-practice.
-
-Under development: `llm/filters/`, the model-side instrument.
-
-Not yet built: the coupling between them, which is the actual instrument.
-
 ## BACKGROUND
 
-The oscillator practice grew out of a chapter co-authored by Sarah Grant and
-Lara Grant on e-textile interfaces to sound circuits, for the third edition of
-Nic Collins' *Handmade Electronic Music*. Working with *Physarum* as a living
-component in those circuits came directly out of it.
-
-The installation could be exhibited in various contexts including galleries,
-science museums, or your local forest.
+The oscillator practice grew out of a chapter I co-authored with Lara Grant on
+e-textile interfaces to sound circuits, for the third edition of Nic Collins'
+*Handmade Electronic Music*. Working with *Physarum* as a living component in
+those circuits developed in parallel with that writing.
 
 ---
 
