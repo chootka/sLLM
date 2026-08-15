@@ -70,6 +70,22 @@
 
         <hr class="admin-rule" />
 
+        <p class="admin-label">Camera</p>
+        <select class="admin-select" :disabled="busy || !cameras.length"
+                :value="cameraSource || ''"
+                @change="setCamera($event.target.value)">
+          <option v-if="!cameras.length" value="">no camera attached</option>
+          <option v-for="source in cameras" :key="source.id" :value="source.id">
+            {{ source.label }} ({{ source.kind }})
+          </option>
+        </select>
+        <p class="admin-hint">
+          Switches without restarting. The preview freezes for a second while
+          the old camera closes and the new one opens.
+        </p>
+
+        <hr class="admin-rule" />
+
         <button class="admin-action subtle" @click="logout">Sign out</button>
         <p class="admin-hint">Reloading the page signs you out.</p>
       </div>
@@ -113,6 +129,8 @@ export default {
       demoActive: false,
       mode: '',
       modes: [],
+      cameras: [],
+      cameraSource: '',
       // The session token lives here and nowhere else. Not a cookie (no CSRF
       // surface) and not localStorage (an XSS would have to run while the
       // session is live rather than harvest it later).
@@ -256,6 +274,7 @@ export default {
         this.loopActive = data.units ? data.units.loop.active : data.active
         this.demoActive = data.units ? data.units.demo.active : false
         await this.refreshRun()
+        await this.refreshCameras()
       } catch (e) {
         this.error = 'Could not read loop state.'
       }
@@ -272,6 +291,50 @@ export default {
         this.modes = data.modes
       } catch (e) {
         // Non-fatal.
+      }
+    },
+
+    async refreshCameras() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/camera/sources`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.cameras = data.sources
+        this.cameraSource = data.source
+      } catch (e) {
+        // Non-fatal: the rest of the panel still works without a camera list.
+      }
+    },
+
+    async setCamera(source) {
+      if (!source || source === this.cameraSource) return
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const response = await fetch(`${this.apiUrl}/api/camera/source`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({ source }),
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Could not switch camera.')
+        this.cameras = data.sources
+        this.cameraSource = data.source
+        this.notice = `Camera: ${data.model}`
+      } catch (e) {
+        this.error = e.message || 'Could not switch camera.'
+        // The server keeps the old camera live when a switch fails, so put the
+        // dropdown back where it was rather than leaving it showing a camera
+        // that is not the one running.
+        await this.refreshCameras()
+      } finally {
+        this.busy = false
       }
     },
 
@@ -350,6 +413,14 @@ export default {
 .admin-action:hover:not(:disabled) { background: #2c2c2c; border-color: #777; }
 .admin-action:disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-action.subtle { border-color: #333; color: #888; }
+
+.admin-select {
+  display: block; width: 100%; margin: 0.4rem 0; padding: 0.4rem;
+  background: #1a1a1a; border: 1px solid #444; border-radius: 4px;
+  color: #b4b4b4; font-size: 0.8rem; cursor: pointer;
+}
+.admin-select:hover:not(:disabled) { border-color: #666; color: #ddd; }
+.admin-select:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .admin-label { color: #888; font-size: 0.75rem; text-transform: uppercase;
   letter-spacing: 0.06em; margin: 0.2rem 0 0.35rem; }

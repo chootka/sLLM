@@ -8,7 +8,8 @@ driven through a module there:
                      away from switching events
     gpio/adc.py      ADS1115, three electrodes differential against reference
     gpio/sensor.py   SHT31 temperature and humidity, and the fan relay
-    gpio/camera.py   picamera2 stills through the matrix blank/flash sequence
+    gpio/camera.py   stills through the matrix blank/flash sequence, from
+                     either a CSI camera or a USB one
     gpio/leds.py     WS2812B matrix, blue stimulus by zone and red imaging light
 
 Nothing here fabricates data. If a device is absent its readings are null and
@@ -18,8 +19,8 @@ which put invented numbers on the dashboard for a chamber nobody was measuring.
 
 Removed, for the record, because none of it corresponded to hardware that is
 on this machine: the Arduino serial reader (electrodes are on the ADS1115 now),
-the OpenCV USB camera path (the camera is CSI), the DHT22/DHT11 fallback (the
-sensor is an SHT31), and the mock environment generator.
+the DHT22/DHT11 fallback (the sensor is an SHT31), and the mock environment
+generator.
 """
 
 import glob
@@ -64,7 +65,7 @@ sys.path.insert(0, os.path.join(
 
 from adc import ElectrodeMonitor
 from bus import SwitchGate
-from camera import Timelapse, open_camera
+from camera import CameraUnavailable, Timelapse, open_camera
 from sensor import EnvironmentMonitor
 from store import electrode_log, environment_log
 
@@ -76,9 +77,13 @@ app = Flask(__name__)
 # impossible, so this is defence in depth rather than the only control -- but a
 # wide-open preflight on a route that starts and stops the experiment is not
 # something to leave lying around.
+_admin_origin = getattr(config, 'ADMIN_ORIGIN', 'https://sllm.visceral.systems')
 CORS(app, resources={
-    r"/api/admin/*": {"origins": [getattr(config, 'ADMIN_ORIGIN',
-                                          'https://sllm.visceral.systems')]},
+    r"/api/admin/*": {"origins": [_admin_origin]},
+    # Choosing the camera is an admin action that happens to live with the
+    # rest of the camera code rather than in admin.py, so it is pinned here by
+    # path instead of by prefix. Capture and preview stay public, as before.
+    r"/api/camera/*": {"origins": [_admin_origin]},
     r"/*": {"origins": "*"},
 })
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -151,6 +156,11 @@ _stimulus_lock = threading.Lock()
 # Capture filenames are slime_YYYYMMDD_HHMMSS.jpg, or slime_YYYYMMDD_HHMMSS_mmm.jpg
 # for captures written with millisecond precision.
 IMAGE_FILENAME_RE = re.compile(r'^slime_(\d{8})_(\d{6})(?:_(\d{1,3}))?\.jpg$')
+
+# Consecutive frames a preview will wait through while no camera is available
+# before giving up. At the default 2fps this is a five second tolerance, which
+# covers a source switch and not much else.
+STREAM_MISS_LIMIT = 10
 
 
 def parse_image_filename(filename):
@@ -382,13 +392,25 @@ def capture_image():
 
 
 def generate_stream():
-    """MJPEG frames from the CSI camera, at a deliberately modest rate."""
+    """MJPEG frames from whichever camera is live, at a modest rate."""
     fps = getattr(config, 'STREAM_FPS', 2)
     interval = 1.0 / max(fps, 0.1)
-    while camera is not None and camera.available:
+    misses = 0
+    while camera is not None:
         started = time.monotonic()
         try:
             frame = camera.stream_frame()
+            misses = 0
+        except CameraUnavailable:
+            # Switching source closes one camera before opening the next, so a
+            # gap here is expected and brief. Ending the stream on the first
+            # one would leave the dashboard on a broken image until somebody
+            # reloaded the page, which is a worse answer than a short freeze.
+            misses += 1
+            if misses > STREAM_MISS_LIMIT:
+                return
+            time.sleep(interval)
+            continue
         except Exception as exc:
             print(f"stream frame failed: {exc}")
             return
@@ -492,6 +514,62 @@ def video_stream():
         return jsonify({"error": "No camera attached"}), 503
     return Response(generate_stream(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+# --- choosing a camera ------------------------------------------------------
+
+def _admin_request():
+    """Whether this request carries a valid admin session.
+
+    Imported here rather than at the top because admin.py is optional -- see
+    register_admin -- and a camera route must not be what turns a missing
+    webauthn install into a dead dashboard.
+    """
+    try:
+        import admin as admin_module
+
+        return admin_module.is_authenticated()
+    except Exception:  # noqa: BLE001 -- no admin module, no admin session
+        return False
+
+
+@app.route('/api/camera/sources', methods=['GET'])
+def camera_sources():
+    """Attached cameras, and which one is live.
+
+    Behind the admin session not because a camera list is secret, but because
+    it is an inventory of what is plugged into the machine and the public
+    dashboard has no use for it.
+    """
+    if not _admin_request():
+        return jsonify({"error": "not authenticated"}), 401
+    return jsonify({"sources": camera.sources(), **camera.status()})
+
+
+@app.route('/api/camera/source', methods=['POST'])
+def camera_select():
+    """Switch to another camera, without restarting the service."""
+    if not _admin_request():
+        return jsonify({"error": "not authenticated"}), 401
+
+    body = request.get_json(silent=True) or {}
+    source = body.get('source', '')
+    if not source:
+        return jsonify({"error": "source required"}), 400
+
+    if source not in [entry['id'] for entry in camera.sources()]:
+        return jsonify({"error": f"no camera with id {source}"}), 404
+
+    try:
+        status = camera.select(source)
+    except CameraUnavailable as exc:
+        # The manager reopens the previous camera before this raises, so a
+        # failed switch costs a moment of preview and nothing else.
+        return jsonify({"error": str(exc), **camera.status()}), 503
+
+    print(f"admin: camera -> {source} by {request.remote_addr}", flush=True)
+    socketio.emit('camera_source', status)
+    return jsonify({"ok": True, "sources": camera.sources(), **status})
 
 
 # --- stimulus ---------------------------------------------------------------
@@ -629,7 +707,10 @@ def main():
     electrodes.start()
     environment.start()
 
-    if camera is not None and getattr(config, 'TIMELAPSE_ENABLED', True):
+    # Started whether or not a camera is attached right now. It holds the
+    # manager rather than a camera, so it starts capturing on its own once one
+    # is plugged in and selected, and keeps going across a source change.
+    if getattr(config, 'TIMELAPSE_ENABLED', True):
         timelapse = Timelapse(camera, config.IMAGE_CAPTURE_INTERVAL).start()
         print(f"✓ timelapse every {config.IMAGE_CAPTURE_INTERVAL}s")
 

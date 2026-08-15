@@ -85,10 +85,18 @@ FAN_RH_ON = None               # e.g. 95.0
 FAN_RH_OFF = None              # e.g. 91.0
 
 # --- camera -----------------------------------------------------------------
-# Pi Camera Module 3 NoIR (IMX708) on CSI. Capture runs through the matrix
-# blank/flash sequence in gpio/leds.py, so no separate illuminator is
-# configured here.
+# Either a Pi camera on the CSI ribbon or a UVC camera on USB. Capture runs
+# through the matrix blank/flash sequence in gpio/leds.py in both cases, so no
+# separate illuminator is configured here.
 #
+# CAMERA_SOURCE picks the one to open at startup:
+#   'auto'                        first camera found, CSI before USB
+#   'csi'                         the ribbon
+#   '/dev/v4l/by-id/usb-...'      a specific USB camera
+# Whatever the admin page last selected outranks this -- it is the more recent
+# statement of intent. `./scripts/py gpio/camera.py info` lists the ids.
+CAMERA_SOURCE = 'auto'
+
 # Set CAMERA_RESOLUTION to None to use the largest mode the fitted sensor
 # reports. 2304x1296 is the IMX708's binned full-field mode: the full 4608x2592
 # is four times the pixels for no extra information about a plasmodium, and it
@@ -96,6 +104,18 @@ FAN_RH_OFF = None              # e.g. 91.0
 CAMERA_RESOLUTION = (2304, 1296)
 CAMERA_WARMUP_TIME = 2         # seconds
 IMAGE_CAPTURE_INTERVAL = 300   # seconds
+
+# USB cameras only. A separate resolution because it is a different sensor
+# with a different mode list -- asking a UVC camera for a CSI sensor's mode
+# gets you whatever it decides is nearest, silently.
+USB_CAMERA_RESOLUTION = (1920, 1080)
+USB_CAMERA_JPEG_QUALITY = 92
+
+# Frames to throw away before keeping one. V4L2 queues frames captured while
+# nobody was reading, so without this the still taken during the red flash can
+# be one exposed just before it came on. It also gives the camera's own auto
+# exposure a few frames to react to the flash. At 30fps, 6 frames is ~200ms.
+USB_CAMERA_FLUSH_FRAMES = 6
 
 # Module 3 has an autofocus lens and the dish never moves, so focus is locked
 # rather than left hunting between frames. None sweeps autofocus once at
