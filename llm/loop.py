@@ -75,6 +75,15 @@ import config  # noqa: E402
 from reducer import reduce_window  # noqa: E402
 from store import channels_from_rows, electrode_log  # noqa: E402
 
+# Imported for its flags only, never to drive the panel -- a live run goes
+# through matrixd. Safe at module scope because leds.py defers `board` and
+# `neopixel` into Matrix.__init__, so nothing here touches the hardware or
+# needs the CircuitPython stack to be importable.
+try:
+    import leds as leds_flags  # noqa: E402
+except Exception:  # noqa: BLE001 -- absent off-Pi; recovery just cannot apply
+    leds_flags = None
+
 # The three prompt variants live in llm/filters/prompts.md as the source of
 # truth. harness.py carries copies of BLIND and NULL; INFORMED is only in the
 # markdown, so it is parsed out rather than duplicated a third time here.
@@ -467,6 +476,26 @@ def main():
                              'exercising the hardware; refuses if the chamber '
                              'is occupied. Turns go to the replay log.')
     args = parser.parse_args()
+
+    # Recovery is a state of the organism, not a run mode. The panel is dark
+    # and the plasmodium is being left alone to come back from sclerotium, so a
+    # live turn now would be written to the record as a real turn against
+    # something that was never lit and could not have answered -- worse than a
+    # gap, because a gap is visibly a gap. Refuse instead.
+    #
+    # Exit 0, not an error: sllm-loop.service is Restart=on-failure, so a clean
+    # exit stops it rather than retrying every 60s for as long as recovery
+    # lasts. The service is enabled, so this is also what catches a reboot.
+    #
+    # --dry-run, --check and --replay stay allowed. None of them actuate, and
+    # the whole point of recovery is that nothing reaches the dish.
+    if getattr(leds_flags, 'RECOVERY', False) and not (
+            args.dry_run or args.check or args.replay):
+        print('RECOVERY is set in gpio/leds.py: the panel is dark and the '
+              'organism is coming back from sclerotium. Refusing to run live '
+              'turns. Clear RECOVERY and RECOVERY_DARK, restart sllm-matrixd, '
+              'then start sllm-loop to resume.', file=sys.stderr)
+        return 0
 
     window_s = getattr(config, 'LLM_WINDOW_S', 1800)
     history_turns = getattr(config, 'LLM_HISTORY_TURNS', 8)

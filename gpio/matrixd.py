@@ -29,8 +29,8 @@ blue stimulus in a `finally`. A callable cannot cross a socket, so the flash
 splits into flash_begin and flash_end with the client's exposure in between --
 and that reintroduces exactly the failure the `finally` existed to prevent. If
 the client crashes, is killed, or simply loses the socket between the two
-calls, the panel is left at IMAGING_BRIGHTNESS across all 256 pixels, roughly
-0.8A of red, held over a living organism until someone notices.
+calls, the panel is left at IMAGING_BRIGHTNESS across every dish pixel, roughly
+0.55A of red, held over a living organism until someone notices.
 
 So flash_begin arms a watchdog. If flash_end does not arrive within
 FLASH_TIMEOUT_S the daemon restores the panel by itself. The client losing its
@@ -184,15 +184,10 @@ class MatrixService:
         with self._lock:
             if self._flashing:
                 raise RuntimeError("a flash is already open")
-            px = self._matrix._px
-            px.fill((0, 0, 0))
-            px.show()
-            time.sleep(leds.BLANK_SETTLE)
-
-            px.brightness = leds.IMAGING_BRIGHTNESS
-            px.fill((255, 0, 0))
-            px.show()
-            time.sleep(leds.BLANK_SETTLE)
+            # leds.Matrix owns what a flash looks like, including which pixels
+            # it lights. This used to be an inline copy of those steps, which
+            # drifted the moment the flash was masked to the dish.
+            self._matrix.imaging_on()
 
             self._flashing = True
             self._flash_expired = False
@@ -209,11 +204,7 @@ class MatrixService:
                 # Both are harmless; report which so the client can log it.
                 return {"expired": expired}
             self._flashing = False
-            px = self._matrix._px
-            px.fill((0, 0, 0))
-            px.show()
-            time.sleep(leds.BLANK_SETTLE)
-            self._matrix._render()
+            self._matrix.imaging_off()
         return {"expired": False}
 
     def off(self):
