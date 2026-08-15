@@ -4,22 +4,22 @@
 - https://sllm.visceral.systems/
 
 A closed-circuit instrument for cross-substrate dialogue: a living slime mould
-(*Physarum polycephalum*) and a large language model, put in recursive exchange
-with each other through sound.
+(*Physarum polycephalum*) and a large language model, put in recursive signal exchange
+with each other through electrical activity, sound, and light.
 
 ---
 
 ## PROJECT OVERVIEW
 
 This project explores whether meaningful patterns of communication can emerge
-between radically different forms of intelligence. By mapping electrical
+between radically different forms of so-called intelligence. By mapping electrical
 responses from a non-human living organism to a computational language model,
 sLLM questions our understanding of communication, intelligence, and the
 boundaries between biological and artificial systems.
 
 ## WHAT? WHY?
 
-Slime moulds occupy a special biological niche — despite being single-celled
+Slime moulds occupy a special biological niche. Despite being single-celled
 organisms, they exhibit surprisingly complex behaviors including problem-solving
 capabilities and environmental adaptation. Scientists study them for their
 prototypical neuron-like behaviors, drawing parallels to much more complex
@@ -27,22 +27,23 @@ nervous systems.
 
 Meanwhile, Large Language Models attempt to simulate human-like reasoning and
 communication through computational means. Both systems represent different
-approaches to "intelligence" — one evolved through billions of years of
+approaches to "intelligence" - one evolved through billions of years of
 biological processes, the other engineered through mathematical models and
 trained on human-created data.
 
 sLLM began conceptually as a playful response to the widespread cultural
-fascination with artificial intelligence. The initial idea was simply to place a
-live-streamed slime mould beside a chat interface, creating a satirical
-juxtaposition between responsive AI chat experiences and the slow, alien
-intelligence of a simple organism.
+fascination with artificial intelligence. The initial idea was to place a
+live-streamed slime mould beside a chat interface, routing messages through 
+a circuit of slime mould wires thereby creating a satirical juxtaposition 
+between responsive AI chat experiences and the slow, alien intelligence of 
+a simple organism.
 
 However, this evolved into a more substantive exploration of cross-species
-communication. The project doesn't claim to achieve "true" communication with
+data exchange. The project doesn't claim to achieve "true" communication with
 slime moulds, but instead examines what happens when we create systems that
 translate between fundamentally different modes of being. The human has since
-stepped out of the loop. The organism is now exposed to controlled stimuli in
-response to the language model — which is itself responding to the organism's
+exited the loop. The organism is now exposed to controlled stimuli in
+response to the language model, which is itself responding to the organism's
 electrical activity and to the sound the instrument is making. Each half acts on
 what the other just did, and the question is whether consistent patterns emerge
 in the organism's electrical activity as a result.
@@ -74,19 +75,20 @@ organic synthesis. Electrodes and a camera read the organism's electrical
 activity and the growth of its network.
 
 **A digital interlocutor.** The language model is not there to control the
-system. It participates in it. It listens to the sound and to the slime's
+system, but rather to participate in it. It listens to the sound and to the slime's
 electrical activity, answers in generated sound and short text, and acts back on
 the organism only through things the slime can actually sense: patterned light,
 which it avoids, and placement of oat attractants. Temperature and humidity are
 held steady as conditions rather than used as messages. The organism responds
 over the next minutes and hours by reconfiguring where it grows and which tubes
-it keeps. That changes the sound, which influences what the model says next.
+it keeps. That changes the sound and electrical activity of the slime's body, 
+which influences what the model says next.
 
-The mismatch of timescales — the model's fast verbosity against the organism's
-slow reconfiguration — is the material, not a problem to engineer around. Sound
-is the shared medium because the ear catches subtleties in shifting signals that
-the eye misses, and because slime-mould-driven oscillators are where the
-*Physarum* practice began.
+The mismatched timescales of the model's fast verbosity against the organism's
+slow reconfiguration is the material rather than a problem. Sound is the output 
+for human understanding of the exchange happening these unlikely partners, chosen
+specifically because the ear catches subtleties in shifting signals that
+the eye would miss.
 
 Once the loop is running, who is leading and who is following becomes unclear,
 or unimportant.
@@ -96,8 +98,7 @@ or unimportant.
 A tracker who reads too much into a broken twig invents an animal. The organism
 has no representation of the model; it responds to light and food as conditions,
 not as messages. Any sense that the two are *conversing* is produced by the
-instrument, and the honest version of this project has to know how much of it the
-instrument is inventing.
+instrument.
 
 That is what `llm/filters/` is for. It is a measuring instrument aimed at the
 model rather than at the slime. Synthetic sessions are generated with events
@@ -175,25 +176,21 @@ bare boards never sit in the humid volume.
 Inside: a 100 mm petri dish on a thin agar sheet, with three Ag/AgCl electrodes
 in a line and a reference in the deep corner. A 16x16 WS2812B matrix sits
 face-up directly under the dish, sealed in a clear moisture pouch behind a
-diffuser. A jar and wick hold humidity
-passively. An SHT31 temperature and humidity sensor hangs from a sealed hole
-high on the wall, above the mist line and out of both the intake stream and the
-camera's view. A wall-mounted Noctua fan blows in through a filter to keep the
-chamber at positive pressure, exhausting through filtered vents on the far wall.
+diffuser. A jar and wick hold humidity passively. An SHT31 temperature and humidity 
+sensor hangs from a sealed hole high on the wall, above the mist line and out of both 
+the intake stream and the camera's view. A wall-mounted Noctua fan blows in through a 
+filter to keep the chamber at positive pressure, exhausting through filtered vents on 
+the far wall.
 
 Outside: a Pi NoIR camera with 850 nm illumination looks down through the clear
-lid from a gantry. On the backplane, the three electrodes and the reference
-arrive over shielded Cat6 into four MCP604 unity-gain followers biased to
-mid-rail, and from there into an ADS1115. The SHT31 shares that I2C bus. A
-74AHCT125 on a second board lifts the Pi's data line to 5 V to drive the matrix,
-and a relay switches fan power while a separate PWM line sets its speed. Then
-the Raspberry Pi 5 and a 5 V supply.
+lid from a gantry. On another chamber sitting below the slime's home, the three 
+electrodes and the reference arrive over shielded Cat6 into four MCP604 unity-gain 
+followers biased to mid-rail, and from there into an ADS1115. The SHT31 shares that
+I2C bus. A 74AHCT125 on a second board lifts the Pi's data line to 5 V to drive the 
+matrix, and a relay switches fan power while a separate PWM line sets its speed. 
+Then the Raspberry Pi 5 and a 5 V supply.
 
-The matrix brightness cap is a power constraint, not an aesthetic one: 256 LEDs
-at full white would draw roughly four times what the supply can deliver, so the
-rail would sag and the panel would brown out.
-
-Two rules organise the rest of it, both about keeping switched current away from
+Two rules organize the rest of it, both about keeping switched current away from
 a microvolt front end. The two cable runs leave the chamber through grommets at
 opposite ends of the wall, signal to the left and power and light to the right,
 so the electrode run and the switching harness never share an exit. And the
@@ -207,17 +204,13 @@ map, and design notes.
 
 `api/app.py` is the web layer only, serving electrode readings, chamber
 environment, camera, and matrix stimulus, and pushing live data to the frontend
-over Socket.IO. Every device it touches lives in `gpio/`. Nothing fabricates
-data: if a device is absent its readings are null and the frontend shows dashes.
-See `documentation/bring_up.md` for the current build and
-`documentation/DEPLOYMENT.md` for deployment.
+over Socket.IO. Every device it touches lives in `gpio/`. See 
+`documentation/bring_up.md` for the current build and `documentation/DEPLOYMENT.md` 
+for deployment.
 
-### Not in this repo
+### Not yet in this repo
 
-The CMOS oscillator circuits. They exist and they work, and they came out of an
-earlier *Physarum* practice where the organism sits in the circuit as a living
-wire. But they are analog hardware with no code, and they have not yet been
-integrated into the sLLM enclosure. Doing that integration, and building the
+The CMOS oscillator circuits. Designing and building the
 sonic loop on top of it, is the next substantial piece of work.
 
 ## BACKGROUND
