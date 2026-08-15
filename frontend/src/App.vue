@@ -420,7 +420,9 @@ export default {
             plugins: {
               legend: {
                 display: true,
-                labels: { color: '#aaa', boxWidth: 12, usePointStyle: true }
+                // padding is the gap between legend entries; the default 10 packs
+                // the dots close enough that the colours read as one swatch strip.
+                labels: { color: '#aaa', boxWidth: 12, usePointStyle: true, padding: 30 }
               },
               tooltip: {
                 enabled: true,
@@ -555,9 +557,15 @@ export default {
     },
     
     channelColour(channel) {
-      // Distinct per channel and stable across reloads, so a trace means the
-      // same electrode every time you look at it.
-      const palette = ['#a0d468', '#5aa9e6', '#e6a15a', '#c58fe6']
+      // Trace colour = the physical colour of that electrode's lead, so you can
+      // look at the dish and the graph and match them without a lookup table.
+      // Full chain, ADS input -> lead -> board A row -> Cat6 pair:
+      //   A0  yellow  r38L  orange
+      //   A1  blue    r40L  blue
+      //   A2  green   r40R  green
+      //   A3  white   r38R  brown   (reference)
+      // Lightened off pure hues so they stay legible on the near-black panel.
+      const palette = ['#e8d44a', '#5aa9e6', '#5ecb6e', '#e8e8e8']
       return palette[Number(channel) % palette.length]
     },
 
