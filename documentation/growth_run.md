@@ -9,8 +9,12 @@ Fill in the results at the bottom. Do not change the tests once the run starts.
 ## The run
 
 One plasmodium, undisturbed, from inoculation to at least 24 h. No dish
-handling, no chamber opening, no manual light. `sllm-loop` stays off — a model
-lighting zones is a second variable and this run is about the electrodes.
+handling, no chamber opening, no manual light.
+
+**Run `sllm-loop`.** An earlier draft of this file said to keep it off, on the
+grounds that a model lighting zones is a second variable. That was wrong: the
+sham blocks make it a randomised controlled trial, which is stronger than
+passive observation, and it does not have to be a separate run.
 
 Acquisition mode `test` throughout, so nothing lands in the live record.
 
@@ -60,10 +64,27 @@ Humidity and temperature against the same features.
 - If a feature correlates with humidity more strongly than with growth, it is
   the chamber. On 2026-08-20 the common mode hit r = +0.85 with humidity.
 
+**Test 5 — applied against sham. This is the primary test.**
+`LLM_SHAM_RATE` is 0.25: a quarter of turns are logged and never applied, and
+the model is never told which. Randomised, same organism, same chamber, same
+humidity.
+
+Compare the 30 min after applied turns against the 30 min after sham turns, on
+the same features as test 1.
+- Positive: applied turns differ from sham turns, on the channel nearest the lit
+  zone, and the difference grows with intensity.
+- This is the only test here that manipulates rather than observes, so it is
+  the one that can show the loop is closed rather than merely correlated.
+- `sham` and `applied` are in every turn record in `data/logs/turns_*.jsonl`.
+- Needs enough turns. At 10 min a turn, 24 h is 144 turns, roughly 36 sham.
+
 ## What counts as a result
 
-Two of tests 1–3 positive, with test 4 not explaining them. One test alone is
-not a result — that is exactly what happened twice on 2026-08-20.
+Test 5 positive is the result worth having: it is the only manipulation.
+
+Failing that, two of tests 1–3 positive with test 4 not explaining them. One
+test alone is not a result — that is exactly what happened twice on
+2026-08-20.
 
 ## Before believing anything
 
@@ -90,5 +111,6 @@ not a result — that is exactly what happened twice on 2026-08-20.
 | 2 oscillation appears | | |
 | 3 camera agrees | | |
 | 4 chamber explains it | | |
+| 5 applied vs sham | | |
 
 **Verdict:**
