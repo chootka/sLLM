@@ -51,17 +51,13 @@ import leds
 SOCKET_PATH = "/run/sllm/matrix.sock"
 
 # The unprivileged account the API runs as. The socket is chowned to this group
-# with mode 0660, so the API can talk to the daemon and nothing else on the box
-# can. This is the whole access control story; there is no auth in the protocol.
+# mode 0660; that is the whole access control story, the protocol has no auth.
 #
-# `sllm` is a dedicated system account with no shell, no home and no sudo -- not
-# a human's login. That is the point: the API is reachable from the internet, so
-# whatever it runs as is what an attacker gets on a bad day. As a human account
-# that would mean SSH keys, git credentials and a shell profile that can be
-# rewritten to capture a sudo password. As `sllm` it means the data directory
-# and one systemd unit.
+# `sllm` is a dedicated system account with no shell, home or sudo. The API is
+# reachable from the internet, so whatever it runs as is what an attacker gets:
+# as `sllm` that is the data directory and one systemd unit.
 #
-# chootka is a member of this group, so the standalone tools still work by hand.
+# chootka is in this group, so the standalone tools still work by hand.
 SOCKET_GROUP = "sllm"
 SOCKET_MODE = 0o660
 
@@ -74,18 +70,13 @@ RECV_LIMIT = 64 * 1024  # a request is a few dozen bytes; this is a sanity cap
 
 # How often the panel is re-sent its current frame.
 #
-# leds.Matrix only writes on a state change, which during a live run is once
-# per ten minute turn. A frame that does not arrive intact -- or a chain that
-# latches a bad state -- therefore persists for the whole turn, because nothing
-# ever writes again to correct it. That is what made demo mode look dead: the
-# daemon held the right state, and the panel did not show it.
+# leds.Matrix only writes on a state change -- once per turn in a live run -- so
+# a dropped frame persists the whole turn with nothing to correct it. That is
+# what made demo mode look dead.
 #
-# This re-sends the SAME frame, which matters for the electrode measurements.
-# bus.SwitchGate exists because changing panel state pulls amps through grounds
-# shared with the electrode reference, and a conversion taken across that edge
-# measures the switching. An identical frame changes no LED's current, so it
-# creates no such edge -- it is 256*24 bits of data-line activity and nothing
-# more. Set to 0 to disable the refresh entirely.
+# It re-sends the SAME frame, which is why it is safe for the electrodes: an
+# identical frame changes no LED current, so it creates no switching edge for a
+# conversion to land across. 0 disables the refresh.
 REFRESH_INTERVAL_S = 2.0
 
 

@@ -160,6 +160,7 @@ class CsiCamera(_CameraBase):
         self._picam.configure(still_config)
         self._picam.start()
         self._set_focus(config)
+        self._set_controls(config)
         # The sensor needs a moment for AE and AWB to settle before the first
         # frame is worth keeping.
         time.sleep(self.warmup)
@@ -197,6 +198,46 @@ class CsiCamera(_CameraBase):
             })
             print(f"· focus fixed at {dioptres} dioptres ({1 / dioptres:.2f}m)"
                   if dioptres else "· focus fixed at infinity")
+
+    def _set_controls(self, config):
+        """Apply the fixed exposure and tone controls from config.
+
+        Everything here exists because the capture happens inside a 100ms
+        flash. Auto exposure meters the blanked panel and then the red comes
+        up, so the frame it chose for darkness arrives blown; auto white
+        balance chases a monochromatic source and lands somewhere new every
+        time. Both have to be pinned or the timelapse is unusable as a series.
+
+        Unknown control names are dropped one at a time rather than failing the
+        whole block, because the control set differs between sensors and a
+        module swap should cost a warning, not a camera that will not open.
+        """
+        controls = getattr(config, 'CAMERA_CONTROLS', None)
+        if not controls:
+            return
+
+        available = self._picam.camera_controls
+        wanted, skipped = {}, []
+        for name, value in controls.items():
+            if name in available:
+                wanted[name] = value
+            else:
+                skipped.append(name)
+
+        if skipped:
+            print(f"· sensor has no {', '.join(sorted(skipped))} -- skipped")
+
+        if not wanted:
+            return
+
+        try:
+            self._picam.set_controls(wanted)
+        except Exception as exc:  # noqa: BLE001 -- a bad value must not stop capture
+            print(f"· camera controls rejected ({exc}); staying on auto")
+            return
+
+        summary = ", ".join(f"{k}={v}" for k, v in sorted(wanted.items()))
+        print(f"· controls {summary}")
 
     @property
     def available(self):
