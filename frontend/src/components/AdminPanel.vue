@@ -31,12 +31,23 @@
       </div>
 
       <div v-else>
+        <p class="admin-label">Recovery</p>
+        <div class="pill" :class="{ busy }">
+          <button :class="{ active: !recovery.active }" :disabled="busy"
+                  @click="setRecovery(false)">off</button>
+          <button :class="{ active: recovery.active, recovery: recovery.active }"
+                  :disabled="busy" @click="setRecovery(true)">recovering</button>
+        </div>
+
+        <hr class="admin-rule" />
+
         <p class="admin-label">Model loop</p>
         <div class="pill" :class="{ busy }">
           <button :class="{ active: !loopActive }" :disabled="busy"
                   @click="setUnit('loop', 'stop')">stopped</button>
           <button :class="{ active: loopActive, live: loopActive }"
-                  :disabled="busy" @click="setUnit('loop', 'start')">running</button>
+                  :disabled="busy || recovery.active"
+                  @click="setUnit('loop', 'start')">running</button>
         </div>
 
         <hr class="admin-rule" />
@@ -46,7 +57,7 @@
           <button :class="{ active: !demoActive }" :disabled="busy"
                   @click="setUnit('demo', 'stop')">stopped</button>
           <button :class="{ active: demoActive, demo: demoActive }"
-                  :disabled="busy || mode === 'live'"
+                  :disabled="busy || mode === 'live' || recovery.active"
                   @click="setUnit('demo', 'start')">running</button>
         </div>
         <p class="admin-hint">
@@ -79,10 +90,6 @@
             {{ source.label }} ({{ source.kind }})
           </option>
         </select>
-        <p class="admin-hint">
-          Switches without restarting. The preview freezes for a second while
-          the old camera closes and the new one opens.
-        </p>
 
         <hr class="admin-rule" />
 
@@ -127,6 +134,7 @@ export default {
       authenticated: false,
       loopActive: false,
       demoActive: false,
+      recovery: { active: false, dark: false, since: null },
       mode: '',
       modes: [],
       cameras: [],
@@ -273,10 +281,45 @@ export default {
         const data = await response.json()
         this.loopActive = data.units ? data.units.loop.active : data.active
         this.demoActive = data.units ? data.units.demo.active : false
+        await this.refreshRecovery()
         await this.refreshRun()
         await this.refreshCameras()
       } catch (e) {
         this.error = 'Could not read loop state.'
+      }
+    },
+
+    async refreshRecovery() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/admin/recovery`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.recovery = data.recovery
+      } catch (e) {
+        // Non-fatal.
+      }
+    },
+
+    async setRecovery(active) {
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const data = await this.post('recovery', { active }, true)
+        this.recovery = data.recovery
+        // Turning recovery on stops both units, so the pills below it are
+        // stale the moment this returns.
+        if (data.units) {
+          this.loopActive = data.units.loop.active
+          this.demoActive = data.units.demo.active
+        }
+      } catch (e) {
+        this.error = e.message || 'Could not switch recovery.'
+        await this.refreshRecovery()
+      } finally {
+        this.busy = false
       }
     },
 
@@ -435,10 +478,15 @@ export default {
    live acquisition earns the highlight, so the panel reads at a glance. */
 .pill button.active { background: #262626; color: #b4b4b4; }
 .pill button.active.live,
-.pill button.active.demo { background: #1d3a4d; color: #9ad4f7; }
+/* Demo mode has to stay obvious without a colour to shout in: it gets the
+   full inversion, which nothing else in the panel uses. */
+.pill button.active.demo,
+/* Recovery is the installation deliberately doing nothing, which is otherwise
+   indistinguishable from it being broken. It gets the same full inversion. */
+.pill button.active.recovery { background: #ededed; color: #0a0a0a; }
 .pill button:disabled { cursor: default; }
 .admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
-.admin-error { color: #e08080; }
-.admin-notice { color: #7fb5d5; }
+.admin-error { color: #ededed; border-left: 2px solid #ededed; padding-left: 0.5rem; }
+.admin-notice { color: #a8a8a8; border-left: 2px dashed rgba(255, 255, 255, 0.35); padding-left: 0.5rem; }
 .admin-hint { color: #666; font-size: 0.75rem; }
 </style>
