@@ -1,6 +1,12 @@
 # Deployment Guide for Raspberry Pi 5
 
-This guide covers deploying sLLM to your Raspberry Pi 5 using Tailscale for secure remote access.
+Deploying sLLM to the Pi over Tailscale.
+
+The box is `sllm` at `100.85.144.126`, logging in as `chootka`. The repo lives
+at `~/sllm` and the services run from `/var/www/sllm` — a commit is not a
+deploy. `deploy/` is the source of truth for the systemd units, the nginx site
+and the polkit rule; see **Deploying** in `bring_up.md` for what the deploy
+script deliberately does not touch.
 
 ## Quick Start: Automated Deployment
 
@@ -302,7 +308,7 @@ If you already have a valid certificate on another server:
 
 ```bash
 # On the other server, copy the certificate using Tailscale IP
-sudo scp -r /etc/letsencrypt/live/sllm.visceral.systems pi@100.85.144.126:/tmp/
+sudo scp -r /etc/letsencrypt/live/sllm.visceral.systems chootka@100.85.144.126:/tmp/
 
 # On the Pi, move it to the right place
 sudo mkdir -p /etc/letsencrypt/live/sllm.visceral.systems

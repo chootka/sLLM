@@ -123,24 +123,46 @@ Nine zones in a 3×3 arrangement. 16 does not divide by 3, so the bands are
 The zones tile all 256 pixels exactly once, asserted in `leds.py grid`.
 
 ```
-0 0 0 0 0 1 1 1 1 1 1 2 2 2 2 2     zone 0  top-left
-0 0 0 0 0 1 1 1 1 1 1 2 2 2 2 2     zone 1  top-middle
-0 0 0 0 0 1 1 1 1 1 1 2 2 2 2 2     zone 2  top-right   <- BARRIER
-3 3 3 3 3 4 4 4 4 4 4 5 5 5 5 5     zone 4  centre
-6 6 6 6 6 7 7 7 7 7 7 8 8 8 8 8     zone 8  bottom-right
+     . . . . . . . . . . . . . . . .
+     . . . . 0 1 1 1 1 1 1 B . . . .
+     . . . 0 0 0 1 1 1 1 2 B B . . .
+     . . 0 0 0 0 1 1 1 1 2 2 2 B . .
+     . 0 0 0 0 0 0 1 1 2 2 2 2 B B .
+     . 3 0 0 0 0 0 1 1 2 2 2 2 2 5 .
+     . 3 3 3 0 0 4 4 4 4 2 2 5 5 5 .
+     . 3 3 3 3 3 4 4 4 4 5 5 5 5 5 .
+     . 3 3 3 3 3 4 4 4 4 5 5 5 5 5 .
+     . 3 3 3 6 6 4 4 4 4 8 8 5 5 5 .
+     . 3 6 6 6 6 6 7 7 8 8 8 8 8 5 .
+     . 6 6 6 6 6 6 7 7 8 8 8 8 8 8 .
+     . . 6 6 6 6 7 7 7 7 8 8 8 8 . .
+     . . . 6 6 6 7 7 7 7 8 8 8 . . .
+     . . . . 6 7 7 7 7 7 7 8 . . . .
+     . . . . . . . . . . . . . . . .
 ```
 
-Note this differs from the "roughly 3×3 pixels each" in the build notes: a 3×3
-grid of zones over a 16×16 panel gives about 5×5 pixels per zone. The full
-partition was chosen because it backlights the arena with no dark bands. Nine
-small 3×3 clusters with gaps between them is a different stimulus geometry; it
-would only need `BANDS` changing.
+`.` is outside the dish, `B` is the lit ring of barrier zone 2. Print it with
+`./scripts/py gpio/leds.py`, which is the source of truth — the map is computed
+from `DISH_RADIUS` and `CENTRE_RADIUS`, not written out anywhere.
 
-**Zone 2 is the barrier.** Held permanently lit at low intensity to stop the
-plasmodium reaching the reference electrode and corrupting the baseline. It is
-not offered to the model, and `set_zone()` raises if anything tries to drive it.
-The reference electrode must therefore sit in the **top-right corner**. If it
-moves, change `BARRIER_ZONE` to match.
+**The arena is the dish, not the panel.** A 150mm dish on a 160mm panel is a
+radius of 7.5 px, so the corners fall outside the agar: lighting them stimulates
+nothing and flares into the frame during imaging. Zone numbers keep their 3×3
+compass directions, but the shapes are a centre disc plus eight rim sectors.
+`CENTRE_RADIUS` is r/3, which makes the centre exactly one ninth of the dish
+area so all nine zones carry equal weight.
+
+An earlier revision of this file showed nine rectangular bands tiling the whole
+panel. That layout put four zones mostly outside the dish, the barrier among
+them, which left it lit *around* the reference electrode rather than over it.
+
+**Zone 2 is the barrier.** Held lit at low intensity to stop the plasmodium
+reaching the reference electrode and corrupting the baseline. It is not offered
+to the model, and `set_zone()` raises if anything tries to drive it. Only its
+outermost ring is energised — 6 of its 21 pixels — because the plasmodium
+travels along the rim, so a band across that approach blocks it as well as a
+full wedge with far less blue. The reference electrode must sit in the
+**top-right**. If it moves, change `BARRIER_ZONE`.
 
 ## Measurements
 
@@ -155,10 +177,15 @@ moves, change `BARRIER_ZONE` to match.
 
 | Constant | Value | Draw |
 |---|---|---|
-| `STIM_BRIGHTNESS` | 0.25 | one zone of blue, well under 100mA |
-| `IMAGING_BRIGHTNESS` | 0.15 | all 256 red at once, ~0.8A, brief |
-| `BARRIER_BRIGHTNESS` | 0.06 | zone 2, lit continuously |
+| `STIM_BRIGHTNESS` | 0.12 | one zone of blue, well under 100mA |
+| `IMAGING_BRIGHTNESS` | 0.012 | all dish pixels red at once, ~0.04A, brief |
+| `BARRIER_BRIGHTNESS` | 0.06 | zone 2's outer ring, lit continuously |
 | `MAX_BRIGHTNESS` | 0.30 | global ceiling |
+
+`IMAGING_RED` is **False**: the dish is backlit by an always-on 850nm IR flood,
+so captures use no red at all. The panel has no diffuser and photographs as a
+grid of 256 dots that buries the plasmodium. Set it True only if the panel gains
+a diffuser and the flood goes away.
 
 ## Gotchas
 

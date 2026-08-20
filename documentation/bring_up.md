@@ -1,6 +1,6 @@
 # Bring-up checklist
 
-State as of 2026-08-05, on the replacement Pi 5 (serial 62a24b43).
+Replacement Pi 5, serial 62a24b43. Hardware state current to 2026-08-20.
 
 ## Working now
 
@@ -9,7 +9,7 @@ State as of 2026-08-05, on the replacement Pi 5 (serial 62a24b43).
 | ADS1115 | I²C 0x48 | reading, 3 channels differential at 1 Hz, gain 16 |
 | SHT31 | I²C 0x44 | reading, ~24.7 °C / 53 %RH |
 | WS2812B matrix | GPIO 18 | opens as root; **not** reachable from the API, see below |
-| Camera | CSI | attached and capturing, but aimed at the ceiling |
+| Camera | CSI | attached, mounted over the dish, capturing on a 5 min timelapse |
 | Noctua fan | BCM 23 relay + BCM 12 PWM | running, 60s in every 300s |
 
 The GPIO 2/3 damage on the old board did not follow to this one:
@@ -55,44 +55,24 @@ Power the Pi down first — the CSI connector is not hot-pluggable.
 6. Restart the API so it picks the camera up: `sudo systemctl restart sllm-api`.
    `/api/status` should then show `"camera": true` and a `camera_model`.
 
-## The matrix is not reachable from the API
+## The matrix, and why it is behind a daemon
 
-`gpio/leds.py` works under `sudo` with system python. It does **not** work
-from the API, for two independent reasons:
+`rpi_ws281x` drives the PWM peripheral through `/dev/mem`, so the panel needs
+root, and the venv's `board`/`neopixel` disagrees with the system's
+`_rpi_ws281x` C extension (`ws2811_channel_t_gpionum_set, argument 2 of type
+'int'`). Either alone would stop the API driving the panel.
 
-1. **Root.** `rpi_ws281x` drives the PWM peripheral through `/dev/mem`.
-   `sllm-api.service` runs as `chootka`.
-2. **Split Blinka.** The venv has its own `board`/`neopixel`, while the C
-   extension `_rpi_ws281x` only exists in `/usr/local/lib/python3.13/
-   dist-packages`. Mixing them gives
-   `ws2811_channel_t_gpionum_set, argument 2 of type 'int'`.
+**Resolved 2026-08-05** with the third of three options — a root-owned helper
+rather than running Flask as root. `gpio/matrixd.py` owns the panel and takes
+commands over `/run/sllm/matrix.sock`; `gpio/matrix_client.py` is a
+`leds.Matrix` work-alike, so `app.py`, `camera.py` and `loop.py` do not know
+which they hold. Socket is root:chootka 0660, which is the entire access
+control story. `sllm-api` reports `matrix: true` while staying unprivileged.
 
-**Update 2026-08-05:** `python3-picamera2` and `python3-numpy` are now
-installed for the system interpreter, which previously had neither. That
-matters twice over. It removed a second symptom of the same split — before it,
-no single interpreter had both `picamera2` and `_rpi_ws281x`, so the
-blank/flash capture sequence could not run at all. And it makes option 2 below
-cheap, because system python can now run the entire stack.
-
-Until this is resolved the API starts fine and reports `"matrix": false`,
-captures happen without the red backlight, and `/api/trigger-light` returns
-503. Nothing else is affected.
-
-Three ways out, in increasing order of effort and decreasing order of risk:
-
-- **Run the API as root.** One line in the unit file. Fixes it immediately,
-  but the whole Flask app, including the routes reachable through nginx, then
-  runs privileged.
-- **Use system python for the service** instead of the venv, and run as root.
-  Removes the split-Blinka half of the problem too, but abandons the pinned
-  dependency set.
-- **A small root-owned matrix helper** that owns the panel and takes commands
-  over a unix socket, with the API staying unprivileged. Most work, and the
-  only option that does not put a web server on root.
-
-The red imaging flash is required for the capture sequence to mean anything,
-so this has to be settled before the timelapse is scientifically useful. It
-does not block attaching the camera or checking focus.
+`python3-picamera2` and `python3-numpy` are installed for the system
+interpreter, which removed the other symptom of the same split: before that no
+single interpreter had both `picamera2` and `_rpi_ws281x`, so the blank/flash
+capture sequence could not run at all.
 
 ## The admin page, and how a passkey gets enrolled
 
@@ -366,15 +346,10 @@ cd /var/www/sllm
 ./scripts/py llm/loop.py               # live -- no sudo, matrixd owns the panel
 ```
 
-**A live run no longer needs sudo or the system interpreter.** It used to: the
-venv could not drive the panel, failing with
-`ws2811_channel_t_gpionum_set, argument 2 of type 'int'`, so the instruction
-here was `sudo python3 llm/loop.py`. `gpio/matrixd.py` removed that -- it is the
-only privileged process, and everything else reaches the panel unprivileged over
-`/run/sllm/matrix.sock`. `sllm-loop.service` runs
-`api/venv/bin/python llm/loop.py` as the `sllm` user with no sudo at all, which
-is the arrangement to copy. Running the loop as root now buys nothing and
-widens what a bug can reach.
+**A live run needs no sudo.** `matrixd` is the only privileged process;
+everything else reaches the panel over `/run/sllm/matrix.sock`.
+`sllm-loop.service` runs `api/venv/bin/python llm/loop.py` as the `sllm` user.
+Older notes saying `sudo python3 llm/loop.py` predate `matrixd` and are wrong.
 
 For a hardware smoke test, add `--sham-rate 0 --interval 30`. At the default
 sham rate of 0.25 roughly one turn in four is deliberately not applied, which
@@ -404,6 +379,34 @@ model reports is its own invention. A real recording cannot tell you that,
 because you do not know what was in it; it can tell you how the loop behaves
 on real noise. Both are worth running.
 
+### Prompt variants
+
+`LLM_PROMPT` picks one of five, parsed out of `llm/filters/prompts.md` by
+`llm/filters/prompts.py`. That is the only copy — the harness and the loop read
+the same file.
+
+| variant | what the model is told |
+|---|---|
+| `blind` | the interface and nothing else |
+| `informed` | that it is coupled to Physarum, plus the zone map |
+| `adversarial` | that its context is finite and the organism consumes it |
+| `mimic` | nothing — it is given Physarum's architecture instead |
+| `null` | describe only, no actions; the model noise floor |
+
+`adversarial` changes the loop's behaviour, not just the wording. It pins
+`num_ctx` (32768 unless `LLM_NUM_CTX` is set), stops truncating history so the
+window actually fills, and sends the compact state so a quiet channel drops its
+coarse trace. All three or none: the prompt tells the model that quiet turns
+cost it less, and that is only true with the compact state on.
+
+The loop stops when the context fills rather than letting Ollama evict the
+oldest turns. It budgets off the conversation it builds itself — Ollama's
+`prompt_eval_count` plateaus below `num_ctx` and never crosses it.
+
+```bash
+./scripts/py llm/loop.py --prompt adversarial --num-ctx 4096 --replay synthetic --speed 600
+```
+
 ### Sham blocks
 
 `LLM_SHAM_RATE` (default 0.25) is the fraction of turns where the action is
@@ -425,9 +428,12 @@ data/logs/replay/turns_YYYYMMDD.jsonl     replay and dry runs
 ```
 
 Daily files, UTC. The turn record holds the reduced state, the model's full
-reply, the validated action, `sham`, `applied`, and any refusal reason — so a
-run can be re-read afterwards without the model's notes being the only
-account of it.
+reply, the validated action, `sham`, `applied`, any refusal reason, and Ollama's
+token `usage` — so a run can be re-read without the model's notes being the only
+account of it. Under `adversarial` it also carries `context_used`.
+
+The logged state includes `period_depth` per channel, which the model never
+sees. It is what `MIN_DEPTH` in `reducer.py` gets calibrated against.
 
 ## Deploying
 
@@ -481,14 +487,22 @@ tail -3 data/readings/electrodes_*.csv  # is it still logging
 git -C ~/sllm log --oneline -5          # what was done
 ```
 
-Then read this file and `CLAUDE_README.md`. The open decisions are the matrix
-root problem above and, once the camera is on, setting
-`CAMERA_FOCUS_DIOPTRES`.
+`sllm-loop.service` is enabled but does not start the model on its own — start
+it deliberately once the readings look right. Check `data/recovery.json`: if
+recovery is on the panel is held dark and the loop refuses a live run.
 
 ## Still to build
 
-Per `CLAUDE_README.md`: port `reducer.py` from `llm/filters`, then the model
-loop that reduces a 30 min window, POSTs to Ollama, and drives a zone. The
-empty-chamber run — two to three days, electrodes in agar, nothing alive —
-comes before the organism and is what the reducer thresholds get retuned
-against.
+- **A clean empty-dish baseline.** Electrodes in agar, nothing alive,
+  undisturbed, two hours minimum. `MIN_DEPTH` in `llm/filters/reducer.py` is a
+  placeholder until it exists, and it is the only honest noise floor for the
+  wiring as it now stands.
+- **Even IR backlighting.** ~23:1 gradient with the bottom-right quadrant
+  clipped; see `hardware_setup.md`. Measure with `scripts/flatfield.py`.
+- **A control for ADVERSARIAL.** Identical context pressure attributed to
+  something neutral rather than the organism. Without it a distressed note is
+  not evidence of anything.
+- **Timelapse frames are not run-labelled.** CSVs and turn logs carry `run_id`
+  and `mode`; images still land in one directory with neither.
+- **`/dev/media3: Operation not permitted`** in the API log. The `DeviceAllow`
+  list in `deploy/sllm-api.service` stops at `media2`. Camera works regardless.

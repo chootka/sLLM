@@ -1,5 +1,8 @@
 # Tailscale Setup Guide for Raspberry Pi
 
+Generic setup notes; the IPs and names below are examples. This machine is
+`sllm` at `100.85.144.126`, login `chootka`.
+
 This guide will walk you through setting up Tailscale on your Raspberry Pi 5 to make it accessible from anywhere without port forwarding.
 
 ## What is Tailscale?
@@ -97,7 +100,7 @@ Now you can access your Pi using its Tailscale IP:
 
 ```bash
 # SSH to your Pi
-ssh pi@100.64.1.2
+ssh chootka@100.64.1.2
 
 # Or access web services
 # http://100.64.1.2:5000  (Flask API)
@@ -127,7 +130,7 @@ You can use Tailscale's MagicDNS to access your Pi by name instead of IP:
 
 2. **Now you can access by name:**
    ```bash
-   ssh pi@sllm-pi
+   ssh chootka@sllm-pi
    # or
    http://sllm-pi:5000
    ```
