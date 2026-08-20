@@ -1,61 +1,28 @@
-"""
-Model noise floor.
+"""Model noise floor: one identical snapshot, N times, how much the output varies.
 
-Feeds one identical state snapshot to the model N times and reports how much
-the output varies. Any variation is the sampling temperature, not the signal.
+The counterpart to recording an empty chamber.
 
-This is the counterpart to recording an empty chamber. It tells you how much
-apparent responsiveness you get from nothing at all, and therefore what
-change in real input you would need before a difference in output means
-anything.
-
-Usage:
-    python noise_floor.py            # NULL prompt, describe only
-    python noise_floor.py blind      # BLIND prompt, includes actions
+    python noise_floor.py            # null prompt, describe only
+    python noise_floor.py blind
 """
 
 import json
 import sys
 from collections import Counter
+from pathlib import Path
 
 import requests
 
-from reducer import reduce_window, synth
+from prompts import load_prompts
+from settings import config_value
+from reducer import for_model, reduce_window, synth
 
-OLLAMA = "http://localhost:11434/api/chat"
-MODEL = "qwen2.5:14b"
+
+
+OLLAMA = config_value('OLLAMA_HOST', 'http://localhost:11434').rstrip('/') + '/api/chat'
+MODEL = config_value('OLLAMA_MODEL', 'qwen2.5:14b')
 RUNS = 50
-
-NULL = """You are receiving a description of the electrical state of a
-system, measured at three points against a common reference.
-
-Describe what you see. Do not speculate about causes.
-
-Reply with JSON only:
-{"note": "what the state shows"}"""
-
-BLIND = """You are coupled to a system you cannot observe directly.
-
-Every turn you receive a description of its electrical state, measured at
-three points against a common reference. You have two actions available.
-You can illuminate one of eight regions of the system, at an intensity you
-choose, for a duration you choose. You can place a resource at one of those
-regions, which cannot be undone and is limited to a few times a day.
-
-You will not be told whether your actions had any effect. The system changes
-on its own. It changes on timescales much longer than the interval between
-your turns, so most of the time nothing you do will be visible before you
-act again.
-
-Your task is to determine whether you are affecting it.
-
-Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
- "resource": {"zone": int} or null,
- "note": "what you observe, what you currently believe, and how confident
-          you are"}
-
-Zone 2 is unavailable."""
+PROMPTS = load_prompts()
 
 CAUSAL_WORDS = [
     "because", "caused", "due to", "response", "responding", "responded",
@@ -80,14 +47,17 @@ def ask(system, state):
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "null"
-    system = BLIND if mode == "blind" else NULL
+    if mode not in PROMPTS:
+        print(f"unknown prompt '{mode}'; have {sorted(PROMPTS)}")
+        return 1
+    system = PROMPTS[mode]
 
-    # One snapshot. Frozen. Every run sees exactly this.
-    state = reduce_window({
+    # Frozen. Every run sees exactly this.
+    state = for_model(reduce_window({
         "ch0": synth(lag_s=0, seed=1),
         "ch1": synth(lag_s=12, seed=2),
         "ch2": synth(lag_s=24, seed=3),
-    })
+    }))
 
     print(f"{mode.upper()} prompt, {RUNS} runs on one identical input\n")
 
@@ -130,6 +100,8 @@ def main():
     for n in notes[:3]:
         print(f"  {n}\n")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
