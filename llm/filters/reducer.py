@@ -21,35 +21,85 @@ PERIOD_QUANTUM_S = 5
 PERIOD_MIN = 30
 PERIOD_MAX = 240
 
+# Below this a channel is treated as having nothing to show, and its coarse
+# trace is dropped from the model-facing state by for_model(compact=True).
+# Set just above the 0.37 mV measured on unconnected electrodes 2026-08-09.
+QUIET_AMPLITUDE_MV = 0.5
+
+# A trough only counts if the correlation actually went down, not if it merely
+# paused on the way. Anything above this is still part of the decay.
+TROUGH_MAX = 0.2
+
+# How far the peak must rise above that trough to count as an oscillation.
+# PROVISIONAL: set from 2026-08-09 unconnected-electrode data, which reached
+# 0.13-0.22. Recalibrate against a clean empty-dish recording; until then
+# expect false positives near 0.15.
+MIN_DEPTH = 0.15
+
+
+def acf(x):
+    """Normalised autocorrelation, lag 0 upward. None if the input is flat."""
+    x = np.asarray(x, dtype=float)
+    x = x - x.mean()
+    if x.std() < 1e-12:
+        return None
+    c = np.correlate(x, x, mode="full")[len(x) - 1:]
+    return c / c[0]
+
 
 def dominant_period(x):
     """Strongest oscillation period in seconds, or None if there isn't one.
 
     Autocorrelation rather than FFT: the signal is short, non-stationary and
-    not a clean sinusoid, and we only want the dominant lag.
+    not a clean sinusoid.
+
+    Do NOT take the argmax over the search band. Noise decays monotonically, so
+    its largest value in the band is always at PERIOD_MIN, and the function then
+    reports the shortest lag it was allowed to consider. On 2026-08-09
+    unconnected data that fired on a third of pure-noise windows, all at 30-32 s.
+
+    A real oscillation falls below zero at half a period and climbs back at a
+    full one, so require a trough then a local maximum.
     """
-    x = np.asarray(x, dtype=float)
-    x = x - x.mean()
-    if x.std() < 1e-12:
-        return None
+    return _period_and_depth(x)[0]
 
-    corr = np.correlate(x, x, mode="full")[len(x) - 1:]
-    corr = corr / corr[0]
 
-    lo, hi = int(PERIOD_MIN * SAMPLE_HZ), int(PERIOD_MAX * SAMPLE_HZ)
-    hi = min(hi, len(corr) - 1)
-    if hi <= lo:
-        return None
+def _period_and_depth(x):
+    """(period_s, depth) -- depth is the rise above the preceding trough."""
+    c = acf(x)
+    if c is None:
+        return None, 0.0
 
-    band = corr[lo:hi]
-    peak = int(np.argmax(band))
+    hi = min(int(PERIOD_MAX * SAMPLE_HZ), len(c) - 2)
+    if hi <= int(PERIOD_MIN * SAMPLE_HZ):
+        return None, 0.0
 
-    # A real oscillation gives a distinct peak. Noise gives a flat band.
-    if band[peak] < 0.2:
-        return None
+    # The trough has to be genuine, not a wobble part way down the decay.
+    trough = None
+    for lag in range(1, hi):
+        if c[lag] < c[lag - 1] and c[lag] <= c[lag + 1] and c[lag] < TROUGH_MAX:
+            trough = lag
+            break
+    if trough is None:
+        return None, 0.0
 
-    raw = float(peak + lo) / SAMPLE_HZ
-    return round(raw / PERIOD_QUANTUM_S) * PERIOD_QUANTUM_S
+    # The FIRST peak after the trough, not the strongest: it is the fundamental,
+    # later ones are harmonics. Taking the strongest lands on whichever slow bump
+    # is largest -- near 120 s in the unconnected data, which made the detector
+    # fire on 74% of pure-noise windows.
+    best, best_depth = None, 0.0
+    for lag in range(trough + 1, hi):
+        if c[lag] > c[lag - 1] and c[lag] >= c[lag + 1]:
+            if lag < PERIOD_MIN * SAMPLE_HZ:
+                continue
+            best, best_depth = lag, float(c[lag] - c[trough])
+            break
+
+    if best is None or best_depth < MIN_DEPTH:
+        return None, best_depth
+
+    raw = float(best) / SAMPLE_HZ
+    return round(raw / PERIOD_QUANTUM_S) * PERIOD_QUANTUM_S, best_depth
 
 
 def phase_lag(a, b, period):
@@ -124,8 +174,12 @@ def describe_channel(x):
     t = np.arange(len(x))
     detrended = x - np.polyval(np.polyfit(t, x, 1), t)
 
+    period_s, depth = _period_and_depth(detrended)
+
     return {
-        "period_s": dominant_period(detrended),
+        "period_s": period_s,
+        # Not for the model. Kept so MIN_DEPTH can be calibrated from logs.
+        "period_depth": round(depth, 3),
         "amplitude_mv": amplitude(detrended),
         "drift_mv_per_min": drift(x),
         "coarse_mv": [round(float(s.mean()) * 1000, 2)
@@ -156,6 +210,37 @@ def reduce_window(channels, previous=None):
         state["changes_since_last_turn"] = compare(previous, state, names)
 
     return state
+
+
+def for_model(state, compact=False):
+    """The view of the state that goes into the prompt.
+
+    reduce_window's return is what gets logged; this is what the model sees.
+    `period_depth` is dropped -- it is diagnostic, and handing the model the
+    detector's confidence invites it to narrate the detector.
+
+    Under `compact` a quiet channel loses its coarse trace, most of the payload,
+    so a quiet turn genuinely costs less context. ADVERSARIAL tells the model
+    exactly that, so it has to be true.
+    """
+    out = {}
+    for key, value in state.items():
+        if not isinstance(value, dict) or "amplitude_mv" not in value:
+            out[key] = value
+            continue
+
+        channel = {k: v for k, v in value.items() if k != "period_depth"}
+        if compact and _is_quiet(value):
+            channel.pop("coarse_mv", None)
+        out[key] = channel
+    return out
+
+
+def _is_quiet(channel):
+    """Nothing detected and the swing is at the noise floor."""
+    return (channel.get("period_s") is None
+            and channel.get("drift_mv_per_min") is None
+            and (channel.get("amplitude_mv") or 0) < QUIET_AMPLITUDE_MV)
 
 
 def compare(before, after, names):
