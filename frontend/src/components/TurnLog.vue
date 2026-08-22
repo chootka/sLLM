@@ -6,7 +6,10 @@
         <span :class="loopRunning ? 'run on' : 'run off'">
           {{ loopRunning ? 'loop running' : 'loop stopped' }}
         </span>
-        <span class="count">{{ turns.length }} turns</span>
+        <span class="count">{{ visible.length }} turns</span>
+        <label class="follow">
+          <input type="checkbox" v-model="allRuns" /> all runs
+        </label>
         <label class="follow">
           <input type="checkbox" v-model="follow" /> follow
         </label>
@@ -15,13 +18,17 @@
     </header>
 
     <p v-if="error" class="turnlog-error">{{ error }}</p>
-    <p v-if="!turns.length && !error" class="turnlog-empty">
+    <p v-if="!visible.length && !error" class="turnlog-empty">
       No turns recorded yet. The loop writes one record per turn, including
       turns where it chose to do nothing.
     </p>
 
     <div class="turnlog-scroll" ref="scroller">
-      <article v-for="t in turns" :key="t.datetime + '-' + t.turn" class="turn">
+      <p v-if="!allRuns && hidden" class="turnlog-prior">
+        {{ hidden }} turns from earlier runs hidden
+      </p>
+
+      <article v-for="t in visible" :key="t.datetime + '-' + t.turn" class="turn">
         <div class="turn-head">
           <time>{{ stamp(t.datetime) }}</time>
           <span class="turn-n">turn {{ t.turn }}</span>
@@ -71,6 +78,7 @@ export default {
   data() {
     return {
       turns: [],
+      allRuns: false,
       loopRunning: null,
       error: '',
       follow: true,
@@ -86,6 +94,24 @@ export default {
   beforeUnmount() {
     if (this.timer) clearInterval(this.timer)
   },
+  computed: {
+    // Each run numbers its turns from 0, so the last turn 0 in the list is
+    // where the current run started. Without this every run bleeds into the
+    // previous one and the page is unreadable after a few days.
+    runStart() {
+      for (let i = this.turns.length - 1; i >= 0; i--) {
+        if (this.turns[i].turn === 0) return i
+      }
+      return 0
+    },
+    visible() {
+      return this.allRuns ? this.turns : this.turns.slice(this.runStart)
+    },
+    hidden() {
+      return this.allRuns ? 0 : this.runStart
+    },
+  },
+
   methods: {
     async load() {
       try {
@@ -182,6 +208,10 @@ export default {
 
 .turn-note { margin: 0.2rem 0; line-height: 1.45; font-size: 0.82rem;
   color: var(--ink); white-space: pre-wrap; }
+.turnlog-prior { color: var(--ink-faint); font-size: 0.72rem;
+  letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 0.9rem;
+  padding-bottom: 0.6rem; border-bottom: 1px solid var(--rule); }
+
 .turn-refused { color: var(--ink-dim); font-size: 0.78rem; margin: 0.3rem 0 0;
   border-left: 2px dashed var(--rule-strong); padding-left: 0.5rem; }
 .turn-state { display: flex; flex-wrap: wrap; gap: 0.9rem;

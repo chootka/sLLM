@@ -97,20 +97,47 @@ test alone is not a result — that is exactly what happened twice on
 
 ## Record the run here
 
-- Inoculated:
-- Settling complete (ch0 plateau, from shape.py):
-- Analysed to:
-- Disturbances, with times:
-- Baseline recording used for MIN_DEPTH:
+- Run: `20260820T231556Z-live`, mode `live` throughout
+- Started 2026-08-20 16:15 PST, stopped 2026-08-21 16:47 PST — 24 h 32 min
+- 157 turns, **0 model failures**, prompt `blind`, sham 0.25
+- Inoculated 2026-08-20 10:30 PST, so the run began ~6 h after inoculation and
+  ~6 h after the dish change: settling was already complete at run start
+- Disturbances: room lighting change at ~15:00 PST 2026-08-21, visible in the
+  timelapse as mean frame brightness 69 -> 117
+- No baseline recording exists. The plain-dish run did not happen.
 
 ## Results
 
 | test | outcome | notes |
 |---|---|---|
-| 1 amplitude tracks growth | | |
-| 2 oscillation appears | | |
-| 3 camera agrees | | |
-| 4 chamber explains it | | |
-| 5 applied vs sham | | |
+| 1 amplitude tracks growth | **negative** | all three channels 1.07x early-to-late, identical, against a 1.5x threshold. Identical across channels means global, not local |
+| 2 oscillation appears | **not run** | needs a calibrated `MIN_DEPTH`, which needs a baseline recording |
+| 3 camera agrees | **not run** | no progressive change detectable. Frame difference steps to 30% in the first 3 h then sits flat for 21. The IR imaging cannot segment the plasmodium |
+| 4 chamber explains it | — | common mode is **0.96** of total variance. Temperature r = +0.48. Humidity railed at 99.9-100.0% all run, so it can no longer serve as a regressor |
+| 5 applied vs sham | **negative** | ch0 p = 0.80, ch1 p = 0.12, ch2 p = 0.63, on 111 applied against 28 sham. Not underpowered |
 
-**Verdict:**
+**Verdict: no evidence of an organism signal, and none of a closed loop.**
+
+This is a result about the instrument, not about the organism. The measurement
+cannot see local activity, because 96% of its variance is shared across all
+three electrodes — up from 86% the day before. Anything happening at one
+electrode is a rounding error against that.
+
+More runs of this kind will not change the answer. The next work is on the
+measurement.
+
+## What follows from it
+
+The three channels share one reference electrode, so anything moving that
+reference appears on all three. That is what common mode is, and 0.96 says it
+is nearly everything.
+
+The ADS1115 can measure a **true differential pair** instead: inputs 0-1 and
+2-3, each a direct difference between two electrodes with no shared reference.
+Common mode is then rejected in hardware rather than subtracted in software,
+and subtracting it in software is what manufactured two false findings on
+2026-08-20.
+
+Cost: two channels instead of three. Change: `ADC_CHANNELS` and the mux mode in
+`gpio/adc.py`. Test: a few hours in the same dish, then compare common-mode
+share against the 0.96 above.
