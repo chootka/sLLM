@@ -17,6 +17,7 @@ CSV_DIR = os.path.join(DATA_DIR, 'readings')
 # zone. Gain 16 is +/-0.256V full scale; surface potentials are single-digit mV.
 ADC_ADDRESS = 0x48
 ADC_GAIN = 16
+ADC_DATA_RATE = 8              # SPS, 125ms integration per conversion
 ADC_SAMPLE_RATE = 1.0          # Hz
 ADC_CHANNELS = (0, 1, 2)       # differential pairs, each against channel 3
 ADC_REFERENCE_CHANNEL = 3
