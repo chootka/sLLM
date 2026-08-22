@@ -1,10 +1,9 @@
 # sLLM — hardware as built
 
-What is physically in the chamber and how it is wired. Bring-up procedure and
-diagnostics live in `bring_up.md`; the panel's geometry and current budget live
-in `led_matrix.md`. This file is the parts-and-pins reference only.
+Parts and pins. Bring-up and diagnostics: `bring_up.md`. Panel geometry and
+current budget: `led_matrix.md`.
 
-Anything marked **TBC** has not been measured — do not treat it as fact.
+**TBC** = not measured.
 
 ## Inventory
 
@@ -18,62 +17,204 @@ Anything marked **TBC** has not been measured — do not treat it as fact.
 | 850nm IR flood | not GPIO-controlled | imaging illumination, always on |
 | Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 300s |
 
-Gone from earlier revisions of this document: the microscope ring light on
-GPIO 17, the exposure LED on GPIO 27, and the DHT22. None of them exist in the
-code and none are wired. The ADC also no longer reads two single-ended
-electrodes — see below.
+Not present: GPIO 17 ring light, GPIO 27 exposure LED, DHT22.
 
 ## Electrodes — ADS1115
 
-Aluminium tape, read **differentially**, never single-ended. The potential that
-matters is between a recording tip and the reference, and a differential pair
-rejects the common-mode noise both wires pick up from the mains and from the
-panel.
+Four Ag/AgCl electrodes, read differentially. One unity-gain buffer per
+electrode on the perf board.
 
 ```
-A0 ---- recording electrode 1  \
-A1 ---- recording electrode 2   >  each measured against A3
-A2 ---- recording electrode 3  /
-A3 ---- reference electrode       (top-right corner, under barrier zone 2)
-ADDR -- GND                       address 0x48
+A0 ---- buffer ---- recording electrode 1  \
+A1 ---- buffer ---- recording electrode 2   >  each measured against A3
+A2 ---- buffer ---- recording electrode 3  /
+A3 ---- buffer ---- reference electrode       (top-right corner, under barrier zone 2)
+ADDR -- GND                                   address 0x48
 ```
 
-The mux only offers the pairs 0-1, 0-3, 1-3, 2-3, so reading 0/1/2 against 3 is
-the only arrangement that gets three channels out of one chip. That is why the
-reference is on A3, and why it must sit in the corner the barrier zone lights —
-if the reference moves, `BARRIER_ZONE` in `gpio/leds.py` moves with it.
+Mux pairs available: 0-1, 0-3, 1-3, 2-3. Reference on A3 is the only
+arrangement giving three channels from one chip. If the reference moves,
+`BARRIER_ZONE` in `gpio/leds.py` moves with it.
 
-Gain 16, ±0.256V full scale, 7.8125 µV per count. Plasmodium surface potentials
-are single-digit millivolts; the default gain 1 would bury the whole signal in
-the first 60 counts of a 32768-count range.
+Gain 16, ±0.256V full scale, 7.8125 µV per count.
 
-Every conversion runs inside `gate.quiet()` — nothing switches while a sample is
-taken. See `gpio/bus.py`.
+The ADS1115 sees an op-amp output, not the electrode. Its switched-capacitor
+input impedance does not load the tips.
+
+Every conversion runs inside `gate.quiet()`. See `gpio/bus.py`.
+
+### Analog front end
+
+Schematics: `~/schematics/` (`0_physarum-full-schematic`, `1_physarum-board-a-cobbler`,
+`3_physarum-wiring-guide`).
+
+Board A, 3V3 domain. Per channel, x4 (E1, E2, E3, REF):
+
+```
+electrode --+-- 10M --> VBIAS        VBIAS = 1.65 V from 10k/10k off 3V3, 10u to GND
+            |
+            +--> MCP604 unity-gain follower --> 10k --+--> ADS1115 A0..A3
+                                                      |
+                                                    100n
+                                                      |
+                                                     GND
+```
+
+- U1 MCP604 quad CMOS op-amp, DIP-14. VDD 3V3 (pin 4), VSS GND (pin 11), 100n
+  decoupling. Input bias ~1 pA, so the 10M bias resistors contribute ~10 uV.
+  Inputs must stay below VDD-1.2 V (~2.1 V); everything sits at VBIAS 1.65 V.
+- 10k + 100n at each ADS pin: absorbs the switched-capacitor charge kick,
+  low-pass at 159 Hz.
+- Electrodes enter on shielded Cat6 through a sealed grommet with a drip loop.
+  Shield and the four partner wires land on GND at the board only, never inside
+  the chamber.
+- Chamber is a plain plastic box. No electrical shielding around the dish or
+  the tips; the Cat6 braid is the only screening on the electrode path.
+  `0_physarum-system-overview.html` says "foil-wrapped: dark + Faraday" and
+  does not match the built rig.
+- Cat6 pairs: orange E1, green E2, blue E3, brown REF.
+- The buffers exist because the ADS1115 presents ~710 kOhm differential input
+  impedance at the +/-0.256 V range.
+
+**MCP604 offset is expected.** Each follower adds a few mV of fixed offset.
+Constant per channel, so it is a baseline shift, not noise: record a baseline
+with electrodes in plain saline and subtract per channel. Zero-drift upgrade
+option is a MCP6V14 (SMD).
+
+Source impedance interacts with the 10M bias resistor: a 3 MOhm protoplasmic
+tube against 10M to VBIAS attenuates by 0.77.
+
+**Data rate 8 SPS, set 2026-08-22** (`ADC_DATA_RATE` in `api/config.py`).
+Previously unset, so the library default 128 SPS applied. 125 ms integration
+per conversion instead of 7.8 ms; three channels is 375 ms, inside the 1 s
+cadence.
+
+Measured effect, same beaker and electrodes, 45 min apart:
+
+| channel | sd at 128 SPS | sd at 8 SPS |
+|---|---|---|
+| ch0 | 1.80 mV | 0.051 mV |
+| ch1 | 0.69 mV | 0.045 mV |
+| ch2 | 2.82 mV | 0.109 mV |
+
+15-35x, against ~4x predicted from averaging alone. The excess was 50 Hz
+pickup aliasing through a conversion window shorter than one mains cycle;
+125 ms spans several cycles and cancels it. Noise floor is now ~50 uV, ~6 LSB.
+
+### Two bench tests, and what each isolates
+
+| test | setup | isolates |
+|---|---|---|
+| **shorted leads** | all four electrode leads clipped together at the far end | buffer + ADC offset only. Board A build step 5 expects all three channels ~0 mV |
+| **common bath** | all four tips in one beaker of saline, wired normally | buffer offset + electrode mismatch |
+
+Bath reading minus shorted reading is the electrode contribution. Run the
+shorted test first.
+
+### Chloridization, as built
+
+Electrolytic. 5 mm tip of electrode wire as anode, a second silver wire as
+cathode, 9V battery with 1k in line, 13 minutes, 100 mL distilled water with
+6 g table salt (~1 M). All four electrodes plated in the same bath.
+
+- Current ~8 mA. Tip area 0.08-0.16 cm2 at 0.5-1 mm wire, so 50-100 mA/cm2.
+  Convention is ~1 mA/cm2. Expect a thick, loosely-adherent film.
+- Iodide contamination ruled out: 6 g iodized salt carries ~1.6 umol iodide
+  against 103 mmol chloride, and the bath passed ~62 umol of charge.
+
+Wire diameter: **TBC**.
+
+### Common-bath offsets, 2026-08-22
+
+All four tips in 1 g / 100 mL saline, wired normally through the buffers.
+True potential difference between tips in one bath is zero, so the reading is
+offset. First 3 minutes after immersion, still settling:
+
+| pair | mean | sd | drift over 3 min |
+|---|---|---|---|
+| ch0 - A3 | +8.95 mV | 1.80 | -0.72 mV |
+| ch1 - A3 | +6.11 mV | 0.69 | -0.56 mV |
+| ch2 - A3 | +3.81 mV | 2.82 | -2.64 mV |
+
+All three positive. Electrode batch mismatch is excluded - one bath, four
+electrodes. Consistent with MCP604 follower offset, which the wiring guide
+already expects at a few mV per channel: each reading is Vos(n) - Vos(A3), so
+one offset follower on A3 shifts all three the same way. The shorted-lead test
+separates the two.
+
+Fixed offset of this size is not a problem at gain 16 - 9 mV against
++/-256 mV of range. Drift is what matters.
+
+Superseded: the 0.7-2.8 mV sd was the 128 SPS conversion window, not front-end
+noise. See the data rate note above. At 8 SPS the same setup reads 0.045-0.109
+mV, and the offsets scatter either side of zero (+2.5, -0.5, -2.6 mV) rather
+than all positive.
+
+### Agar geometry
+
+As built: one continuous bed. Reference buried in it, three recording
+electrodes just below the surface.
+
+The bed conducts and shunts the source. Protoplasmic tube resistance is ~3 MΩ
+(Adamatzky 2014). Spreading resistance between mm-scale tips a few cm apart in
+the bed is 10–100 kΩ, a divider of 30:1 to 300:1: a 5 mV tube potential
+reaches the buffer as 17–170 µV, against a 7.8 µV step and tens of mV of
+drift.
+
+Measure it with a multimeter across two electrode leads. kΩ = shunted.
+
+Depth split is a second effect. The bed loses water from the top, raising
+surface ion concentration, so there is an electrochemical gradient between the
+buried reference and the near-surface recorders. It appears on all three
+channels because they share that reference.
+
+### Target geometry — islands
+
+1. One island of non-nutrient 2% agar per electrode, bare dish floor between
+   them, gaps ~10 mm.
+2. Reference island at the centre, plasmodium inoculated there.
+3. All four tips flat on the dish floor under their blob, at one depth.
+4. Bare oat flake on each recording island.
+
+Electrode spacing sets apparent period: 2–3 cm gives 30–40 min (Adamatzky and
+Jones 2011), 2–3 mm gives 60–180 s (Kishimoto 1958). Keep the recording pair
+close; the arena is 150 mm.
+
+### Reading a bench test
+
+Read from the running logger rather than starting a second process:
+
+```bash
+tail -f /var/www/sllm/data/readings/electrodes_$(date +%Y%m%d).csv
+```
+
+Do not run `gpio/adc.py watch` while `sllm-api` is active - both drive the same
+ADS1115 over I2C. Stop the unit first if you want the standalone tool.
+
+Allow 20-30 min to settle before reading. Tip source impedance cannot be
+measured from the ADC; the buffers block it.
 
 ## Illumination
 
-Two separate light sources with two different jobs. They cannot share a frame.
+Two sources, never in the same frame.
 
-**IR flood (imaging).** An always-on 850nm flood backlights the dish. It is not
-switched from GPIO and takes no part in the capture sequence. Being IR, it is
-not a stimulus Physarum can respond to, which is the whole point of using it.
+**IR flood (imaging).** 850nm, always on, not GPIO-switched, takes no part in
+the capture sequence.
 
 - Emitter / part: **TBC**
 - Power source: **TBC**
 - Mounting height and standoff to the diffuser: **TBC**
 
-**Known fault, 2026-08-19: the flood is not even.** Sampling a 6×6 luminance
-grid over the dish crop on three frames spanning 18 hours gives a stable ~20:1
-gradient — the bottom-right quadrant clips at 255 across roughly a quarter of
-the dish, the top-left sits at 10–25. The pattern does not move between frames,
-so it is fixed geometry: a single near-field emitter, close under the diffuser
-and off the optical axis toward the bottom-right. Anything in the clipped region
-is unrecoverable.
+**Fault, 2026-08-19: flood is uneven.** 6×6 luminance grid over the dish crop,
+three frames spanning 18 hours: stable ~20:1 gradient, bottom-right quadrant
+clipped at 255 over ~¼ of the dish, top-left at 10–25. Fixed geometry — single
+near-field emitter, close under the diffuser, off-axis toward bottom-right.
+Clipped pixels are unrecoverable.
 
 ### Replacement rig — target geometry
 
-The dish is **150mm**. Modelling 8 Lambertian emitters on a ring, illuminance
-across the 75mm-radius disc, best ring radius at each standoff:
+Dish is 150mm. 8 Lambertian emitters on a ring, illuminance across the 75mm
+radius, best ring radius per standoff:
 
 | Standoff to diffuser | Best ring diameter | max/min |
 |---|---|---|
@@ -83,119 +224,111 @@ across the 75mm-radius disc, best ring radius at each standoff:
 | 50mm | 120mm | 1.4 |
 | 75mm | 144mm | 1.1 |
 
-**Build to 8 emitters on a 110–120mm circle, 40–50mm below the diffuser**,
-firing straight up into it. Note the ring is *smaller* than the dish, about
-0.75x its diameter — the outer emitters still throw light inward across the
-centre, so a ring matched to the dish edge over-lights the rim.
+Build: 8 emitters on a 110–120mm circle, 40–50mm below the diffuser, firing
+straight up. Ring diameter is ~0.75× the dish; a ring matched to the dish edge
+over-lights the rim.
 
-With only ~30mm of height, add a 9th emitter at the centre: 8-on-a-ring alone is
-2.8 there, 8+1 is 2.0, and 12+1 is 1.6. Below ~25mm no ring geometry works for a
-dish this wide — that case is two spaced diffuser layers and white cavity walls
-doing the work instead.
+At ~30mm add a 9th emitter at the centre: 8-on-a-ring is 2.8, 8+1 is 2.0, 12+1
+is 1.6. Below ~25mm no ring geometry works at this dish width — use two spaced
+diffuser layers and white cavity walls.
 
-Caveats on the table: it assumes **wide-angle emitters** (narrow domes at 40mm
-print discs no matter what the geometry says), and it is illuminance before any
-diffusion, so the built rig should beat it.
+Table assumes wide-angle emitters; narrow domes at 40mm print discs. Figures
+are illuminance before diffusion.
 
 Drive: 4 strings of 2 LEDs across 5V, ~22Ω 0.5W per string, ~400mA total at
-100mA per emitter. One resistor per string — 850nm Vf is only ~1.4-1.6V and
-paralleled emitters current-hog badly.
+100mA per emitter. One resistor per string — 850nm Vf is ~1.4–1.6V and
+paralleled emitters current-hog.
 
-Order of work, first item is most of the win:
+Order of work:
 
 1. Standoff and diffusion. Uniformity is set by emitter-to-diffuser distance,
-   not emitter count. Two spaced layers beat one sheet on the LEDs.
-2. Ring geometry per the table above, emitters pointing up, not inward at the
-   dish. Inward-aimed gives a bright rim and dark centre.
-3. Line the cavity — sides and floor — with white card. Free bounce fill, and a
-   bigger win than adding emitters.
+   not emitter count. Two spaced layers beat one sheet.
+2. Ring geometry per the table, emitters pointing up, not inward. Inward-aimed
+   gives a bright rim and dark centre.
+3. Line the cavity sides and floor with white card.
 4. Centre the array on the optical axis.
-5. Lock camera exposure and gain so AE stops metering the hot spot.
-6. Flat-field correction in software, last. It can normalise a 2:1 gradient; it
-   cannot recover clipped pixels.
+5. Lock camera exposure and gain.
+6. Flat-field correction in software. Normalises a 2:1 gradient; cannot
+   recover clipped pixels.
 
-Measure before and after with `./scripts/py scripts/flatfield.py` on frames with
-matched exposure. Baseline 2026-08-19: **ratio 23.2, clipped 9.2%**. Target is
-ratio under 2 with nothing clipped.
+Measure with `./scripts/py scripts/flatfield.py` on matched-exposure frames.
+Baseline 2026-08-19: ratio 23.2, clipped 9.2%. Target: ratio under 2, nothing
+clipped.
 
-**First attempt, 2026-08-20: removed.** The new IR string browned out the fan
-relay. Not a capacity problem — 8 emitters draw roughly 65mA against a 4A supply
-— so suspect a short in that wiring and check it before rebuilding. The LEDs
-came out and the old single emitter is back in service, so the 23:1 gradient
-above is still what the camera sees.
+2026-08-20: first replacement string browned out the fan relay and was removed.
+8 emitters draw ~65mA against a 4A supply, so check that wiring for a short
+before rebuilding. Old single emitter back in service; the 23:1 gradient stands.
 
 **Matrix red (disabled).** `IMAGING_RED = False` in `gpio/leds.py`. The panel is
-a bare 10mm-pitch array with no diffuser above it, so lit for imaging it
-photographs as a grid of 256 dots that buries the plasmodium between them. The
-two sources also want exposures an order of magnitude apart — roughly 8ms for
-red at `IMAGING_BRIGHTNESS` against ~60ms for the flood — so exposing for one
-blows or blacks the other. Re-enable only if the panel gains a diffuser and the
-IR flood goes away.
+a bare 10mm-pitch array with no diffuser, so it photographs as a grid of 256
+dots. Exposures differ by an order of magnitude — ~8ms for red at
+`IMAGING_BRIGHTNESS` against ~60ms for the flood. Re-enable only with a
+diffuser above the panel and the IR flood removed.
 
-The capture sequence still blanks the panel before every exposure regardless,
-which is what keeps the barrier zone out of the frame.
+The capture sequence blanks the panel before every exposure, which keeps the
+barrier zone out of frame.
 
 ## Matrix — WS2812B 16×16
 
-**Never write white.** 256 pixels at full white draws roughly 15A, far past
-what the supply or the wiring will take. `MAX_BRIGHTNESS` in `gpio/leds.py`
-caps it globally; one zone of blue at `STIM_BRIGHTNESS` is under 100mA.
+**Fault: unplugged. Shorted from condensation inside the chamber.** Date
+unplugged: **TBC**. Humidity railed at 99.9-100.0% for the whole 20260821 run.
+The panel sits under the dish inside the humid box; any rebuild needs the
+matrix sealed against condensation.
 
-Data on BCM 18 (**physical header pin 12**, not physical 18) through a 74AHCT125
-level shifter. Wiring and the shifter's own pinout are in `gpio/matrix_diag.py`;
-zone geometry, brightness caps and the current budget are in `led_matrix.md`.
+`sllm-matrixd` reports success with the panel unpowered - writes go out over
+GPIO 18 and there is no readback. Software state is not evidence the panel lit.
 
-The panel is owned exclusively by `sllm-matrixd` running as root — it is the
-only privileged process in the system. Everything else talks to it over a unix
+
+**Never write white.** 256 pixels at full white draws ~15A. `MAX_BRIGHTNESS` in
+`gpio/leds.py` caps globally; one zone of blue at `STIM_BRIGHTNESS` is under
+100mA.
+
+Data on BCM 18 (**physical header pin 12**) through a 74AHCT125 level shifter.
+Shifter pinout: `gpio/matrix_diag.py`. Zone geometry, brightness caps, current
+budget: `led_matrix.md`.
+
+The panel is owned exclusively by `sllm-matrixd` running as root — the only
+privileged process in the system. Everything else talks to it over a unix
 socket at `/run/sllm/matrix.sock` (root:sllm, 0660) via `gpio/matrix_client.py`,
-which presents the same methods as `leds.Matrix`. Never drive GPIO 18 directly
-while matrixd is up; stop the unit first.
+which presents the same methods as `leds.Matrix`. Stop the unit before driving
+GPIO 18 directly.
 
 ## Camera
 
-Camera Module 3 NoIR on the CSI ribbon. The connector is not hot-pluggable —
-power down first. Cable orientation and the attach procedure are in
-`bring_up.md`; do not work from memory on ribbon orientation.
+Camera Module 3 NoIR on the CSI ribbon. Not hot-pluggable — power down first.
+Cable orientation and attach procedure: `bring_up.md`.
 
 From `api/config.py`:
 
-- `CAMERA_RESOLUTION = (2304, 1296)` — the IMX708's binned full-field mode. The
-  full 4608×2592 is four times the pixels for no extra information about a
-  plasmodium and makes a multi-day timelapse enormous.
+- `CAMERA_RESOLUTION = (2304, 1296)` — IMX708 binned full-field mode.
 - `CAMERA_FOCUS_DIOPTRES = 9.3` — measured 2026-08-13, sweep peak at 16×
-  contrast. Focus is locked rather than left hunting between frames.
+  contrast. Locked, not hunting.
 - `IMAGE_CAPTURE_INTERVAL = 300` seconds.
 
-A UVC camera on USB is supported as an alternative (`CAMERA_SOURCE`,
+UVC camera on USB supported as an alternative (`CAMERA_SOURCE`,
 `USB_CAMERA_RESOLUTION`, `USB_CAMERA_FLUSH_FRAMES`). List attached cameras with
 `./scripts/py gpio/camera.py info`.
 
 ## Chamber fan
 
-A Noctua NF-A6x25 5V on a relay. Its only purpose is keeping fresh air moving so
-mould does not establish — it will shift humidity and temperature as a side
-effect, but neither is a setpoint and neither decides when it runs. The timed
-cycle is the whole rule.
+Noctua NF-A6x25 5V on a relay. Runs on a timed cycle for mould prevention.
+Humidity and temperature are not setpoints and do not gate it.
 
 ```
 relay IN  -> physical pin 16 = BCM 23, active-high (HIGH closes)
 fan PWM   -> physical pin 32 = BCM 12, held HIGH as a level while running
 ```
 
-The PWM line is held high as a level, not driven as a waveform. Without it the
-relay closes and the fan does not turn: the pin idles as an input with the
-pull-down on, and the fan reads that as 0% duty. See the `Relay` docstring in
-`gpio/sensor.py`.
+The PWM line is a held level, not a waveform. Without it the relay closes and
+the fan does not turn: the pin idles as an input with the pull-down on, and the
+fan reads 0% duty. See the `Relay` docstring in `gpio/sensor.py`.
 
-Cycle: 60s on in every 300s (20% duty), with 30s minimum on and 60s minimum off
-purely to stop the contacts chattering. Optional extra ventilation at saturation
-(`FAN_RH_ON` / `FAN_RH_OFF`) is off by default and is not part of the mould
-logic.
+Cycle: 60s on in every 300s (20% duty), 30s minimum on, 60s minimum off.
+`FAN_RH_ON` / `FAN_RH_OFF` saturation ventilation is off by default.
 
 ## Environment sensor
 
-SHT31 at `0x44` (`0x45` if ADDR is pulled high), read once a second. It replaced
-the DHT22 the original build notes called for.
+SHT31 at `0x44` (`0x45` with ADDR high), read once a second.
 
 ## Quick checks
 
@@ -207,5 +340,4 @@ i2cdetect -y 1                    # expect 44 and 48
 sudo systemctl stop sllm-matrixd && sudo python3 gpio/leds.py zones
 ```
 
-Deeper diagnostics, the polkit/systemd layout, and the panel debugging protocol
-are in `bring_up.md`.
+Deeper diagnostics, polkit/systemd layout, panel debugging: `bring_up.md`.
