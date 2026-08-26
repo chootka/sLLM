@@ -286,24 +286,24 @@ def get_readings_range():
 def get_phase_lock():
     """Is the applied light arriving at a preferred phase of the rhythm?
 
-    **Admin only, for the same reason /api/turns withholds `applied`.** Only
-    applied actions put light in the dish, so the onset times this reads out of
-    the switches log are exactly the record of which turns were not shams. The
-    aggregate alone would be fairly harmless, but the endpoint would still be a
-    place to go looking, and the experiment depends on that information not
-    being reachable from a public page.
-
     Two systems entrain each other without either knowing anything about the
     other. What that needs is for the phase relationship between them to settle
     rather than stay arbitrary, which is what this measures and all it claims.
+
+    **Event counts are withheld unless the caller is an authenticated admin.**
+    Only applied actions put light in the dish, so the number of onsets in a
+    window, set against the actions the public turn log shows were requested,
+    gives away how many of them were shams. The shape does not: a phase
+    distribution says when light landed relative to the rhythm and nothing
+    about which turn produced it. So the histogram goes out normalised, and the
+    counts stay behind the same door `applied` does.
     """
     try:
         import admin as admin_module
 
-        if not admin_module.is_authenticated():
-            return jsonify({"error": "admin only"}), 403
+        privileged = admin_module.is_authenticated()
     except Exception:
-        return jsonify({"error": "admin only"}), 403
+        privileged = False
 
     log = getattr(electrodes, 'log', None)
     if log is None:
@@ -354,8 +354,17 @@ def get_phase_lock():
     out = analyse(stamps, values, sorted(onsets),
                   bins=request.args.get('bins', 12, type=int),
                   shuffles=300)
-    out.update({"start": start, "end": end, "channel": channel,
-                "samples": len(stamps)})
+    out.update({"start": start, "end": end, "channel": channel})
+    if privileged:
+        out["samples"] = len(stamps)
+    else:
+        total = sum(out.get("bins") or []) or 1
+        out["bins"] = [round(c / total, 4) for c in (out.get("bins") or [])]
+        out["n_onsets"] = None
+        # A thin window must still read as "not enough yet" rather than as a
+        # negative result, so the verdict and its reason survive; the number
+        # behind it does not.
+        out["detail"] = re.sub(r'\d+', 'too few', out.get("detail", ""), count=1)
     return jsonify(out)
 
 
