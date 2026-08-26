@@ -351,7 +351,7 @@ export default {
       imageKey: 0, // Used to force img element re-render
       capturingImage: false, // Prevent concurrent captures
       viewMode: 'livestream', // 'livestream' or 'timelapse'
-      maxImages: 100, // Max images held in memory at once
+      maxImages: 500, // Max images held in memory at once
       totalImagesOnServer: 0, // Full archive size reported by /api/images
       cameraAvailable: null, // null until /api/status reports; false hides livestream
       viewModeChosenByUser: false, // Don't override an explicit toggle
@@ -928,11 +928,12 @@ export default {
       //   A1  blue    r40L  blue     dashed
       //   A2  green   r40R  green    dotted
       //   A3  white   r38R  brown    (reference)
+      // ch0 follows the Cat6 pair colour (orange), not the ADS lead (yellow).
       // Lightened off pure hues for the black panel. Same hues in both themes;
-      // the light set is stepped down so yellow does not vanish on white.
+      // the light set is stepped down to hold contrast on white.
       const palette = this.theme === 'light'
-        ? ['#a08400', '#1f6fb0', '#2f8f45', '#333333']
-        : ['#e8d44a', '#5aa9e6', '#5ecb6e', '#e8e8e8']
+        ? ['#b4560e', '#1f6fb0', '#2f8f45', '#333333']
+        : ['#ef9040', '#5aa9e6', '#5ecb6e', '#e8e8e8']
       return palette[Number(channel) % palette.length]
     },
 
