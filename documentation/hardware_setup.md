@@ -72,7 +72,15 @@ electrode --+-- 10M --> VBIAS        VBIAS = 1.65 V from 10k/10k off 3V3, 10u to
   the tips; the Cat6 braid is the only screening on the electrode path.
   `0_physarum-system-overview.html` says "foil-wrapped: dark + Faraday" and
   does not match the built rig.
-- Cat6 pairs: orange E1, green E2, blue E3, brown REF.
+- Channel map, board is the source of truth (Board A rows, confirmed at the
+  bench 2026-08-26):
+
+  | ADS input | app channel | Board A row | Cat6 pair | panel trace |
+  |---|---|---|---|---|
+  | A0 | ch0 | r38L | orange | orange, solid |
+  | A1 | ch1 | r40L | blue | blue, dashed |
+  | A2 | ch2 | r40R | green | green, dotted |
+  | A3 | reference | r38R | brown | grey |
 - The buffers exist because the ADS1115 presents ~710 kOhm differential input
   impedance at the +/-0.256 V range.
 

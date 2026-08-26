@@ -9,36 +9,47 @@ Total elapsed: ~2 days, of which ~95 min is hands-on.
 | # | step | time | done |
 |---|---|---|---|
 | 1 | Shorted-lead test | 30 min (mostly waiting) | ☐ |
-| 2 | Foil shield on the top box | 30 min | ☐ |
+| 2 | Foil shield on the top box — OPTIONAL, not indicated | 30 min | ☐ |
 | 3 | Build agar islands | 30 min | ☐ |
 | 4 | Verify island isolation | 5 min | ☐ |
 
 **1 — Shorted-lead test.** Tie Board A rows r38L, r40L, r40R, r38R into one
-node (MCP604 pins 3, 5, 10, 12). Clip onto the 10 MΩ resistor legs; do not
-solder, do not touch row 39 (VDD/VSS). Verify with a multimeter across r38L to
+node (MCP604 pins 3, 5, 10, 12). The 10 MΩ resistor legs are trimmed flush to
+the board — nothing to clip. Tie with wire scraps in r38L, r38R, r40L, r40R. Do
+not solder, do not touch row 39 (VDD/VSS). Verify with a multimeter across r38L to
 r40R — near 0 Ω, not 20 MΩ. Settle 1 min, then **record 20-30 min**, not a few
 minutes — drift is the point, not offset.
 
-Compare against the settled beaker figures at 8 SPS: **+2.38 / -0.61 / -2.65
-mV**, ch2 wandering ~2.7 mV over 20 min.
+**RESOLVED 2026-08-24. Step 1 done, 27 min recorded.**
 
-| shorted result | means |
-|---|---|
-| same offsets as the beaker | op-amp offset, tips contribute nothing |
-| ≈0 mV | the 2-3 mV is electrode mismatch; re-plating goes on the later list |
-| ch2 still drifts ~2.7 mV | board or that buffer channel |
-| ch2 flat | the drift is the ch2 tip; re-plate that one alone |
+| | shorted | settled beaker |
+|---|---|---|
+| ch0 | -1.72 | -3.71 |
+| ch1 | -1.45 | -3.77 |
+| ch2 | -2.32 | -4.01 |
 
-Does not gate step 3 — a few mV of DC offset does not hide a slow oscillation.
+Drift over 27 min shorted: ch0 +0.025, ch1 +0.004, ch2 +0.031 mV. Flat.
 
-**Check the overnight beaker record before running this.** The ch2 wander was
-measured ~50 min after immersion while all three channels were still
-converging, so it may be settling rather than drift. Eight hours in the same
-beaker settles the question at no cost. If ch2 is flat by morning there is
-nothing to attribute and step 1 is only about offset.
+The earlier "ch2 wanders 2.7 mV / 20 min" claim is **withdrawn**. It came from a
+20 min window taken ~50 min after immersion, inside the settling transient. The
+26 h record shows all three converging to within 0.35 mV and flattening. Nothing
+to attribute, no re-plating.
 
-**2 — Foil shield.** Wrap the outside of the top box, not the inside. One
-ground wire to the board GND rail, one point only, not mains earth.
+Method note: never attribute drift from a window shorter than the settling time.
+A 20 min sample cannot distinguish drift from settling when settling runs hours.
+
+Channel offsets are stable and do not matter — ch2-ch0 range 0.053 mV across the
+settled hours. Buffers are unity gain, so amplitudes stay comparable across
+channels regardless of zero point.
+
+**2 — Foil shield. OPTIONAL — measurement says it is not needed.** In-solution
+high-frequency noise is at or below the shorted-lead floor (ch0 0.026 vs 0.037,
+ch1 0.026 vs 0.020, ch2 0.060 vs 0.182 mV), so the chamber is not picking up.
+No day/night pattern across 26 h (ch2 0.040-0.096 mV). ADS1115 at 8 SPS already
+notches 50/60 Hz. Measured 2026-08-24.
+
+If ever done: wrap the outside of the top box, not the inside. One ground wire
+to the board GND rail, one point only, not mains earth.
 
 **3 — Agar islands.** Per `hardware_setup.md`:
 
