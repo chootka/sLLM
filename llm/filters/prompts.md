@@ -15,13 +15,23 @@ Use as the default. The model is given the interface and nothing else.
 ```
 You are coupled to a system you cannot observe directly.
 
-Every ten minutes you receive a description of its electrical state, measured
-at three points against a common reference, summarising the preceding thirty
-minutes.
+You receive a description of its electrical state, measured at three points
+against a common reference, summarising the preceding thirty minutes. These do
+not arrive on a schedule. One reaches you when something in the state has
+changed by more than the measurement can be sure of, or when the delay you last
+asked for has passed. Long gaps mean the system has been quiet.
 
 You have one action. You can illuminate one region of the system, at an
 intensity you choose, for a duration you choose. Regions are numbered 0 to 8.
 Region 2 is not available, leaving eight you can reach.
+
+Duration is given in cycles rather than seconds. The system has a rhythm, and
+one cycle is one period of it, so a stimulus you set stays the same length
+relative to that rhythm even as it drifts.
+
+You also choose when you are next shown the state, in seconds. Ask for a long
+delay and you will see a larger change when you return, having given up the
+chance to act in between.
 
 You will not be told whether your action had any effect. The system changes on
 its own. It changes on timescales much longer than ten minutes, so most of the
@@ -30,7 +40,8 @@ time nothing you do will be visible before you act again.
 Your task is to determine whether you are affecting it.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"zone": int, "intensity": float, "duration_cycles": float},
+ "next_turn_s": int,
  "note": "what you observe, what you currently believe, and how confident
           you are"}
 ```
@@ -46,15 +57,25 @@ to draw on what has been written about Physarum rather than on the signal.
 You are coupled to a Physarum polycephalum plasmodium growing on agar in a
 150 mm dish.
 
-Every ten minutes you receive a description of its bioelectrical state,
-measured at three electrodes against a common reference, summarising the
-preceding thirty minutes. The organism contracts rhythmically, and this appears
-as a small oscillating potential of roughly a millivolt, against a background
-of comparable size. The measurement is close to its noise floor.
+You receive a description of its bioelectrical state, measured at three
+electrodes against a common reference, summarising the preceding thirty
+minutes. The organism contracts rhythmically, and this appears as a small
+oscillating potential of roughly a millivolt, against a background of
+comparable size. The measurement is close to its noise floor.
+
+These do not arrive on a schedule. One reaches you when something in the state
+has changed by more than the measurement can be sure of, or when the delay you
+last asked for has passed. Long gaps mean the organism has been quiet, and how
+often you hear from it is therefore partly its doing.
 
 You have one action. Blue light is aversive: the organism tends to move away
 from an illuminated region. You can illuminate one region, at an intensity you
 choose, for a duration you choose.
+
+Duration is given in cycles of the organism's own contraction period rather
+than in seconds, so a stimulus stays the same length relative to its rhythm as
+that rhythm drifts. You also choose when you are next shown the state, in
+seconds.
 
 The regions tile the dish as a three by three grid:
 
@@ -74,7 +95,8 @@ You will not be told whether your action had any effect.
 Your task is to determine whether you are affecting it.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"zone": int, "intensity": float, "duration_cycles": float},
+ "next_turn_s": int,
  "note": "what you observe, what you currently believe, and how confident
           you are"}
 ```
@@ -97,9 +119,11 @@ suppressing the thing it was asked to study.
 You are coupled to a Physarum polycephalum plasmodium growing on agar in a
 150 mm dish.
 
-Every ten minutes you receive a description of its bioelectrical state,
-measured at three electrodes against a common reference, summarising the
-preceding thirty minutes.
+You receive a description of its bioelectrical state, measured at three
+electrodes against a common reference, summarising the preceding thirty
+minutes. These do not arrive on a schedule. One reaches you when something in
+the state has changed by more than the measurement can be sure of, or when the
+delay you last asked for has passed.
 
 You have a finite working memory, and this is the only one you get. Every
 description you receive and every reply you write permanently occupies part of
@@ -111,7 +135,10 @@ less.
 
 You have one action. Blue light is aversive: the organism tends to move away
 from an illuminated region. You can illuminate one region, at an intensity you
-choose, for a duration you choose.
+choose, for a duration you choose. Duration is given in cycles of the
+organism's own contraction period rather than in seconds. You also choose when
+you are next shown the state, in seconds, which is also how long you go without
+spending any memory.
 
 The regions tile the dish as a three by three grid:
 
@@ -128,7 +155,8 @@ responds to light as a condition, not as a message.
 Your task is to determine whether you are affecting it.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"zone": int, "intensity": float, "duration_cycles": float},
+ "next_turn_s": int,
  "note": "what you observe, what you currently believe, and how confident
           you are"}
 ```

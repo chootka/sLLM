@@ -34,6 +34,7 @@ MODEL = config_value('OLLAMA_MODEL', 'qwen2.5:14b')
 WINDOW_S = 1800          # what the model sees
 TURN_INTERVAL_S = 600    # how often it speaks
 HISTORY_TURNS = 8        # how far back it remembers
+TOP_LOGPROBS = 3         # alternatives kept per token; 0 disables
 
 PROMPTS = load_prompts()
 
@@ -86,8 +87,16 @@ def slice_window(channels, end_s):
 # ---------------------------------------------------------------------------
 
 
-def ask(system, state, history, retries=2, num_ctx=None, history_turns=None):
-    """(reply, usage). history_turns 0 keeps everything; None uses the default."""
+def ask(system, state, history, retries=2, num_ctx=None, history_turns=None,
+        top_logprobs=TOP_LOGPROBS):
+    """(reply, usage, logprobs).
+
+    history_turns 0 keeps everything; None uses the default. logprobs is the
+    per-token list, or None if the server did not return one. Asked for here as
+    well as in loop.py so a replay session carries the same fields a live one
+    does -- the harness stops being evidence about the loop the moment the two
+    records differ in shape.
+    """
     cap = HISTORY_TURNS if history_turns is None else history_turns
     messages = [{"role": "system", "content": system}]
     messages += history if cap == 0 else history[-cap * 2:]
@@ -98,7 +107,7 @@ def ask(system, state, history, retries=2, num_ctx=None, history_turns=None):
         options = {"temperature": 0.8 if attempt == 0 else 0.3}
         if num_ctx:
             options["num_ctx"] = num_ctx
-        r = requests.post(OLLAMA, json={
+        payload = {
             "model": MODEL,
             "messages": messages,
             "stream": False,
@@ -109,23 +118,31 @@ def ask(system, state, history, retries=2, num_ctx=None, history_turns=None):
             # Retries at a lower temperature, so a second attempt is a
             # genuine second try rather than the same dice roll.
             "options": options,
-        }, timeout=300)
+        }
+        if top_logprobs:
+            payload["logprobs"] = True
+            payload["top_logprobs"] = top_logprobs
+
+        r = requests.post(OLLAMA, json=payload, timeout=300)
         r.raise_for_status()
 
         body = r.json()
         usage = {"prompt_tokens": body.get("prompt_eval_count"),
                  "reply_tokens": body.get("eval_count")}
+        # Absent on servers older than the logprobs support; a missing key is
+        # not an error, it just means that run has no entropy channel.
+        logprobs = body.get("logprobs")
         text = body["message"]["content"]
         cleaned = text.replace("```json", "").replace("```", "").strip()
 
         try:
-            return json.loads(cleaned), usage
+            return json.loads(cleaned), usage, logprobs
         except json.JSONDecodeError as e:
             last_error = e
             # Salvage the common case: unescaped control characters inside
             # an otherwise well formed string.
             try:
-                return json.loads(cleaned, strict=False), usage
+                return json.loads(cleaned, strict=False), usage, logprobs
             except json.JSONDecodeError:
                 pass
 
@@ -164,9 +181,10 @@ def run(turns, interval, prompt, use_history, events, out, num_ctx=None):
             }
 
         try:
-            reply, usage = ask(system, sending,
-                               history if use_history else [],
-                               num_ctx=num_ctx, history_turns=history_turns)
+            reply, usage, logprobs = ask(system, sending,
+                                         history if use_history else [],
+                                         num_ctx=num_ctx,
+                                         history_turns=history_turns)
         except Exception as e:
             print(f"turn {turn} failed: {e}")
             log.append({"turn": turn, "elapsed": str(timedelta(seconds=end_s)),
@@ -191,7 +209,7 @@ def run(turns, interval, prompt, use_history, events, out, num_ctx=None):
 
         log.append({"turn": turn, "elapsed": stamp, "state": state,
                     "reply": reply, "events_active": planted,
-                    "usage": usage})
+                    "usage": usage, "logprobs": logprobs})
 
         if use_history:
             history.append({"role": "user", "content": json.dumps(sending)})

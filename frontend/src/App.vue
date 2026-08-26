@@ -4,6 +4,7 @@
        (try_files), so matching on the pathname is the whole routing story. -->
   <div v-if="isLogsRoute" class="logs-route">
     <TurnLog :api-url="apiUrl" />
+    <PhaseLock :api-url="apiUrl" />
     <AdminPanel :api-url="apiUrl" />
   </div>
 
@@ -271,6 +272,7 @@ import 'chartjs-adapter-date-fns'
 import { format as formatDate } from 'date-fns'
 import AdminPanel from './components/AdminPanel.vue'
 import TurnLog from './components/TurnLog.vue'
+import PhaseLock from './components/PhaseLock.vue'
 import SlimeViz from './components/SlimeViz.vue'
 
 Chart.register(...registerables)
@@ -286,7 +288,7 @@ Chart.defaults.color = '#8f8f8f'
 
 export default {
   name: 'App',
-  components: { AdminPanel, TurnLog, SlimeViz },
+  components: { AdminPanel, TurnLog, SlimeViz, PhaseLock },
   data() {
     return {
       // App version - increment on each deployment

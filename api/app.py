@@ -282,6 +282,83 @@ def get_readings_range():
     })
 
 
+@app.route('/api/phase-lock', methods=['GET'])
+def get_phase_lock():
+    """Is the applied light arriving at a preferred phase of the rhythm?
+
+    **Admin only, for the same reason /api/turns withholds `applied`.** Only
+    applied actions put light in the dish, so the onset times this reads out of
+    the switches log are exactly the record of which turns were not shams. The
+    aggregate alone would be fairly harmless, but the endpoint would still be a
+    place to go looking, and the experiment depends on that information not
+    being reachable from a public page.
+
+    Two systems entrain each other without either knowing anything about the
+    other. What that needs is for the phase relationship between them to settle
+    rather than stay arbitrary, which is what this measures and all it claims.
+    """
+    try:
+        import admin as admin_module
+
+        if not admin_module.is_authenticated():
+            return jsonify({"error": "admin only"}), 403
+    except Exception:
+        return jsonify({"error": "admin only"}), 403
+
+    log = getattr(electrodes, 'log', None)
+    if log is None:
+        return jsonify({"error": "disk logging is disabled"}), 503
+
+    end = request.args.get('end', type=float) or time.time()
+    hours = min(max(request.args.get('hours', 24, type=float), 0.5), 24 * 14)
+    start = end - hours * 3600
+    channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
+    channel = request.args.get('channel') or f'ch{channels[0]}_mv'
+    mode = request.args.get('mode') or None
+
+    stamps, values = [], []
+    for name in _reading_modes(mode):
+        for row in log.between(start, end, mode=name):
+            try:
+                stamps.append(float(row['timestamp']))
+                values.append(float(row[channel]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    order = sorted(range(len(stamps)), key=lambda i: stamps[i])
+    stamps = [stamps[i] for i in order]
+    values = [values[i] for i in order]
+
+    onsets = []
+    for path in sorted(glob.glob(os.path.join(config.LOG_DIR,
+                                              'switches_*.jsonl'))):
+        with open(path, encoding='utf-8') as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                stamp = row.get('timestamp')
+                if row.get('event') == 'on' and stamp and start <= stamp <= end:
+                    onsets.append(float(stamp))
+
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'llm', 'filters'))
+        from phaselock import analyse
+    except ImportError as exc:
+        return jsonify({"error": f"phaselock unavailable: {exc}"}), 503
+
+    # Fewer shuffles than the CLI uses: this runs on the Pi while a session is
+    # recording, and the verdict is stable well before 1000.
+    out = analyse(stamps, values, sorted(onsets),
+                  bins=request.args.get('bins', 12, type=int),
+                  shuffles=300)
+    out.update({"start": start, "end": end, "channel": channel,
+                "samples": len(stamps)})
+    return jsonify(out)
+
+
 @app.route('/api/slime/skeleton', methods=['GET'])
 def get_slime_skeleton():
     """The plasmodium's tube network, for the WebGL view.
