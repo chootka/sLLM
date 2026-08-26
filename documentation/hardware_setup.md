@@ -12,9 +12,9 @@ current budget: `led_matrix.md`.
 | Raspberry Pi 5 | — | host, replacement board fitted 2026-08-05 |
 | ADS1115 | I²C `0x48` | electrode potentials, 3 differential channels at 1 Hz |
 | SHT31 | I²C `0x44` | chamber temperature and humidity |
-| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus zones + barrier zone |
+| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus zones + barrier zone. **Unplugged**, shorted on condensation |
 | Camera Module 3 NoIR (IMX708) | CSI | stills, 2304×1296 |
-| 850nm IR flood | not GPIO-controlled | imaging illumination, always on |
+| 850nm IR flood | not GPIO-controlled | imaging illumination, always on. Confirmed fitted and running 2026-08-26 |
 | Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 300s |
 
 Not present: GPIO 17 ring light, GPIO 27 exposure LED, DHT22.
@@ -160,33 +160,40 @@ than all positive.
 
 ### Agar geometry
 
-As built: one continuous bed. Reference buried in it, three recording
-electrodes just below the surface.
+**As built 2026-08-24: four discrete islands of non-nutrient 2% agar on bare
+dish floor.** Arena 150 mm.
 
-The bed conducts and shunts the source. Protoplasmic tube resistance is ~3 MΩ
-(Adamatzky 2014). Spreading resistance between mm-scale tips a few cm apart in
-the bed is 10–100 kΩ, a divider of 30:1 to 300:1: a 5 mV tube potential
-reaches the buffer as 17–170 µV, against a 7.8 µV step and tens of mV of
-drift.
+| | |
+|---|---|
+| reference island | 20 mm dia x 4 mm, centre |
+| recording islands | 3 x 15 mm dia x 4 mm |
+| gap | 10 mm bare floor, edge to edge |
+| spacing | 27.5 mm centre to centre |
+| tips | all four flat on the dish floor at one depth, agar dropped over them |
+| oat flake | one per recording island, none on the reference |
 
-Measure it with a multimeter across two electrode leads. kΩ = shunted.
+Per Adamatzky and Jones 2011: discrete blobs on bare floor so the organism is
+the only conductive path between sites.
 
-Depth split is a second effect. The bed loses water from the top, raising
-surface ion concentration, so there is an electrochemical gradient between the
-buried reference and the near-surface recorders. It appears on all three
-channels because they share that reference.
+**Superseded: one continuous agar bed**, reference buried in it, three recording
+electrodes just below the surface. Two faults, both fixed by the switch to
+islands:
 
-### Target geometry — islands
+- The bed conducts and shunts the source. Protoplasmic tube resistance is ~3 MΩ
+  (Adamatzky 2014). Spreading resistance between mm-scale tips a few cm apart in
+  the bed is 10-100 kΩ, a divider of 30:1 to 300:1: a 5 mV tube potential
+  reaches the buffer as 17-170 µV, against a 7.8 µV step and tens of mV of
+  drift. Test with a multimeter across two electrode leads: kΩ = shunted.
+- Depth split. The bed loses water from the top, raising surface ion
+  concentration, so an electrochemical gradient forms between the buried
+  reference and the near-surface recorders. Appears on all three channels
+  because they share that reference.
 
-1. One island of non-nutrient 2% agar per electrode, bare dish floor between
-   them, gaps ~10 mm.
-2. Reference island at the centre, plasmodium inoculated there.
-3. All four tips flat on the dish floor under their blob, at one depth.
-4. Bare oat flake on each recording island.
-
-Electrode spacing sets apparent period: 2–3 cm gives 30–40 min (Adamatzky and
-Jones 2011), 2–3 mm gives 60–180 s (Kishimoto 1958). Keep the recording pair
-close; the arena is 150 mm.
+**Spacing and period.** 2-3 cm gives 30-40 min (Adamatzky and Jones 2011),
+2-3 mm gives 60-180 s (Kishimoto 1958). 27.5 mm spacing predicts the 30-40 min
+band. The 2026-08-24 run measured a 2.2-2.4 min oscillation and no 30-40 min
+band; see `STATUS.md`. 2-3 mm spacing is incompatible with the 10 mm gaps
+needed to keep the sites separate.
 
 ### Reading a bench test
 

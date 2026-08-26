@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-08-26 08:35 CEST. This is the only current-state document. If
+Updated 2026-08-26 21:20 CEST. This is the only current-state document. If
 another file disagrees with this one, this one is right.
 
 ## In plain language
@@ -81,8 +81,9 @@ those three files and is not required to record.
 
 | | |
 |---|---|
-| run | `20260824T004220Z-live`, started 2026-08-24 02:42 CEST |
-| elapsed | 50 h |
+| run | `20260826T191540Z-test`, started 2026-08-26 21:15:40 CEST |
+| elapsed | step 7 blank, 18-24 h target |
+| dish | organism removed, fresh agar blobs, electrodes in the same configuration |
 | services | `sllm-api` active, `sllm-loop` inactive |
 | recovery mode | ON since 2026-08-23, panel dark, LEDs blocked |
 | chamber | 25.6 C, 99.5% RH |
@@ -118,6 +119,26 @@ Board A rows are the source of truth.
   dex against +1.20 to +1.90 before; all three below every pre-value, exact
   rank test p = 0.012. ch2 held inside its prior range over the same hours.
 
+## Observed 2026-08-26 10:45, unconfirmed
+
+- No visible tubes anywhere in the dish. Organism alive on the reference island.
+  Oat flakes on the recording islands uneaten.
+- Possible onset of sporulation. **User will judge 2026-08-27.** Not recorded as
+  fact. Sclerotium is ruled out by direction: Adamatzky reports sclerotium as a
+  rise toward +20 mV; channels are at -19 mV and falling.
+- ch2 shows no noise rise despite no visible tube: 0.071 mV against its own
+  confirmed-unconnected baseline of 0.193 mV. An invisible conductive path to
+  ch2 apparently survives. Condensation bridging ruled out -- channel spread
+  widened to 12.2 mV and pairwise correlations fell, the opposite of a short.
+- Current configuration: two disconnected control electrodes (ch0 never
+  colonised, ch1 since 04:05) and one connected electrode (ch2), same dish,
+  same hours.
+
+Base rate for this assay, Whiting et al. `1312.4189v1.pdf` section 3.1: about
+10 of 20 dishes grow a usable single tube; 42 of 240 single-tube dishes gave
+the oscillations sought. Listed failure modes include multiple tubes,
+sclerotia formation, and growth away from the oat flake.
+
 ## Not established
 
 - The 30-40 min band. 0.23-0.47 mV against 4-5 mV expected. Ten times under.
@@ -127,30 +148,104 @@ Board A rows are the source of truth.
 
 ## Known problems
 
-1. **Condensation.** Chamber runs at or near 100% RH. Condensation moved the
-   per-sample noise on ch1 by 10x on 2026-08-26 with no mechanical change, and
-   previously shorted the LED matrix. This is the main unsolved engineering
-   problem. Needs airflow, desiccant, or a lower setpoint.
+1. **Condensation.** Chamber runs at or near 100% RH. It shorted the LED matrix,
+   and it is the reason the matrix cannot be repowered for a light-stimulus test.
+   Needs airflow, desiccant, or a lower setpoint.
+
+   Not responsible for the 2026-08-26 ch1 noise rise -- that was the tube
+   retracting. Humidity recovered to 99.9% while ch1's noise stayed 8-10x high.
+   Per-sample noise tracks electrode connection, not humidity.
 2. **ch0 not colonised.** Useful as a running control; a problem only if a third
    measuring site is required.
-3. **`/dev/media3` permission error** at `sllm-api` start. Harmless now, but a
+3. **Camera frontend timeouts.** Two on 2026-08-26, 04:18:36 and 11:06:07. Both
+   followed handling of the rig, per the user. I2C to the sensor answers during
+   the fault (module ID 0x0708), so the control pins are fine and the CSI data
+   lanes are not delivering. Recovery needs an `sllm-api` restart, which gaps the
+   electrode record because the same process logs both.
+4. **`/dev/media3` permission error** at `sllm-api` start. Harmless now, but a
    reboot that renumbers media nodes will present as a dead camera. Fix is a
    systemd drop-in with `DeviceAllow=char-media rw`; must be written by the user.
-4. **Deployed tree drifts.** Services run `/var/www/sllm`. A commit is not a
+5. **Deployed tree drifts.** Services run `/var/www/sllm`. A commit is not a
    deploy. Diff before assuming deployed behaviour.
 
 ## Next
 
-1. Decide the artifact threshold in advance and write it into `rebuild_plan.md`
-   step 5: a peak in 60-200 s exceeding local background by >1.0 dex at p<0.01,
-   with no organism, means artifact.
-2. Run one of two tests:
-   - **Light stimulus.** Blue LED on/off blocks, 20 min each, four repeats,
-     times recorded. Shows whether the organism drives the signal. Keeps the
-     organism. Blocked on condensation risk to the matrix.
-   - **Organism removed.** `test` mode, 18-24 h, discard the first half. Shows
-     whether the signal depends on the organism. Ends the run.
-3. Fix condensation before the next run regardless of which test runs.
+1. Step 7 is running. Analyse against the pre-registration below, not before
+   the 18 h mark.
+2. Fix condensation before the next run.
+3. Light stimulus test, if the organism is kept: blue LED on/off blocks, 20 min
+   each, four repeats, times recorded. Blocked on the matrix, which is
+   unplugged after a condensation short.
+
+## Deferred
+
+- **LLM loop.** Nothing to close a loop around until the signal question is
+  settled.
+- **Matrix repair.** Unplugged, shorted on condensation. Any rebuild needs it
+  sealed. Required before the light-stimulus test.
+- **Re-plating electrodes.** Not indicated. Shorted-lead test 2026-08-24 was
+  flat: drift ch0 +0.025, ch1 +0.004, ch2 +0.031 mV over 27 min.
+- **Foil shield.** Not indicated. In-solution noise is at or below the shorted
+  floor; 8 SPS already notches 50/60 Hz.
+- **True differential pair (0-1, 2-3).** Do it after the stimulus test, not
+  with it. Changing geometry and mux together makes the common-mode result
+  uninterpretable.
+
+## Recording protocol
+
+| # | step | mode | duration | state |
+|---|---|---|---|---|
+| bench 1 | shorted-lead test | — | 27 min | done 2026-08-24 |
+| bench 2 | foil shield | — | — | not indicated |
+| bench 3 | build agar islands | — | — | done 2026-08-24 |
+| bench 4 | verify island isolation | — | — | done 2026-08-24 |
+| 5 | noise floor, no organism | `test` | 12 h | not run; the pre-bridge window of run 6 is serving as the blank |
+| 6 | organism in | `live` | 24 h from bridge, 36 max | done, 2026-08-24 02:42 - 2026-08-26 21:15 |
+| 7 | organism removed | `test` | ends 2026-08-27 18:00 CEST, 20.75 h, discard first 10 h | running since 2026-08-26 21:15 |
+| 8 | organism back in, same blobs | `live` | 24 h from bridge, runs unattended | starts 2026-08-27 18:00 CEST |
+
+Steps 6 and 8: the 24 h counts from tube bridge, not inoculation. In run 6 the
+first bridge came 10.7 h after inoculation, so budget ~36 h wall clock for
+step 8 or accept a shorter post-bridge window. Bridge time comes from the
+timelapse.
+
+Step 7: fresh agar blobs are unavoidable, and fresh agar settles for 6-12 h,
+hence 24 h rather than the 6 h originally planned.
+
+Steps 7 and 8 are a paired control: same dish, same blobs, same electrodes,
+blank then organism, back to back.
+
+## Step 7 pre-registration
+
+Written 2026-08-26 21:20 CEST. Run `20260826T191540Z-test` had started; none of
+its data had been read.
+
+**Dish.** Organism removed. Fresh agar blobs. Electrodes in the same
+configuration and positions as run 6.
+
+**Run length.** 20 h minimum; scheduled to end 2026-08-27 18:00 CEST at 20.75 h. Analysis window h+10 to end. The first 10 h are
+discarded as fresh-agar settling and are not analysed for any purpose.
+
+**Statistic.** Per channel, the largest periodogram peak in the 60-200 s band,
+expressed as log10 excess (dex) over the local median background taken over
++-0.6 octave in log period. p from 200 coloured-noise surrogates drawn on that
+background. Same estimator as run 6, unchanged.
+
+**Decision rule.**
+
+| result on any channel | conclusion |
+|---|---|
+| peak >1.0 dex at p<0.01 | artifact. The 2.2-2.4 min line does not require the organism |
+| all channels <1.0 dex, or >=1.0 dex only at p>=0.01 | the line does not reproduce without the organism |
+| 0.5-1.0 dex at p<0.01 | inconclusive. No claim either way |
+
+**Reference values from run 6.** ch1 and ch2 post-bridge +1.20 to +1.95 dex at
+p<0.005. ch0, never colonised, +0.48 to +0.75 dex, p 0.12-0.50.
+
+**Exclusions declared in advance.** The first 10 h. Any window in which the lid
+was opened or the rig was handled. Any `sllm-api` restart gap.
+
+No other statistic will be substituted after the data is seen.
 
 ## Excluded data
 
@@ -159,6 +254,7 @@ Board A rows are the source of truth.
 | 2026-08-26 04:05:30 - 04:07:00 | lid opened, electrodes wiggled. Noise 4.1/4.8 mV |
 | 2026-08-26 ~04:14 - 04:18 | camera ribbon pulled and reseated, lid open. RH fell to 72% |
 | 2026-08-26 04:23:41 - 04:23:57 | `sllm-api` restarted to recover the camera. 15 s gap. run_id preserved |
+| 2026-08-26 11:08:32 - 11:08:39 | `sllm-api` restarted after a second camera frontend timeout at 11:06:07. 7 s gap. run_id preserved |
 
 ## Other documents
 
@@ -167,7 +263,6 @@ Board A rows are the source of truth.
 | `hardware_setup.md` | wiring, board, sensors, settings |
 | `bring_up.md` | how to build the rig from scratch |
 | `method_basis.md` | why the rig is built this way, with citations |
-| `rebuild_plan.md` | bench punch list and the recording step table |
 | `growth_run.md` | pre-registered protocol for the LLM-loop run |
 | `av_instrument.md` | future A/V direction, not a spec |
 | `led_matrix.md`, `DEPLOYMENT.md`, `TAILSCALE_SETUP.md` | subsystem reference |
