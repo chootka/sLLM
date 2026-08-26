@@ -1,4 +1,5 @@
 /data/
+/deck/
 scripts/config.sh
 node_modules/
 frontend/dist/

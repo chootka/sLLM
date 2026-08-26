@@ -243,6 +243,12 @@ def _is_quiet(channel):
             and (channel.get("amplitude_mv") or 0) < QUIET_AMPLITUDE_MV)
 
 
+# The exact sentence compare() returns when nothing cleared threshold. Named
+# because the loop tests against it to decide whether to take a turn at all,
+# and a bare string in two files drifts.
+NO_CHANGE = "nothing measurable changed"
+
+
 def compare(before, after, names):
     """Name what moved, in plain terms, or say nothing moved.
 
@@ -279,7 +285,7 @@ def compare(before, after, names):
         if old_lag is not None and new_lag is not None and old_lag != new_lag:
             changes.append(f"lag {pair} moved from {old_lag}s to {new_lag}s")
 
-    return changes if changes else ["nothing measurable changed"]
+    return changes if changes else [NO_CHANGE]
 
 
 # ---------------------------------------------------------------------------

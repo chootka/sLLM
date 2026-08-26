@@ -12,6 +12,13 @@ What is different from the harness:
   * the action is applied to real hardware, or deliberately withheld
   * every turn is appended to a JSONL log whether or not anything happened
 
+Turn timing. Turns fire when the reducer reports a change above threshold, not
+on a clock (--trigger state, the default). The model also names its own next
+delay. Two systems entrain each other without either knowing anything about the
+other -- the earth and the moon do it -- but only if each one's timing depends
+on the other's. On a fixed tick the rhythm was ours and this was a driver with a
+model attached. See documentation/method_basis.md.
+
 Sham blocks. Some fraction of turns are run with the action logged and not
 applied. The model is never told which turn it is in -- that is the whole
 point, and it is why `applied` lives in the log and never in the prompt. A
@@ -72,7 +79,7 @@ sys.path.insert(0, str(HERE / 'filters'))
 import syspath  # noqa: E402,F401  (path setup, must precede hardware imports)
 
 import config  # noqa: E402
-from reducer import reduce_window, for_model  # noqa: E402
+from reducer import NO_CHANGE, reduce_window, for_model  # noqa: E402
 from trail import Trail  # noqa: E402
 from store import channels_from_rows, electrode_log  # noqa: E402
 
@@ -80,6 +87,10 @@ from store import channels_from_rows, electrode_log  # noqa: E402
 # Pure stdlib on purpose: importing leds.py here would put the refusal below
 # behind the CircuitPython stack, where an ImportError silently disables it.
 import recovery as recovery_state  # noqa: E402
+
+# Which run a turn belongs to, so turn records carry the same run_id and mode
+# that store.py stamps on every reading. Stdlib only, same reasoning as above.
+import run as run_state  # noqa: E402
 
 from prompts import load_prompts  # noqa: E402
 
@@ -93,6 +104,9 @@ class LiveSource:
         self.log = electrode_log(config)
         self.window_s = window_s
         self.channels = channels
+        # Set on every window() so a turn record can name the readings it was
+        # computed from. Without it a state is not traceable back to rows.
+        self.last_bounds = None
 
     def describe(self):
         rows = self.log.recent(self.window_s)
@@ -101,7 +115,11 @@ class LiveSource:
         return f"{len(rows)} samples spanning {span / 60:.1f} min"
 
     def window(self, turn):
-        return channels_from_rows(self.log.recent(self.window_s), self.channels)
+        rows = self.log.recent(self.window_s)
+        self.last_bounds = ({"start": float(rows[0]['timestamp']),
+                             "end": float(rows[-1]['timestamp'])}
+                            if rows else None)
+        return channels_from_rows(rows, self.channels)
 
 
 class ReplaySource:
@@ -176,12 +194,18 @@ class ReplaySource:
 class Ollama:
     """Chat client for the model running on the laptop."""
 
-    def __init__(self, host, model, timeout=300, num_ctx=None):
+    def __init__(self, host, model, timeout=300, num_ctx=None, top_logprobs=3):
         self.url = host.rstrip('/') + '/api/chat'
         self.model = model
         self.timeout = timeout
         # None leaves it to the model's Modelfile.
         self.num_ctx = num_ctx
+        # Per-token probabilities. The one measure of the model's uncertainty
+        # that does not depend on what it says about itself -- fluent text over
+        # a wide distribution is exactly the case a note cannot report. Free to
+        # ask for at request time and unrecoverable afterwards, so it is always
+        # on. 0 disables it.
+        self.top_logprobs = top_logprobs
 
     def reachable(self):
         """(ok, detail). Checks the server answers and has the model."""
@@ -200,7 +224,11 @@ class Ollama:
         return True, f"{self.model} available"
 
     def ask(self, system, state, history, retries=2):
-        """(reply, usage), usage being Ollama's own token counts."""
+        """(reply, usage, logprobs).
+
+        usage is Ollama's own token counts; logprobs is its per-token list for
+        the reply that parsed, or None if the server did not return any.
+        """
         messages = [{"role": "system", "content": system}]
         messages += history
         messages.append({"role": "user", "content": json.dumps(state)})
@@ -213,7 +241,7 @@ class Ollama:
             if self.num_ctx:
                 options["num_ctx"] = self.num_ctx
 
-            response = requests.post(self.url, json={
+            payload = {
                 "model": self.model,
                 "messages": messages,
                 "stream": False,
@@ -222,7 +250,13 @@ class Ollama:
                 # the parse fails, which loses the turn.
                 "format": "json",
                 "options": options,
-            }, timeout=self.timeout)
+            }
+            if self.top_logprobs:
+                payload["logprobs"] = True
+                payload["top_logprobs"] = self.top_logprobs
+
+            response = requests.post(self.url, json=payload,
+                                     timeout=self.timeout)
             response.raise_for_status()
 
             body = response.json()
@@ -230,14 +264,17 @@ class Ollama:
                 "prompt_tokens": body.get("prompt_eval_count"),
                 "reply_tokens": body.get("eval_count"),
             }
+            # Absent on servers older than the logprobs support; a missing key
+            # is not an error, it just means that run has no entropy channel.
+            logprobs = body.get("logprobs")
             text = body["message"]["content"]
             cleaned = text.replace("```json", "").replace("```", "").strip()
             try:
-                return json.loads(cleaned), usage
+                return json.loads(cleaned), usage, logprobs
             except json.JSONDecodeError as exc:
                 last_error = exc
                 try:
-                    return json.loads(cleaned, strict=False), usage
+                    return json.loads(cleaned, strict=False), usage, logprobs
                 except json.JSONDecodeError:
                     pass
 
@@ -270,12 +307,88 @@ class TurnLog:
         return path
 
 
-def validate_action(reply, zones, barrier_zone, max_duration):
+def wait_for_turn(source, turn, previous, window_s, args, requested_s):
+    """Block until the next turn should run. Returns what triggered it.
+
+    Two systems only count as coupled if each one's timing depends on the
+    other. On a fixed tick the forcing is periodic no matter what the organism
+    does, which makes this a driver with a model attached rather than a loop:
+    the model picks the zone, but the rhythm is mine. So in state mode the
+    organism sets the tempo. The window is re-reduced every `poll` seconds
+    against the state as it stood at the last turn, and the turn fires as soon
+    as the reducer reports something above threshold. A quiet organism means no
+    turns for hours, which is the correct behaviour and not a stall.
+
+    The model's own `next_turn_s` is the second trigger, so both sides have a
+    say. `min_gap` is a floor, because a noisy patch would otherwise fire turns
+    back to back and swamp the record.
+
+    Replay always uses the clock. A replay window is indexed by turn number, so
+    polling without advancing `turn` returns identical data forever and nothing
+    would ever cross threshold.
+    """
+    if args.trigger == 'clock' or args.replay:
+        time.sleep(max(0.0, args.interval / args.speed))
+        return 'clock'
+
+    speed = max(args.speed, 1e-9)
+    floor = args.min_gap / speed
+    ceiling = (requested_s if requested_s else args.max_gap or 0) / speed
+    waited = 0.0
+
+    while True:
+        time.sleep(args.poll / speed)
+        waited += args.poll / speed
+
+        if waited < floor:
+            continue
+        if ceiling and waited >= ceiling:
+            return 'requested' if requested_s else 'ceiling'
+
+        series = source.window(turn)
+        if series is None:
+            return 'exhausted'
+        if min((len(v) for v in series.values()), default=0) < window_s * 0.5:
+            continue
+
+        # `previous` is deliberately not updated here. Change is always
+        # measured against the last turn, not the last poll, or a slow trend
+        # would be invisible one poll at a time.
+        state = reduce_window(series, previous)
+        if state.get('changes_since_last_turn', [NO_CHANGE]) != [NO_CHANGE]:
+            return 'state'
+
+
+def measured_period(state):
+    """Median contraction period across channels that reported one, or None.
+
+    One number for the organism's current tempo, used to express a stimulus in
+    its own time base rather than in seconds off the wall clock.
+    """
+    periods = [ch.get('period_s') for name, ch in state.items()
+               if isinstance(ch, dict) and ch.get('period_s')]
+    if not periods:
+        return None
+    periods = sorted(periods)
+    middle = len(periods) // 2
+    if len(periods) % 2:
+        return float(periods[middle])
+    return (periods[middle - 1] + periods[middle]) / 2.0
+
+
+def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
     """Pull a usable light action out of the reply, or None.
 
     The model is asked for JSON but is not constrained to sensible values, so
     everything is bounded here rather than trusted. A refused action is still
     logged -- what the model asked for is data even when it is unusable.
+
+    Duration is asked for in cycles of the organism's own contraction period,
+    not in seconds. Three cycles is 270s at a 90s period and 420s at 140s, so
+    the stimulus stays scaled to the organism as its tempo drifts rather than
+    being fixed against a clock that has nothing to do with it. duration_s is
+    still accepted, for replaying older sessions and for the case where no
+    period was measured.
     """
     light = reply.get('light')
     if not isinstance(light, dict):
@@ -284,7 +397,13 @@ def validate_action(reply, zones, barrier_zone, max_duration):
     try:
         zone = int(light['zone'])
         intensity = float(light.get('intensity', 1.0))
-        duration = float(light.get('duration_s', 60))
+        if light.get('duration_cycles') is not None:
+            cycles = float(light['duration_cycles'])
+            if not period_s:
+                return None, "duration in cycles but no period measured"
+            duration = cycles * period_s
+        else:
+            duration = float(light.get('duration_s', 60))
     except (KeyError, TypeError, ValueError) as exc:
         return None, f"malformed light action: {exc}"
 
@@ -293,11 +412,16 @@ def validate_action(reply, zones, barrier_zone, max_duration):
     if not 0 <= zone < zones:
         return None, f"zone {zone} outside 0..{zones - 1}"
 
-    return {
+    action = {
         "zone": zone,
         "intensity": min(max(intensity, 0.0), 1.0),
         "duration_s": min(max(duration, 0.0), max_duration),
-    }, None
+    }
+    if light.get('duration_cycles') is not None:
+        # Kept so the log says what was asked for as well as what it became.
+        action["duration_cycles"] = float(light['duration_cycles'])
+        action["period_s_at_request"] = period_s
+    return action, None
 
 
 def open_matrix(dry_run):
@@ -447,6 +571,23 @@ def main():
     parser.add_argument('--speed', type=float, default=1.0,
                         help='time compression in replay, e.g. 600 runs a '
                              '10 min turn interval in 1 s')
+    parser.add_argument('--trigger', choices=('state', 'clock'), default='state',
+                        help="what decides when a turn happens. 'state' waits "
+                             "for the reducer to report a change above "
+                             "threshold, so the organism sets the tempo; "
+                             "'clock' uses --interval. Replay forces clock.")
+    parser.add_argument('--poll', type=int, default=60,
+                        help='seconds between checks of the window while '
+                             'waiting for a state change')
+    parser.add_argument('--min-gap', type=int,
+                        default=getattr(config, 'LLM_MIN_TURN_GAP', 300),
+                        help='floor on seconds between turns, so a noisy '
+                             'patch cannot fire them back to back')
+    parser.add_argument('--max-gap', type=int,
+                        default=getattr(config, 'LLM_MAX_TURN_GAP', 0),
+                        help='ceiling on seconds between turns; 0 means a '
+                             'quiet organism produces no turns at all, which '
+                             'is the intended behaviour')
     parser.add_argument('--sham-rate', type=float, default=None)
     parser.add_argument('--num-ctx', type=int, default=None,
                         help='context window in tokens; pins the denominator '
@@ -514,8 +655,6 @@ def main():
         # session, which means something is in the chamber. A separate occupancy
         # flag used to say the same thing and went stale, because nothing broke
         # when it did.
-        import run as run_state  # noqa: PLC0415 -- gpio/ is on the path above
-
         if run_state.current(config).get('mode') == 'live':
             print("refusing --demo: recording is live, so the chamber is taken\n"
                   "to be occupied. This mode invents data and puts real light on\n"
@@ -628,9 +767,16 @@ def main():
         return 1
 
     history, previous, turn = [], None, 0
+    # Carried between turns: what the model asked for as its next delay, and
+    # what actually caused this turn to fire. Both go in the record.
+    requested_s, trigger_why = None, 'start'
     context_used, last_turn_cost = 0, 0
     chars_per_token = None
-    print(f"\nrunning, a turn every {args.interval}s. ctrl-c to stop.\n")
+    if args.trigger == 'clock' or args.replay:
+        print(f"\nrunning, a turn every {args.interval}s. ctrl-c to stop.\n")
+    else:
+        print(f"\nrunning; turns fire when the state changes, no sooner than "
+              f"{args.min_gap}s apart. ctrl-c to stop.\n")
 
     try:
         while args.turns == 0 or turn < args.turns:
@@ -671,12 +817,33 @@ def main():
                         else None),
                 }
 
+            # Consulted every turn rather than once at startup, so a mode
+            # change from the admin page lands on the next record. Same
+            # reasoning as store.py's run_provider.
+            active_run = run_state.current(config)
+
             record = {
                 "turn": turn,
+                # Unix float as well as the readable form: this is the same key
+                # the readings CSV is written under, so a turn joins to the rows
+                # it came from without parsing anything.
+                "timestamp": time.time(),
                 "datetime": datetime.now(timezone.utc).astimezone().isoformat(),
+                "run_id": active_run.get('id', ''),
+                "mode": active_run.get('mode', 'test'),
                 "prompt": args.prompt,
+                "model": {"name": args.model, "num_ctx": num_ctx},
                 "source": getattr(source, 'label', 'live'),
+                # What caused this turn: a state change above threshold, the
+                # delay the model asked for last time, the clock, or a
+                # ceiling. The distribution of these over a run says how much
+                # of the tempo belonged to the organism.
+                "trigger": trigger_why,
                 "window_samples": shortest,
+                # First and last reading timestamps behind this state, when the
+                # source knows them. Replay windows are sample indices into a
+                # fixed series and have no wall clock of their own.
+                "window": getattr(source, 'last_bounds', None),
                 "state": state,
             }
             if args.replay and hasattr(source, 'planted_at'):
@@ -693,17 +860,21 @@ def main():
                 recent = history[-history_turns * 2:]
 
             try:
-                reply, usage = ollama.ask(system, sending, recent)
+                reply, usage, logprobs = ollama.ask(system, sending, recent)
             except Exception as exc:
                 print(f"[turn {turn}] model failed: {exc}")
                 record["error"] = str(exc)
                 turns_log.append(record)
                 turn += 1
-                time.sleep(max(0, args.interval / args.speed - (time.monotonic() - started)))
+                if args.turns and turn >= args.turns:
+                    break    # no point waiting for a turn that will not run
+                trigger_why = wait_for_turn(source, turn, previous, window_s,
+                                            args, requested_s)
                 continue
 
             record["reply"] = reply
             record["usage"] = usage
+            record["logprobs"] = logprobs
 
             # Count our own conversation, not prompt_eval_count: Ollama caps
             # and caches that, so it plateaus below num_ctx and never crosses.
@@ -721,9 +892,11 @@ def main():
                 last_turn_cost = max(1, context_used - previous_used)
                 record["context_used"] = context_used
 
+            period_s = measured_period(state)
             action, refusal = validate_action(
                 reply, leds.ZONES, leds.BARRIER_ZONE,
-                getattr(config, 'MAX_STIMULUS_DURATION', 300))
+                getattr(config, 'MAX_STIMULUS_DURATION', 300),
+                period_s=period_s)
             record["action_refused"] = refusal
 
             # Decided before the action is applied, and never revealed to the
@@ -746,6 +919,17 @@ def main():
                     print(f"[turn {turn}] apply failed: {exc}")
 
             record["action"] = action
+
+            # The model's say in the tempo. Bounded to the same floor and a
+            # day's ceiling, so a bad number cannot stall or flood the run.
+            requested_s = None
+            asked = reply.get('next_turn_s')
+            if asked is not None:
+                try:
+                    requested_s = min(max(float(asked), args.min_gap), 86400)
+                except (TypeError, ValueError):
+                    record["next_turn_refused"] = f"unusable: {asked!r}"
+            record["requested_next_turn_s"] = requested_s
 
             if mimic:
                 # Marked by acting, not by choosing. A sham lays nothing -- the
@@ -789,7 +973,10 @@ def main():
                 break
 
             # In replay --speed compresses this; live it is always 1.0.
-            time.sleep(max(0, args.interval / args.speed - (time.monotonic() - started)))
+            if args.turns and turn >= args.turns:
+                break        # no point waiting for a turn that will not run
+            trigger_why = wait_for_turn(source, turn, previous, window_s,
+                                        args, requested_s)
     except KeyboardInterrupt:
         print("\nstopped")
     finally:
