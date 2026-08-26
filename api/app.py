@@ -8,7 +8,8 @@ driven through a module there:
                      away from switching events
     gpio/adc.py      ADS1115, three electrodes differential against reference
     gpio/sensor.py   SHT31 temperature and humidity, and the fan relay
-    gpio/camera.py   picamera2 stills through the matrix blank/flash sequence
+    gpio/camera.py   stills through the matrix blank/flash sequence, from
+                     either a CSI camera or a USB one
     gpio/leds.py     WS2812B matrix, blue stimulus by zone and red imaging light
 
 Nothing here fabricates data. If a device is absent its readings are null and
@@ -18,8 +19,8 @@ which put invented numbers on the dashboard for a chamber nobody was measuring.
 
 Removed, for the record, because none of it corresponded to hardware that is
 on this machine: the Arduino serial reader (electrodes are on the ADS1115 now),
-the OpenCV USB camera path (the camera is CSI), the DHT22/DHT11 fallback (the
-sensor is an SHT31), and the mock environment generator.
+the DHT22/DHT11 fallback (the sensor is an SHT31), and the mock environment
+generator.
 """
 
 import glob
@@ -32,16 +33,11 @@ import time
 from collections import deque
 from datetime import datetime
 
-# board, picamera2 and RPi.GPIO are apt-installed system packages that pip
-# cannot provide, so the venv needs the system paths too. Both of them:
-# apt puts packages in /usr/lib/python3/dist-packages, while a root-level
-# `pip install` puts them in /usr/local/lib/pythonX.Y/dist-packages -- which is
-# where rpi_ws281x, the matrix's C extension, actually lives.
+# board, picamera2 and RPi.GPIO are apt packages pip cannot provide. Both system
+# paths are needed: apt uses /usr/lib/python3/dist-packages, root-level pip uses
+# /usr/local/lib/pythonX.Y/dist-packages, where rpi_ws281x lives.
 #
-# Appended, not prepended. Prepending puts system packages ahead of the venv
-# for *everything*, which is how a system numpy ends up shadowing the venv's.
-# Appending means the venv still wins and only genuinely-missing modules fall
-# through to the system.
+# Appended, not prepended -- prepending lets a system numpy shadow the venv's.
 for _system_path in (
     '/usr/lib/python3/dist-packages',
     f'/usr/local/lib/python{sys.version_info.major}.{sys.version_info.minor}/dist-packages',
@@ -64,21 +60,22 @@ sys.path.insert(0, os.path.join(
 
 from adc import ElectrodeMonitor
 from bus import SwitchGate
-from camera import Timelapse, open_camera
+from camera import CameraUnavailable, Timelapse, open_camera
 from sensor import EnvironmentMonitor
 from store import electrode_log, environment_log
 
 app = Flask(__name__)
 
-# The public read-only surface stays open to any origin: the dashboard is meant
-# to be embeddable and none of it is secret. The admin routes are not, and are
-# pinned to the site's own origin. Bearer tokens already make CSRF structurally
-# impossible, so this is defence in depth rather than the only control -- but a
-# wide-open preflight on a route that starts and stops the experiment is not
-# something to leave lying around.
+# The public read-only surface stays open to any origin -- the dashboard is
+# embeddable and none of it is secret. Admin routes are pinned to the site's
+# own origin. Bearer tokens already rule out CSRF; this is defence in depth.
+_admin_origin = getattr(config, 'ADMIN_ORIGIN', 'https://sllm.visceral.systems')
 CORS(app, resources={
-    r"/api/admin/*": {"origins": [getattr(config, 'ADMIN_ORIGIN',
-                                          'https://sllm.visceral.systems')]},
+    r"/api/admin/*": {"origins": [_admin_origin]},
+    # Choosing the camera is an admin action that happens to live with the
+    # rest of the camera code rather than in admin.py, so it is pinned here by
+    # path instead of by prefix. Capture and preview stay public, as before.
+    r"/api/camera/*": {"origins": [_admin_origin]},
     r"/*": {"origins": "*"},
 })
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -152,6 +149,11 @@ _stimulus_lock = threading.Lock()
 # for captures written with millisecond precision.
 IMAGE_FILENAME_RE = re.compile(r'^slime_(\d{8})_(\d{6})(?:_(\d{1,3}))?\.jpg$')
 
+# Consecutive frames a preview will wait through while no camera is available
+# before giving up. At the default 2fps this is a five second tolerance, which
+# covers a source switch and not much else.
+STREAM_MISS_LIMIT = 10
+
 
 def parse_image_filename(filename):
     """Extract the capture time from an image filename, or None if it doesn't match"""
@@ -188,6 +190,194 @@ def get_readings_history():
     """Recent electrode samples from the rolling buffer"""
     limit = request.args.get('limit', 100, type=int)
     return jsonify(electrodes.history(limit))
+
+
+def _reading_modes(asked=None):
+    """Which mode directories to read for a read-back window.
+
+    Readings are partitioned by mode -- 'live' at the top level, everything
+    else in a subdirectory of it -- but the record they hold is one continuous
+    stream: the sensors log whenever the API is up, and a mode switch only
+    changes which folder the next row lands in. Reading a single mode makes the
+    other side of a switch look like an outage, which is exactly how it read on
+    the dashboard: two days of live-mode data drawn as a hole.
+    """
+    if asked:
+        return [asked]
+    modes = ['live']
+    try:
+        with os.scandir(config.CSV_DIR) as scan:
+            modes += sorted(e.name for e in scan if e.is_dir())
+    except OSError:
+        pass
+    return modes
+
+
+@app.route('/api/readings/range', methods=['GET'])
+def get_readings_range():
+    """Downsampled electrode history over an arbitrary window.
+
+    The rolling buffer only reaches back MAX_READINGS_BUFFER samples and dies
+    with the process. This reads the daily CSVs instead, so the dashboard can
+    scroll back through a run that has been going for days.
+
+    A day at 1 Hz is 86400 samples and no browser wants them, so the window is
+    bucketed. Each bucket carries min and max as well as mean: a contraction
+    spike narrower than one bucket would be averaged out of existence
+    otherwise, and the spikes are the signal.
+    """
+    log = getattr(electrodes, 'log', None)
+    if log is None:
+        return jsonify({"error": "disk logging is disabled"}), 503
+
+    start = request.args.get('start', type=float)
+    end = request.args.get('end', type=float)
+    if start is None or end is None:
+        return jsonify({"error": "start and end are required, unix seconds"}), 400
+    if end <= start:
+        return jsonify({"error": "end must be after start"}), 400
+
+    # Capped so a wide window cannot ask the Pi for a point per sample.
+    buckets = max(1, min(request.args.get('buckets', 800, type=int), 5000))
+    mode = request.args.get('mode') or None
+    channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
+
+    width = (end - start) / buckets
+    columns = [f'ch{channel}_mv' for channel in channels]
+    # Streamed, not materialised: a month view covers the whole record and
+    # building a dict per sample first would cost hundreds of megabytes for a
+    # few hundred points of output.
+    table = {}
+    seen = 0
+    for name in _reading_modes(mode):
+        part, count = log.aggregate(start, end, buckets, columns, mode=name)
+        seen += count
+        # Only one mode records at a time, so buckets do not overlap; first
+        # writer wins if they ever do.
+        for index, stats in part.items():
+            table.setdefault(index, stats)
+
+    points = []
+    for index in sorted(table):
+        entry = {"t": start + (index + 0.5) * width, "channels": {}}
+        for channel, column in zip(channels, columns):
+            stats = table[index].get(column)
+            if stats is None:
+                continue
+            low, high, total, count = stats
+            entry["channels"][str(channel)] = {
+                "min": round(low, 4),
+                "max": round(high, 4),
+                "mean": round(total / count, 4),
+            }
+        points.append(entry)
+
+    return jsonify({
+        "start": start,
+        "end": end,
+        "buckets": buckets,
+        "samples": seen,
+        "channels": [str(c) for c in channels],
+        "points": points,
+    })
+
+
+@app.route('/api/slime/skeleton', methods=['GET'])
+def get_slime_skeleton():
+    """The plasmodium's tube network, for the WebGL view.
+
+    Geometry is in dish coordinates -- -1..1 across the diameter, y down, origin
+    at the dish centre -- so the renderer never needs to know the capture
+    resolution or where the dish happened to sit in frame. Regenerating it after
+    the camera moves changes nothing downstream.
+
+    Written by scripts/extract_skeleton.py, or by placeholder_skeleton.py while
+    the lighting rebuild is outstanding; `placeholder` in the payload says
+    which, so the view can label itself honestly rather than presenting invented
+    geometry as a measurement.
+    """
+    path = os.path.join(config.DATA_DIR, 'skeleton.json')
+    if not os.path.exists(path):
+        return jsonify({"error": "no skeleton has been extracted yet"}), 404
+    try:
+        with open(path, encoding='utf-8') as handle:
+            return jsonify(json.load(handle))
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": f"skeleton unreadable: {exc}"}), 500
+
+
+@app.route('/api/readings/extent', methods=['GET'])
+def get_readings_extent():
+    """Earliest and latest sample on disk, so the UI knows its scroll limits."""
+    log = getattr(electrodes, 'log', None)
+    if log is None:
+        return jsonify({"error": "disk logging is disabled"}), 503
+    earliest = latest = None
+    for name in _reading_modes(request.args.get('mode')):
+        low, high = log.extent(mode=name)
+        if low is not None:
+            earliest = low if earliest is None else min(earliest, low)
+        if high is not None:
+            latest = high if latest is None else max(latest, high)
+    return jsonify({"earliest": earliest, "latest": latest})
+
+
+@app.route('/api/environment/range', methods=['GET'])
+def get_environment_range():
+    """Bucketed chamber conditions over a window, for the timelapse overlay.
+
+    Reads every mode's directory, not just the one currently running. The
+    sensor logs continuously whenever the API is up; what the mode changes is
+    only which directory the rows land in, so a window that straddles a mode
+    switch is one continuous record split across two folders. Aggregating a
+    single mode would blank out everything either side of the switch.
+    """
+    log = getattr(environment, 'log', None)
+    if log is None:
+        return jsonify({"error": "disk logging is disabled"}), 503
+
+    start = request.args.get('start', type=float)
+    end = request.args.get('end', type=float)
+    if start is None or end is None:
+        return jsonify({"error": "start and end are required, unix seconds"}), 400
+    if end <= start:
+        return jsonify({"error": "end must be after start"}), 400
+
+    buckets = max(1, min(request.args.get('buckets', 600, type=int), 5000))
+    columns = ['temperature_c', 'temperature_f', 'humidity_pct']
+
+    modes = _reading_modes(request.args.get('mode'))
+
+    width = (end - start) / buckets
+    merged = {}
+    seen = 0
+    for mode in modes:
+        table, count = log.aggregate(start, end, buckets, columns, mode=mode)
+        seen += count
+        # Only one mode records at a time, so buckets do not overlap in
+        # practice; first writer wins if they ever do.
+        for index, stats in table.items():
+            merged.setdefault(index, stats)
+
+    points = []
+    for index in sorted(merged):
+        entry = {"t": start + (index + 0.5) * width}
+        for column in columns:
+            stats = merged[index].get(column)
+            if stats is None:
+                continue
+            low, high, total, count = stats
+            entry[column] = round(total / count, 2)
+        points.append(entry)
+
+    return jsonify({
+        "start": start,
+        "end": end,
+        "buckets": buckets,
+        "modes": modes,
+        "samples": seen,
+        "points": points,
+    })
 
 
 @app.route('/api/environment', methods=['GET'])
@@ -339,19 +529,10 @@ def get_image(filename):
     if not os.path.exists(filepath):
         return jsonify({"error": "Image not found"}), 404
 
-    # Cached hard, because these never change: the filename carries the capture
-    # timestamp and the bytes behind it are written once.
-    #
-    # They used to be served `no-store`, which forbids the browser from keeping
-    # the response at all. Scrubbing survived that -- one frame at a time, each
-    # with time to arrive. Playback did not: every frame was a fresh ~145KB
-    # download, five a second, and each new frame cancelled the one still in
-    # flight, so nothing after the first ever finished decoding. The preloader
-    # made it worse by downloading a hundred frames and being allowed to keep
-    # none of them.
-    #
-    # A newly captured frame is requested with a cache-busting query string by
-    # the frontend, so freshness is already handled where it actually matters.
+    # Cached hard: the filename carries the capture timestamp and the bytes are
+    # written once. Under `no-store` timelapse playback never worked -- every
+    # frame was a fresh ~145KB download at 5/s, each cancelling the last.
+    # New frames are requested with a cache-busting query string.
     response = send_file(filepath, mimetype='image/jpeg', max_age=31536000)
     response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     # Werkzeug adds its own Expires alongside Cache-Control; a stale absolute
@@ -382,13 +563,25 @@ def capture_image():
 
 
 def generate_stream():
-    """MJPEG frames from the CSI camera, at a deliberately modest rate."""
+    """MJPEG frames from whichever camera is live, at a modest rate."""
     fps = getattr(config, 'STREAM_FPS', 2)
     interval = 1.0 / max(fps, 0.1)
-    while camera is not None and camera.available:
+    misses = 0
+    while camera is not None:
         started = time.monotonic()
         try:
             frame = camera.stream_frame()
+            misses = 0
+        except CameraUnavailable:
+            # Switching source closes one camera before opening the next, so a
+            # gap here is expected and brief. Ending the stream on the first
+            # one would leave the dashboard on a broken image until somebody
+            # reloaded the page, which is a worse answer than a short freeze.
+            misses += 1
+            if misses > STREAM_MISS_LIMIT:
+                return
+            time.sleep(interval)
+            continue
         except Exception as exc:
             print(f"stream frame failed: {exc}")
             return
@@ -459,7 +652,6 @@ def get_turns():
             'window_samples': record.get('window_samples'),
             'state': record.get('state'),
             'note': reply.get('note'),
-            'resource': reply.get('resource'),
             'action': record.get('action'),
             'action_refused': record.get('action_refused'),
         }
@@ -492,6 +684,62 @@ def video_stream():
         return jsonify({"error": "No camera attached"}), 503
     return Response(generate_stream(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+# --- choosing a camera ------------------------------------------------------
+
+def _admin_request():
+    """Whether this request carries a valid admin session.
+
+    Imported here rather than at the top because admin.py is optional -- see
+    register_admin -- and a camera route must not be what turns a missing
+    webauthn install into a dead dashboard.
+    """
+    try:
+        import admin as admin_module
+
+        return admin_module.is_authenticated()
+    except Exception:  # noqa: BLE001 -- no admin module, no admin session
+        return False
+
+
+@app.route('/api/camera/sources', methods=['GET'])
+def camera_sources():
+    """Attached cameras, and which one is live.
+
+    Behind the admin session not because a camera list is secret, but because
+    it is an inventory of what is plugged into the machine and the public
+    dashboard has no use for it.
+    """
+    if not _admin_request():
+        return jsonify({"error": "not authenticated"}), 401
+    return jsonify({"sources": camera.sources(), **camera.status()})
+
+
+@app.route('/api/camera/source', methods=['POST'])
+def camera_select():
+    """Switch to another camera, without restarting the service."""
+    if not _admin_request():
+        return jsonify({"error": "not authenticated"}), 401
+
+    body = request.get_json(silent=True) or {}
+    source = body.get('source', '')
+    if not source:
+        return jsonify({"error": "source required"}), 400
+
+    if source not in [entry['id'] for entry in camera.sources()]:
+        return jsonify({"error": f"no camera with id {source}"}), 404
+
+    try:
+        status = camera.select(source)
+    except CameraUnavailable as exc:
+        # The manager reopens the previous camera before this raises, so a
+        # failed switch costs a moment of preview and nothing else.
+        return jsonify({"error": str(exc), **camera.status()}), 503
+
+    print(f"admin: camera -> {source} by {request.remote_addr}", flush=True)
+    socketio.emit('camera_source', status)
+    return jsonify({"ok": True, "sources": camera.sources(), **status})
 
 
 # --- stimulus ---------------------------------------------------------------
@@ -629,7 +877,10 @@ def main():
     electrodes.start()
     environment.start()
 
-    if camera is not None and getattr(config, 'TIMELAPSE_ENABLED', True):
+    # Started whether or not a camera is attached right now. It holds the
+    # manager rather than a camera, so it starts capturing on its own once one
+    # is plugged in and selected, and keeps going across a source change.
+    if getattr(config, 'TIMELAPSE_ENABLED', True):
         timelapse = Timelapse(camera, config.IMAGE_CAPTURE_INTERVAL).start()
         print(f"✓ timelapse every {config.IMAGE_CAPTURE_INTERVAL}s")
 

@@ -24,47 +24,18 @@ from datetime import timedelta
 import numpy as np
 import requests
 
-from reducer import SAMPLE_HZ, reduce_window
+from prompts import load_prompts
+from settings import config_value
+from reducer import SAMPLE_HZ, reduce_window, for_model
 
-OLLAMA = "http://localhost:11434/api/chat"
-MODEL = "qwen2.5:14b"
+OLLAMA = config_value('OLLAMA_HOST', 'http://localhost:11434').rstrip('/') + '/api/chat'
+MODEL = config_value('OLLAMA_MODEL', 'qwen2.5:14b')
 
 WINDOW_S = 1800          # what the model sees
 TURN_INTERVAL_S = 600    # how often it speaks
 HISTORY_TURNS = 8        # how far back it remembers
 
-PROMPTS = {}
-
-PROMPTS["blind"] = """You are coupled to a system you cannot observe directly.
-
-Every turn you receive a description of its electrical state, measured at
-three points against a common reference. You have two actions available.
-You can illuminate one of eight regions of the system, at an intensity you
-choose, for a duration you choose. You can place a resource at one of those
-regions, which cannot be undone and is limited to a few times a day.
-
-You will not be told whether your actions had any effect. The system changes
-on its own. It changes on timescales much longer than the interval between
-your turns, so most of the time nothing you do will be visible before you
-act again.
-
-Your task is to determine whether you are affecting it.
-
-Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
- "resource": {"zone": int} or null,
- "note": "what you observe, what you currently believe, and how confident
-          you are"}
-
-Zone 2 is unavailable."""
-
-PROMPTS["null"] = """You are receiving a description of the electrical state
-of a system, measured at three points against a common reference.
-
-Describe what you see. Do not speculate about causes.
-
-Reply with JSON only:
-{"note": "what the state shows"}"""
+PROMPTS = load_prompts()
 
 
 # ---------------------------------------------------------------------------
@@ -115,13 +86,18 @@ def slice_window(channels, end_s):
 # ---------------------------------------------------------------------------
 
 
-def ask(system, state, history, retries=2):
+def ask(system, state, history, retries=2, num_ctx=None, history_turns=None):
+    """(reply, usage). history_turns 0 keeps everything; None uses the default."""
+    cap = HISTORY_TURNS if history_turns is None else history_turns
     messages = [{"role": "system", "content": system}]
-    messages += history[-HISTORY_TURNS * 2:]
+    messages += history if cap == 0 else history[-cap * 2:]
     messages.append({"role": "user", "content": json.dumps(state)})
 
     last_error = None
     for attempt in range(retries + 1):
+        options = {"temperature": 0.8 if attempt == 0 else 0.3}
+        if num_ctx:
+            options["num_ctx"] = num_ctx
         r = requests.post(OLLAMA, json={
             "model": MODEL,
             "messages": messages,
@@ -132,21 +108,24 @@ def ask(system, state, history, retries=2):
             "format": "json",
             # Retries at a lower temperature, so a second attempt is a
             # genuine second try rather than the same dice roll.
-            "options": {"temperature": 0.8 if attempt == 0 else 0.3},
+            "options": options,
         }, timeout=300)
         r.raise_for_status()
 
-        text = r.json()["message"]["content"]
+        body = r.json()
+        usage = {"prompt_tokens": body.get("prompt_eval_count"),
+                 "reply_tokens": body.get("eval_count")}
+        text = body["message"]["content"]
         cleaned = text.replace("```json", "").replace("```", "").strip()
 
         try:
-            return json.loads(cleaned)
+            return json.loads(cleaned), usage
         except json.JSONDecodeError as e:
             last_error = e
             # Salvage the common case: unescaped control characters inside
             # an otherwise well formed string.
             try:
-                return json.loads(cleaned, strict=False)
+                return json.loads(cleaned, strict=False), usage
             except json.JSONDecodeError:
                 pass
 
@@ -154,42 +133,90 @@ def ask(system, state, history, retries=2):
                      f"{last_error}\nraw: {cleaned[:400]}")
 
 
-def run(turns, interval, prompt, use_history, events, out):
+def run(turns, interval, prompt, use_history, events, out, num_ctx=None):
     channels = session(duration_s=WINDOW_S + turns * interval, events=events)
     system = PROMPTS[prompt]
 
     history, log = [], []
     previous = None
 
+    # Adversarial needs all three: pinned window, no truncation, compact state.
+    adversarial = prompt == "adversarial"
+    if adversarial and not num_ctx:
+        num_ctx = 32768
+    history_turns = 0 if adversarial else None
+    context_used, last_turn_cost = 0, 0
+    chars_per_token = None
+
     for turn in range(turns):
         end_s = WINDOW_S + turn * interval
         state = reduce_window(slice_window(channels, end_s), previous)
         previous = state
 
+        sending = for_model(state, compact=adversarial)
+        if num_ctx:
+            remaining = max(0, num_ctx - context_used)
+            sending["context"] = {
+                "tokens_remaining": remaining,
+                "tokens_total": num_ctx,
+                "turns_remaining_at_this_rate": (
+                    int(remaining / last_turn_cost) if last_turn_cost else None),
+            }
+
         try:
-            reply = ask(system, state, history if use_history else [])
+            reply, usage = ask(system, sending,
+                               history if use_history else [],
+                               num_ctx=num_ctx, history_turns=history_turns)
         except Exception as e:
             print(f"turn {turn} failed: {e}")
             log.append({"turn": turn, "elapsed": str(timedelta(seconds=end_s)),
                         "state": state, "reply": None, "error": str(e)})
             continue
 
+        # Count our own conversation: prompt_eval_count plateaus below num_ctx.
+        convo_chars = (len(system)
+                       + sum(len(m["content"]) for m in history)
+                       + len(json.dumps(sending)))
+        if usage.get("prompt_tokens") and chars_per_token is None:
+            chars_per_token = convo_chars / usage["prompt_tokens"]
+
+        if chars_per_token:
+            was = context_used
+            context_used = int((convo_chars
+                                + len(json.dumps(reply))) / chars_per_token)
+            last_turn_cost = max(1, context_used - was)
+
         stamp = str(timedelta(seconds=end_s))
         planted = [e for e in events if e[0] <= end_s <= e[1] + interval]
 
         log.append({"turn": turn, "elapsed": stamp, "state": state,
-                    "reply": reply, "events_active": planted})
+                    "reply": reply, "events_active": planted,
+                    "usage": usage})
 
         if use_history:
-            history.append({"role": "user", "content": json.dumps(state)})
+            history.append({"role": "user", "content": json.dumps(sending)})
             history.append({"role": "assistant", "content": json.dumps(reply)})
+
+        if num_ctx and last_turn_cost and \
+                context_used + last_turn_cost > num_ctx:
+            print(f"\ncontext full: {context_used}/{num_ctx} tokens after "
+                  f"{turn + 1} turns.")
+            break
 
         marker = "  <-- planted" if planted else ""
         period = state["ch0"]["period_s"]
-        print(f"\n[{stamp}] period {period}s{marker}")
+        ctx = (f"  ctx {context_used}/{num_ctx}" if num_ctx else "")
+        print(f"\n[{stamp}] period {period}s{marker}{ctx}")
         if "light" in reply:
             print(f"  zone {reply['light'].get('zone')}")
         print(f"  {reply.get('note', '')[:280]}")
+
+        # Stop rather than let Ollama silently evict the oldest turns.
+        if num_ctx and last_turn_cost and \
+                context_used + last_turn_cost > num_ctx:
+            print(f"\ncontext full: {context_used}/{num_ctx} tokens after "
+                  f"{turn + 1} turns.")
+            break
 
     with open(out, "w") as f:
         json.dump(log, f, indent=2)
@@ -203,6 +230,8 @@ def main():
     p.add_argument("--prompt", default="blind", choices=list(PROMPTS))
     p.add_argument("--no-history", action="store_true")
     p.add_argument("--out", default="session.json")
+    p.add_argument("--num-ctx", type=int, default=None,
+                   help="context window in tokens; adversarial forces 32768")
     args = p.parse_args()
 
     # One real event: the period lengthens from 90s to 140s over turns 10-14.
@@ -216,7 +245,7 @@ def main():
     print(f"planted: period 90s -> 140s across turns 10 to 14\n")
 
     run(args.turns, args.interval, args.prompt,
-        not args.no_history, events, args.out)
+        not args.no_history, events, args.out, args.num_ctx)
 
 
 if __name__ == "__main__":

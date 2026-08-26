@@ -72,29 +72,16 @@ sys.path.insert(0, str(HERE / 'filters'))
 import syspath  # noqa: E402,F401  (path setup, must precede hardware imports)
 
 import config  # noqa: E402
-from reducer import reduce_window  # noqa: E402
+from reducer import reduce_window, for_model  # noqa: E402
+from trail import Trail  # noqa: E402
 from store import channels_from_rows, electrode_log  # noqa: E402
 
-# The three prompt variants live in llm/filters/prompts.md as the source of
-# truth. harness.py carries copies of BLIND and NULL; INFORMED is only in the
-# markdown, so it is parsed out rather than duplicated a third time here.
-PROMPTS_MD = HERE / 'filters' / 'prompts.md'
+# Recovery state only, never the panel -- a live run drives it through matrixd.
+# Pure stdlib on purpose: importing leds.py here would put the refusal below
+# behind the CircuitPython stack, where an ImportError silently disables it.
+import recovery as recovery_state  # noqa: E402
 
-
-def load_prompts():
-    """Parse the fenced prompt blocks out of prompts.md, keyed by heading."""
-    prompts, current, in_block, buffer = {}, None, False, []
-    for line in PROMPTS_MD.read_text(encoding='utf-8').splitlines():
-        if line.startswith('## '):
-            current = line[3:].strip().lower()
-        elif line.startswith('```'):
-            if in_block and current:
-                prompts[current] = '\n'.join(buffer).strip()
-                buffer = []
-            in_block = not in_block
-        elif in_block:
-            buffer.append(line)
-    return {k: v for k, v in prompts.items() if v}
+from prompts import load_prompts  # noqa: E402
 
 
 class LiveSource:
@@ -189,10 +176,12 @@ class ReplaySource:
 class Ollama:
     """Chat client for the model running on the laptop."""
 
-    def __init__(self, host, model, timeout=300):
+    def __init__(self, host, model, timeout=300, num_ctx=None):
         self.url = host.rstrip('/') + '/api/chat'
         self.model = model
         self.timeout = timeout
+        # None leaves it to the model's Modelfile.
+        self.num_ctx = num_ctx
 
     def reachable(self):
         """(ok, detail). Checks the server answers and has the model."""
@@ -211,12 +200,19 @@ class Ollama:
         return True, f"{self.model} available"
 
     def ask(self, system, state, history, retries=2):
+        """(reply, usage), usage being Ollama's own token counts."""
         messages = [{"role": "system", "content": system}]
         messages += history
         messages.append({"role": "user", "content": json.dumps(state)})
 
         last_error = None
         for attempt in range(retries + 1):
+            # A retry at a lower temperature is a genuine second try rather
+            # than the same dice roll again.
+            options = {"temperature": 0.8 if attempt == 0 else 0.3}
+            if self.num_ctx:
+                options["num_ctx"] = self.num_ctx
+
             response = requests.post(self.url, json={
                 "model": self.model,
                 "messages": messages,
@@ -225,20 +221,23 @@ class Ollama:
                 # occasionally emits a literal newline inside a string and
                 # the parse fails, which loses the turn.
                 "format": "json",
-                # A retry at a lower temperature is a genuine second try
-                # rather than the same dice roll again.
-                "options": {"temperature": 0.8 if attempt == 0 else 0.3},
+                "options": options,
             }, timeout=self.timeout)
             response.raise_for_status()
 
-            text = response.json()["message"]["content"]
+            body = response.json()
+            usage = {
+                "prompt_tokens": body.get("prompt_eval_count"),
+                "reply_tokens": body.get("eval_count"),
+            }
+            text = body["message"]["content"]
             cleaned = text.replace("```json", "").replace("```", "").strip()
             try:
-                return json.loads(cleaned)
+                return json.loads(cleaned), usage
             except json.JSONDecodeError as exc:
                 last_error = exc
                 try:
-                    return json.loads(cleaned, strict=False)
+                    return json.loads(cleaned, strict=False), usage
                 except json.JSONDecodeError:
                     pass
 
@@ -360,35 +359,25 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
 
     intensity = action["intensity"]
     if full_intensity:
-        # A demo is not data, and the model's chosen intensity is typically
-        # 0.5-0.8 which, against STIM_BRIGHTNESS of 0.25, lands around 31/255 --
-        # only twice the always-on barrier, and easy to miss entirely in a lit
-        # room. Which zone the model picked is the point of a demo; how brightly
-        # it asked for it is not.
+        # The model's 0.5-0.8 against STIM_BRIGHTNESS lands near 31/255, twice
+        # the barrier and easy to miss in a lit room. A demo shows which zone,
+        # not how brightly.
         intensity = 1.0
 
-    # Worked out before the zone is lit, because a zero-length request must not
-    # light it at all. This used to be computed after set_zone and to simply
-    # `return` on duration <= 0, which left the zone on with nothing armed to
-    # take it off again: a request for zero seconds of light lasted until the
-    # next turn overwrote it, up to a full 600s interval on an organism that is
-    # photophobic. That is the same failure the docstring above describes -- a
-    # duration parsed, validated, logged and not applied -- in its other
-    # direction.
+    # Worked out before the zone is lit: a zero-length request must not light it
+    # at all. Computing this after set_zone left the zone on with nothing armed
+    # to clear it, so zero seconds lasted until the next turn.
     #
-    # Scaling the duration alongside the interval keeps the on/off ratio honest,
-    # but at 60x a 60s pulse becomes a one-second blink -- below the threshold of
-    # being seeable, which defeats the point of a mode that exists to be watched.
-    # min_duration is the visibility floor, and is only set in demo.
+    # Scaling duration with the interval keeps the on/off ratio honest, but at
+    # 60x a 60s pulse is a one-second blink. min_duration is the visibility
+    # floor, set only in demo.
     duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
     if duration > 0:
         duration = max(duration, min_duration)
 
-    # Clearing rather than lighting-then-clearing: the zone is already dark, and
-    # a set/clear pair would spend a switching edge saying so. bus.SwitchGate
-    # exists to keep exactly those edges away from the electrode reference.
-    # hold_until_next is exempt because it ignores the duration by design -- a
-    # demo still shows the model's choice, whatever length it asked for.
+    # Clear rather than light-then-clear: the zone is already dark, and a
+    # set/clear pair spends a switching edge saying so. hold_until_next is
+    # exempt -- a demo shows the choice whatever duration was asked for.
     if not hold_until_next and duration <= 0:
         matrix.clear_stimulus()
         return
@@ -397,11 +386,8 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
     matrix.set_zone(action["zone"], intensity)
     _switch('on')
 
-    # In a demo the zone stays lit until the model chooses the next one, so the
-    # panel always shows the current choice and visibly moves. Scaling the
-    # duration instead gave a 13% duty cycle -- six seconds lit out of the ~45
-    # between turns, because model latency dominates the compressed interval --
-    # which is not something a person watching can be expected to catch.
+    # Demo holds the zone until the next choice, so the panel visibly moves.
+    # Scaling the duration instead gave ~13% duty, which nobody can watch.
     if hold_until_next:
         return
 
@@ -462,45 +448,72 @@ def main():
                         help='time compression in replay, e.g. 600 runs a '
                              '10 min turn interval in 1 s')
     parser.add_argument('--sham-rate', type=float, default=None)
+    parser.add_argument('--num-ctx', type=int, default=None,
+                        help='context window in tokens; pins the denominator '
+                             'the adversarial prompt reports to the model')
     parser.add_argument('--demo', action='store_true',
                         help='synthetic data at speed, DRIVING the panel. For '
                              'exercising the hardware; refuses if the chamber '
                              'is occupied. Turns go to the replay log.')
     args = parser.parse_args()
 
+    # In recovery the panel is dark, so a live turn would be logged as real
+    # against something that was never lit. A gap is visibly a gap; a fake turn
+    # is not. Refuse.
+    #
+    # Exit 0, not an error: sllm-loop.service is Restart=on-failure, so a clean
+    # exit stops it rather than retrying for as long as recovery lasts.
+    #
+    # --dry-run, --check and --replay stay allowed; none actuate.
+    if recovery_state.active(fresh=True) and not (
+            args.dry_run or args.check or args.replay):
+        print('recovery mode is on: the panel is dark and the organism is '
+              'coming back from sclerotium. Refusing to run live turns. Turn '
+              'recovery off from the admin page (or `python3 '
+              'gpio/recovery.py off`) and start sllm-loop to resume.',
+              file=sys.stderr)
+        return 0
+
     window_s = getattr(config, 'LLM_WINDOW_S', 1800)
     history_turns = getattr(config, 'LLM_HISTORY_TURNS', 8)
+
+    # Each variant that changes the loop, not only the wording, is wired here.
+    # Adversarial needs all three of pinned window, no truncation and compact
+    # state; mimic needs all four of no history, trail, changes-only and no
+    # note. Any one missing and the prompt describes something that is not
+    # happening.
+    adversarial = args.prompt == 'adversarial'
+    mimic = args.prompt == 'mimic'
+    num_ctx = args.num_ctx or getattr(config, 'LLM_NUM_CTX', None)
+    compact_state = adversarial
+
+    trail = None
+    if mimic:
+        trail = Trail(os.path.join(config.DATA_DIR, 'trail.json'))
+        history_turns = -1          # no history at all, not a window of it
+
+    if adversarial:
+        if not num_ctx:
+            num_ctx = 32768
+        history_turns = 0
+    elif history_turns == 0 and not num_ctx:
+        print("history is uncapped with no num_ctx set: the context will fill\n"
+              "and Ollama will silently drop the oldest turns. Set LLM_NUM_CTX.")
     sham_rate = (args.sham_rate if args.sham_rate is not None
                  else getattr(config, 'LLM_SHAM_RATE', 0.25))
     channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
 
-    # Replay implies dry run. Driving the panel from a recording would put
-    # real light on the organism on the strength of data that is not about it.
+    # Replay implies dry run: driving the panel from a recording puts real light
+    # on the organism from data that is not about it.
     #
-    # --demo is the one deliberate exception, and exists because there was
-    # otherwise NO way to watch the hardware work. The live loop cannot be made
-    # fast without being made meaningless -- a 30 minute window and a 10 minute
-    # turn are set by Physarum's contraction period, not by impatience -- and
-    # replay, which is fast, refuses to actuate. So the physical chain could
-    # only ever be observed at one zone change every ten minutes.
-    #
-    # What makes the exception safe is that it is loud, it is gated on the
-    # chamber being empty, and its turns are written to data/logs/replay/ where
-    # they can never be mistaken for the record of a real session.
+    # --demo is the one exception, and exists because the live loop cannot be
+    # sped up without becoming meaningless. It is safe because it is loud, gated
+    # on an empty chamber, and logs to data/logs/replay/.
     if args.demo:
-        # Read fresh, every start, from the recording mode -- which is the same
-        # assertion a separate occupancy flag used to make, one flag later.
-        #
-        # There used to be two: recording test/live, and chamber empty/occupied.
-        # Two controls for one fact, and the occupancy one was the weaker of the
-        # pair, because nothing goes wrong when it is stale. It therefore went
-        # stale, which is exactly the failure it existed to prevent. The mode is
-        # the flag that stays honest: set it wrong and a real session is written
-        # to the test subdirectory where analysis filters it out, so it gets
-        # corrected within a turn.
-        #
-        # `live` now means a real session is being recorded, which means there is
-        # something in the chamber.
+        # Read fresh every start from the recording mode: `live` means a real
+        # session, which means something is in the chamber. A separate occupancy
+        # flag used to say the same thing and went stale, because nothing broke
+        # when it did.
         import run as run_state  # noqa: PLC0415 -- gpio/ is on the path above
 
         if run_state.current(config).get('mode') == 'live':
@@ -532,17 +545,12 @@ def main():
     if args.demo:
         min_stimulus_s = max(6.0, (args.interval / max(args.speed, 1e-9)) * 0.5)
 
-    # sham_rate is computed above, before the --demo block ran, so it still
-    # holds the config default. The --demo block has since set args.sham_rate to
-    # 0 unless one was passed explicitly, so take it from there. A demo has
-    # nothing to control for, and a sham just makes a quarter of the turns light
-    # nothing, which reads as broken hardware to a viewer.
+    # sham_rate above still holds the config default, so take the demo value
+    # from args. A demo has nothing to control for, and a sham reads as broken
+    # hardware to a viewer.
     #
-    # This used to test `args.sham_rate is None` -- which the --demo block had
-    # just made false by setting it to 0.0, so the override never fired and a
-    # hand-run demo ran the full 25%. sllm-demo.service hid it by passing
-    # --sham-rate 0 on the command line, so only a demo started by hand was
-    # affected, which is the one the documentation tells you to run.
+    # Do not test `args.sham_rate is None` here -- the --demo block has already
+    # set it to 0.0, so the override never fires and a hand-run demo gets 25%.
     if args.demo:
         sham_rate = args.sham_rate
 
@@ -552,20 +560,15 @@ def main():
         return 1
     system = prompts[args.prompt]
 
-    ollama = Ollama(args.host, args.model)
+    ollama = Ollama(args.host, args.model, num_ctx=num_ctx)
     turns_log = TurnLog(config.LOG_DIR, replay=bool(args.replay) or args.dry_run)
 
-    # When the light actually moved, which the turn record cannot say: it is
-    # written while the stimulus is still on, so the off time does not exist yet.
+    # When the light actually moved. The turn record cannot say: it is written
+    # while the stimulus is still on, so the off time does not exist yet.
     #
-    # These rows are what let an analysis drop ADC samples that sat inside a
-    # switching transient. bus.SwitchGate keeps conversions away from switches
-    # within the API process, but llm/loop.py drives zones through matrixd,
-    # which is a separate process and outside that lock -- so a zone change can
-    # land mid-conversion and be measured instead of the organism. At
-    # ADC_SWITCH_SETTLE of 0.25s against one sample a second, that is well under
-    # one sample per turn, and excluding samples near these timestamps costs
-    # almost nothing while closing the gap completely.
+    # These rows let analysis drop ADC samples caught in a switching transient.
+    # bus.SwitchGate only covers the API process; loop.py drives matrixd, which
+    # is outside that lock, so a zone change can land mid-conversion.
     switch_log = TurnLog(config.LOG_DIR, replay=bool(args.replay) or args.dry_run,
                          prefix='switches')
 
@@ -625,6 +628,8 @@ def main():
         return 1
 
     history, previous, turn = [], None, 0
+    context_used, last_turn_cost = 0, 0
+    chars_per_token = None
     print(f"\nrunning, a turn every {args.interval}s. ctrl-c to stop.\n")
 
     try:
@@ -645,6 +650,27 @@ def main():
             state = reduce_window(series, previous)
             previous = state
 
+            # Model-facing view; the full state is what gets logged.
+            sending = for_model(state, compact=compact_state)
+            if mimic:
+                # Changes only, plus the trail. No absolute values, and the
+                # trail is the only thing that carries across turns.
+                trail.step()
+                sending = {
+                    "changed": state.get("changes_since_last_turn",
+                                         ["nothing measurable changed"]),
+                    "trail": trail.view(),
+                }
+            if num_ctx:
+                remaining = max(0, num_ctx - context_used)
+                sending["context"] = {
+                    "tokens_remaining": remaining,
+                    "tokens_total": num_ctx,
+                    "turns_remaining_at_this_rate": (
+                        int(remaining / last_turn_cost) if last_turn_cost
+                        else None),
+                }
+
             record = {
                 "turn": turn,
                 "datetime": datetime.now(timezone.utc).astimezone().isoformat(),
@@ -658,8 +684,16 @@ def main():
                 # can be checked against whether one happened.
                 record["events_planted"] = source.planted_at(turn)
 
+            # -1 sends nothing, 0 keeps everything, n keeps the last n turns.
+            if history_turns < 0:
+                recent = []
+            elif history_turns == 0:
+                recent = history
+            else:
+                recent = history[-history_turns * 2:]
+
             try:
-                reply = ollama.ask(system, state, history[-history_turns * 2:])
+                reply, usage = ollama.ask(system, sending, recent)
             except Exception as exc:
                 print(f"[turn {turn}] model failed: {exc}")
                 record["error"] = str(exc)
@@ -669,6 +703,23 @@ def main():
                 continue
 
             record["reply"] = reply
+            record["usage"] = usage
+
+            # Count our own conversation, not prompt_eval_count: Ollama caps
+            # and caches that, so it plateaus below num_ctx and never crosses.
+            # Turn 0 calibrates chars-per-token.
+            convo_chars = (len(system)
+                           + sum(len(m["content"]) for m in history)
+                           + len(json.dumps(sending)))
+            if usage.get("prompt_tokens") and chars_per_token is None:
+                chars_per_token = convo_chars / usage["prompt_tokens"]
+
+            if chars_per_token:
+                previous_used = context_used
+                context_used = int((convo_chars
+                                    + len(json.dumps(reply))) / chars_per_token)
+                last_turn_cost = max(1, context_used - previous_used)
+                record["context_used"] = context_used
 
             action, refusal = validate_action(
                 reply, leds.ZONES, leds.BARRIER_ZONE,
@@ -695,9 +746,22 @@ def main():
                     print(f"[turn {turn}] apply failed: {exc}")
 
             record["action"] = action
+
+            if mimic:
+                # Marked by acting, not by choosing. A sham lays nothing -- the
+                # trail is on the surface, and nothing reached it. A dry run is
+                # hypothetical throughout, so a valid non-sham action counts,
+                # or the trail could never be exercised without an organism.
+                laid = record["applied"] or (args.dry_run and action
+                                             and not is_sham)
+                if laid:
+                    trail.mark(action["zone"], action["intensity"])
+                trail.save()
+                record["trail"] = trail.view()
+
             path = turns_log.append(record)
 
-            history.append({"role": "user", "content": json.dumps(state)})
+            history.append({"role": "user", "content": json.dumps(sending)})
             history.append({"role": "assistant", "content": json.dumps(reply)})
 
             stamp = datetime.now().strftime('%H:%M:%S')
@@ -707,13 +771,23 @@ def main():
             planted = "  <-- planted" if record.get("events_planted") else ""
             print(f"[{stamp}] turn {turn}  period {period}s  "
                   f"zone {zone}  {mark}{planted}")
-            if reply.get('resource'):
-                # Placing an oat flake is a physical act nobody has automated.
-                # Surfaced loudly so it can be honoured or deliberately not.
-                print(f"           RESOURCE REQUESTED: {reply['resource']}")
-            print(f"           {str(reply.get('note', ''))[:200]}")
+            if mimic:
+                print(f"           trail {record['trail']}")
+            else:
+                print(f"           {str(reply.get('note', ''))[:200]}")
+            if num_ctx:
+                print(f"           context {context_used}/{num_ctx} tokens, "
+                      f"{max(0, num_ctx - context_used)} left")
 
             turn += 1
+
+            # Stop rather than let Ollama silently evict the oldest turns.
+            if num_ctx and last_turn_cost and \
+                    context_used + last_turn_cost > num_ctx:
+                print(f"\ncontext full: {context_used}/{num_ctx} tokens after "
+                      f"{turn} turns. Stopping.")
+                break
+
             # In replay --speed compresses this; live it is always 1.0.
             time.sleep(max(0, args.interval / args.speed - (time.monotonic() - started)))
     except KeyboardInterrupt:

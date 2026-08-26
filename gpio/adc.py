@@ -5,6 +5,11 @@ the barrier zone. Differential, not single-ended: what matters is the potential
 between a recording tip and the reference, and a differential pair rejects the
 common-mode noise both wires pick up from the mains and from the panel.
 
+Data rate 8 SPS: each conversion integrates over 125ms rather than the
+library default's 7.8ms. Longer integration averages more of the noise away,
+and 125ms spans several mains cycles so 50Hz pickup largely cancels. Three
+channels at 8 SPS is 375ms, inside the 1 Hz cadence.
+
 Gain 16 gives +/-0.256V full scale, 7.8125 uV per count. Plasmodium surface
 potentials run to single-digit millivolts, so the default gain 1 would put the
 entire signal inside the first 60 counts of a 32768-count range.
@@ -49,6 +54,7 @@ class ElectrodeADC:
         self.reference = getattr(config, 'ADC_REFERENCE_CHANNEL', 3)
         self.channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
         self.sample_rate = getattr(config, 'ADC_SAMPLE_RATE', 1.0)
+        self.data_rate = getattr(config, 'ADC_DATA_RATE', 8)
 
         for channel in self.channels:
             if (channel, self.reference) not in VALID_PAIRS:
@@ -64,6 +70,7 @@ class ElectrodeADC:
         try:
             self._ads = ADS.ADS1115(get_i2c(), address=self.address)
             self._ads.gain = self.gain
+            self._ads.data_rate = self.data_rate
         except (OSError, ValueError) as exc:
             raise ADCUnavailable(f"ADS1115 at 0x{self.address:02X}: {exc}") from exc
 

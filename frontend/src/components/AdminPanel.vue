@@ -31,12 +31,23 @@
       </div>
 
       <div v-else>
+        <p class="admin-label">Recovery</p>
+        <div class="pill" :class="{ busy }">
+          <button :class="{ active: !recovery.active }" :disabled="busy"
+                  @click="setRecovery(false)">off</button>
+          <button :class="{ active: recovery.active, recovery: recovery.active }"
+                  :disabled="busy" @click="setRecovery(true)">recovering</button>
+        </div>
+
+        <hr class="admin-rule" />
+
         <p class="admin-label">Model loop</p>
         <div class="pill" :class="{ busy }">
           <button :class="{ active: !loopActive }" :disabled="busy"
                   @click="setUnit('loop', 'stop')">stopped</button>
           <button :class="{ active: loopActive, live: loopActive }"
-                  :disabled="busy" @click="setUnit('loop', 'start')">running</button>
+                  :disabled="busy || recovery.active"
+                  @click="setUnit('loop', 'start')">running</button>
         </div>
 
         <hr class="admin-rule" />
@@ -46,7 +57,7 @@
           <button :class="{ active: !demoActive }" :disabled="busy"
                   @click="setUnit('demo', 'stop')">stopped</button>
           <button :class="{ active: demoActive, demo: demoActive }"
-                  :disabled="busy || mode === 'live'"
+                  :disabled="busy || mode === 'live' || recovery.active"
                   @click="setUnit('demo', 'start')">running</button>
         </div>
         <p class="admin-hint">
@@ -67,6 +78,18 @@
           Test data is written to its own directory. While live is
           selected, demo mode is blocked.
         </p>
+
+        <hr class="admin-rule" />
+
+        <p class="admin-label">Camera</p>
+        <select class="admin-select" :disabled="busy || !cameras.length"
+                :value="cameraSource || ''"
+                @change="setCamera($event.target.value)">
+          <option v-if="!cameras.length" value="">no camera attached</option>
+          <option v-for="source in cameras" :key="source.id" :value="source.id">
+            {{ source.label }} ({{ source.kind }})
+          </option>
+        </select>
 
         <hr class="admin-rule" />
 
@@ -111,8 +134,11 @@ export default {
       authenticated: false,
       loopActive: false,
       demoActive: false,
+      recovery: { active: false, dark: false, since: null },
       mode: '',
       modes: [],
+      cameras: [],
+      cameraSource: '',
       // The session token lives here and nowhere else. Not a cookie (no CSRF
       // surface) and not localStorage (an XSS would have to run while the
       // session is live rather than harvest it later).
@@ -255,9 +281,45 @@ export default {
         const data = await response.json()
         this.loopActive = data.units ? data.units.loop.active : data.active
         this.demoActive = data.units ? data.units.demo.active : false
+        await this.refreshRecovery()
         await this.refreshRun()
+        await this.refreshCameras()
       } catch (e) {
         this.error = 'Could not read loop state.'
+      }
+    },
+
+    async refreshRecovery() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/admin/recovery`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.recovery = data.recovery
+      } catch (e) {
+        // Non-fatal.
+      }
+    },
+
+    async setRecovery(active) {
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const data = await this.post('recovery', { active }, true)
+        this.recovery = data.recovery
+        // Turning recovery on stops both units, so the pills below it are
+        // stale the moment this returns.
+        if (data.units) {
+          this.loopActive = data.units.loop.active
+          this.demoActive = data.units.demo.active
+        }
+      } catch (e) {
+        this.error = e.message || 'Could not switch recovery.'
+        await this.refreshRecovery()
+      } finally {
+        this.busy = false
       }
     },
 
@@ -272,6 +334,50 @@ export default {
         this.modes = data.modes
       } catch (e) {
         // Non-fatal.
+      }
+    },
+
+    async refreshCameras() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/camera/sources`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.cameras = data.sources
+        this.cameraSource = data.source
+      } catch (e) {
+        // Non-fatal: the rest of the panel still works without a camera list.
+      }
+    },
+
+    async setCamera(source) {
+      if (!source || source === this.cameraSource) return
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const response = await fetch(`${this.apiUrl}/api/camera/source`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({ source }),
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Could not switch camera.')
+        this.cameras = data.sources
+        this.cameraSource = data.source
+        this.notice = `Camera: ${data.model}`
+      } catch (e) {
+        this.error = e.message || 'Could not switch camera.'
+        // The server keeps the old camera live when a switch fails, so put the
+        // dropdown back where it was rather than leaving it showing a camera
+        // that is not the one running.
+        await this.refreshCameras()
+      } finally {
+        this.busy = false
       }
     },
 
@@ -351,6 +457,14 @@ export default {
 .admin-action:disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-action.subtle { border-color: #333; color: #888; }
 
+.admin-select {
+  display: block; width: 100%; margin: 0.4rem 0; padding: 0.4rem;
+  background: #1a1a1a; border: 1px solid #444; border-radius: 4px;
+  color: #b4b4b4; font-size: 0.8rem; cursor: pointer;
+}
+.admin-select:hover:not(:disabled) { border-color: #666; color: #ddd; }
+.admin-select:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .admin-label { color: #888; font-size: 0.75rem; text-transform: uppercase;
   letter-spacing: 0.06em; margin: 0.2rem 0 0.35rem; }
 .pill { display: flex; border: 1px solid #444; border-radius: 999px;
@@ -364,10 +478,15 @@ export default {
    live acquisition earns the highlight, so the panel reads at a glance. */
 .pill button.active { background: #262626; color: #b4b4b4; }
 .pill button.active.live,
-.pill button.active.demo { background: #1d3a4d; color: #9ad4f7; }
+/* Demo mode has to stay obvious without a colour to shout in: it gets the
+   full inversion, which nothing else in the panel uses. */
+.pill button.active.demo,
+/* Recovery is the installation deliberately doing nothing, which is otherwise
+   indistinguishable from it being broken. It gets the same full inversion. */
+.pill button.active.recovery { background: #ededed; color: #0a0a0a; }
 .pill button:disabled { cursor: default; }
 .admin-rule { border: none; border-top: 1px solid #2a2a2a; margin: 0.8rem 0 0.5rem; }
-.admin-error { color: #e08080; }
-.admin-notice { color: #7fb5d5; }
+.admin-error { color: #ededed; border-left: 2px solid #ededed; padding-left: 0.5rem; }
+.admin-notice { color: #a8a8a8; border-left: 2px dashed rgba(255, 255, 255, 0.35); padding-left: 0.5rem; }
 .admin-hint { color: #666; font-size: 0.75rem; }
 </style>

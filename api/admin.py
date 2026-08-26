@@ -74,14 +74,11 @@ from flask import Blueprint, jsonify, request
 
 admin = Blueprint('admin', __name__, url_prefix='/api/admin')
 
-# The only unit this may touch, and the only verbs it may use. Both are fixed
-# strings compared against a whitelist -- nothing from a request is ever
-# interpolated into a command, and subprocess is called with an argv list so
-# there is no shell to inject into.
-# Two units, and they are mutually exclusive: both drive the same panel, so
-# starting either stops the other. `demo` invents its data, and interleaving
-# fabricated stimulus with a real session would leave no way to tell afterwards
-# which turn caused which light.
+# Units and verbs are whitelisted fixed strings; subprocess takes an argv list,
+# so nothing from a request reaches a shell.
+# The two units are mutually exclusive -- both drive the panel, so starting
+# either stops the other. `demo` invents data, and interleaving it with a real
+# session would leave no way to tell which turn caused which light.
 UNITS = {
     'loop': 'sllm-loop.service',
     'demo': 'sllm-demo.service',
@@ -412,11 +409,9 @@ def register(app, config):
                 resident_key=ResidentKeyRequirement.PREFERRED,
                 user_verification=UserVerificationRequirement.REQUIRED,
             ),
-            # Deliberately no exclude_credentials. Its only job is to stop the
-            # same authenticator being registered twice, which is harmless, and
-            # Android's Credential Manager fails opaquely on it -- "an unknown
-            # error occurred while talking to the credential manager", with
-            # nothing reaching the server to explain it. Not worth the trade.
+            # No exclude_credentials: it only prevents duplicate registration,
+            # which is harmless, and Android's Credential Manager fails opaquely
+            # on it with nothing reaching the server.
         )
         # The token is validated but NOT yet spent; enrol/verify spends it once
         # a credential actually verifies, so a failed attempt is retryable.
@@ -538,12 +533,10 @@ def register(app, config):
 
     # --- the actual controls ----------------------------------------------
 
-    # There is no chamber empty/occupied control. It said the same thing as the
-    # recording mode -- test means nothing is in there, live means something is
-    # -- and of the two, the mode is the one that stays accurate, because
-    # getting it wrong sends a real session to the test subdirectory where
-    # analysis filters it out. An occupancy flag with no such consequence went
-    # stale instead. llm/loop.py refuses --demo while the mode is live.
+    # No separate occupancy control: the recording mode says it. test means
+    # nothing is in the chamber, live means something is, and getting the mode
+    # wrong has a visible consequence so it stays accurate.
+    # llm/loop.py refuses --demo while the mode is live.
 
     @admin.route('/run', methods=['GET'])
     @guard
@@ -573,16 +566,10 @@ def register(app, config):
         if mode not in run_state.MODES:
             return jsonify({"error": f"mode must be one of {list(run_state.MODES)}"}), 400
 
-        # `live` asserts that something is in the chamber. A demo is inventing
-        # data and putting real light on the panel, so the two cannot both be
-        # true -- and the demo interlock only runs at start, so without this the
-        # panel would keep driving invented stimulus onto a chamber that had
-        # just been declared occupied.
-        #
-        # Refused rather than stopping the demo for you. Which of the two is
-        # wrong depends on something only a human can see: whether the organism
-        # is actually in there yet. Guessing either way silently is worse than
-        # asking.
+        # `live` and a running demo cannot both be true, and the demo interlock
+        # only runs at start. Refused rather than stopping the demo: which of
+        # the two is wrong depends on whether the organism is actually in there,
+        # which only a human can see.
         if mode == 'live':
             demo_running, _ = unit_state(UNITS['demo'])
             if demo_running:
@@ -600,6 +587,74 @@ def register(app, config):
         print(f"admin: run mode -> {mode} ({new_run['id']}) by {_client_ip()}",
               flush=True)
         return jsonify({"ok": True, "run": new_run})
+
+    # --- recovery ---------------------------------------------------------
+    # State lives in data/recovery.json and is read on every render, so this
+    # changes the panel within one refresh interval with nothing restarted.
+    #
+    # Threat model: the added capability is blanking the panel and stopping the
+    # loop, or clearing recovery. Clearing starts nothing, so the worst case is
+    # an installation sitting dark, which is visible and reversible from the
+    # page.
+
+    @admin.route('/recovery', methods=['GET'])
+    @guard
+    def recovery_status():
+        import recovery as recovery_state
+
+        return jsonify({
+            "recovery": recovery_state.state(fresh=True),
+            "history": recovery_state.history(limit=10),
+        })
+
+    @admin.route('/recovery', methods=['POST'])
+    @guard
+    def recovery_switch():
+        """Turn recovery on or off.
+
+        Turning it on stops both panel units first. Recovery means nothing
+        reaches the dish, and a loop left running would keep taking turns
+        against a dark panel -- llm/loop.py refuses to *start* in recovery, but
+        that check only runs at start, so a running loop would sail past it and
+        log turns the organism could not have answered.
+
+        Turning it off starts nothing. Coming out of recovery is a decision
+        about the organism, and whether the loop should then run is a separate
+        one that stays with the human looking at the dish.
+        """
+        import recovery as recovery_state
+
+        body = request.get_json(silent=True) or {}
+        if 'active' not in body:
+            return jsonify({"error": "active must be true or false"}), 400
+        want = bool(body.get('active'))
+        # Dark by default: coming out of sclerotium, blue from the barrier is
+        # more likely to suppress the emergence than to guard anything, because
+        # the organism cannot yet make the journey the barrier blocks.
+        want_dark = bool(body.get('dark', True))
+        note = body.get('note', '') or ''
+
+        if want:
+            for key, unit in UNITS.items():
+                running, _ = unit_state(unit)
+                if not running:
+                    continue
+                stopped = _systemctl('stop', unit)
+                if stopped.returncode != 0:
+                    detail = (stopped.stderr or stopped.stdout).strip()
+                    return jsonify({
+                        "error": f"could not stop {unit} first: {detail}"
+                    }), 500
+                print(f"admin: stopped {unit} for recovery", flush=True)
+
+        try:
+            current = recovery_state.set_state(want, want_dark, note)
+        except OSError as exc:
+            return jsonify({"error": f"could not write recovery state: {exc}"}), 500
+
+        print(f"admin: recovery -> {current['active']} "
+              f"(dark={current['dark']}) by {_client_ip()}", flush=True)
+        return jsonify({"ok": True, "recovery": current, "units": _all_states()})
 
     @admin.route('/loop', methods=['GET'])
     @guard
@@ -622,19 +677,26 @@ def register(app, config):
 
         unit = UNITS[which]
 
-        # A demo invents data and puts real light on the panel, and `live`
-        # asserts something is in the chamber. Checked here as well as in the
-        # page, because this endpoint is reachable without it.
-        #
-        # This used to switch the mode to `test` instead, so samples taken under
-        # invented light were routed away from the experiment record. That
-        # silently defeated the interlock it looks like it supports: loop.py
-        # refuses --demo while the mode is live, and the mode had already been
-        # changed by the time it looked. The routing is not lost -- a demo can
-        # now only start from `test`, which is where those samples already go.
+        # Checked here as well as in the page, since this endpoint is reachable
+        # without it. Do NOT switch the mode to `test` here instead -- that
+        # defeats the interlock, because loop.py checks the mode after it has
+        # already been changed. A demo can only start from `test` anyway.
         #
         # Before the stop-the-other-unit step below, so a refusal does not leave
-        # the model loop stopped for a demo that never started.
+        # the loop stopped for a demo that never started.
+        #
+        # Recovery means nothing reaches the dish. loop.py refuses on its own;
+        # the demo has no such check and would run against a panel held dark.
+        if action == 'start':
+            import recovery as recovery_state
+
+            if recovery_state.active(fresh=True):
+                return jsonify({
+                    "error": "turn recovery off first — the organism is "
+                             "coming back from sclerotium and the panel is "
+                             "being held dark"
+                }), 409
+
         if action == 'start' and which == 'demo':
             import run as run_state
 

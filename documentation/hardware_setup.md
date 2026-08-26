@@ -1,186 +1,351 @@
-# Slime Mould Monitor - Hardware Setup Guide
+# sLLM — hardware as built
 
-## Components Needed
+Parts and pins. Bring-up and diagnostics: `bring_up.md`. Panel geometry and
+current budget: `led_matrix.md`.
 
-### Currently Available:
-- Raspberry Pi 4/5
-- Microscope with ring light
-- Microscope camera
-- Macro lens camera
-- Slime moulds in petri dishes
-- Aluminum tape
+**TBC** = not measured.
 
-### Still Needed:
-- ADS1115 ADC module (for electrical readings)
-- Additional LED for exposure light
-- DHT22 temperature/humidity sensor (optional but prepared)
-- Resistors (330Ω for LED, 10kΩ for pull-down, 4.7kΩ for DHT22)
-- Jumper wires
-- Breadboard
+## Inventory
 
-## Wiring Diagram
+| Device | Bus / pin | Role |
+|---|---|---|
+| Raspberry Pi 5 | — | host, replacement board fitted 2026-08-05 |
+| ADS1115 | I²C `0x48` | electrode potentials, 3 differential channels at 1 Hz |
+| SHT31 | I²C `0x44` | chamber temperature and humidity |
+| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus zones + barrier zone |
+| Camera Module 3 NoIR (IMX708) | CSI | stills, 2304×1296 |
+| 850nm IR flood | not GPIO-controlled | imaging illumination, always on |
+| Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 300s |
 
-### Aluminum Tape Electrodes:
+Not present: GPIO 17 ring light, GPIO 27 exposure LED, DHT22.
+
+## Electrodes — ADS1115
+
+Four Ag/AgCl electrodes, read differentially. One unity-gain buffer per
+electrode on the perf board.
+
 ```
-Petri Dish with Slime Mould
-    |
-    | (Aluminum tape strip 1)
-    |
-    +----> To ADS1115 A0
-    |
-    | (Aluminum tape strip 2)
-    |
-    +----> To ADS1115 A1
-```
-
-### Raspberry Pi GPIO Connections:
-```
-RPi GPIO          Device
---------          ------
-GPIO 2 (SDA) ---> ADS1115 SDA
-GPIO 3 (SCL) ---> ADS1115 SCL
-3.3V ---------> ADS1115 VDD
-GND ----------> ADS1115 GND
-
-GPIO 17 -------> Ring Light Control (via relay/transistor)
-GPIO 27 -------> Exposure LED (through 330Ω resistor)
-
-GPIO 4 --------> DHT22 Data Pin
-3.3V ---------> DHT22 VCC
-GND ----------> DHT22 GND
-                (4.7kΩ resistor between Data and VCC)
-
-Camera --------> USB or CSI port (depending on camera type)
+A0 ---- buffer ---- recording electrode 1  \
+A1 ---- buffer ---- recording electrode 2   >  each measured against A3
+A2 ---- buffer ---- recording electrode 3  /
+A3 ---- buffer ---- reference electrode       (top-right corner, under barrier zone 2)
+ADDR -- GND                                   address 0x48
 ```
 
-### ADS1115 Configuration:
-- A0: Aluminum tape electrode 1
-- A1: Aluminum tape electrode 2
-- ADDR: Connect to GND for default address 0x48
+Mux pairs available: 0-1, 0-3, 1-3, 2-3. Reference on A3 is the only
+arrangement giving three channels from one chip. If the reference moves,
+`BARRIER_ZONE` in `gpio/leds.py` moves with it.
 
-## Setting Up the Electrodes
+Gain 16, ±0.256V full scale, 7.8125 µV per count.
 
-1. **Prepare the Petri Dish:**
-   - Clean the petri dish thoroughly
-   - Let it dry completely
+The ADS1115 sees an op-amp output, not the electrode. Its switched-capacitor
+input impedance does not load the tips.
 
-2. **Apply Aluminum Tape:**
-   - Cut two strips of aluminum tape, about 1cm wide
-   - Place them on opposite sides of the petri dish
-   - Leave about 5cm extending outside for connections
-   - Ensure the strips don't touch each other
+Every conversion runs inside `gate.quiet()`. See `gpio/bus.py`.
 
-3. **Inoculate with Slime Mould:**
-   - Place the slime mould in the center
-   - Ensure it has paths to both electrodes
-   - Add oat flakes as food sources
+### Analog front end
 
-4. **Connect to ADC:**
-   - Use alligator clips or solder wires to the aluminum tape
-   - Connect one strip to A0, the other to A1
-   - This creates a differential measurement
+Schematics: `~/schematics/` (`0_physarum-full-schematic`, `1_physarum-board-a-cobbler`,
+`3_physarum-wiring-guide`).
 
-## Setting Up the DHT22 Sensor (Optional)
+Board A, 3V3 domain. Per channel, x4 (E1, E2, E3, REF):
 
-1. **DHT22 Pin Configuration:**
-   - Pin 1 (VCC): Connect to 3.3V
-   - Pin 2 (Data): Connect to GPIO 4
-   - Pin 3 (NC): Not connected
-   - Pin 4 (GND): Connect to Ground
+```
+electrode --+-- 10M --> VBIAS        VBIAS = 1.65 V from 10k/10k off 3V3, 10u to GND
+            |
+            +--> MCP604 unity-gain follower --> 10k --+--> ADS1115 A0..A3
+                                                      |
+                                                    100n
+                                                      |
+                                                     GND
+```
 
-2. **Pull-up Resistor:**
-   - Place a 4.7kΩ resistor between Data and VCC
-   - This ensures reliable communication
+- U1 MCP604 quad CMOS op-amp, DIP-14. VDD 3V3 (pin 4), VSS GND (pin 11), 100n
+  decoupling. Input bias ~1 pA, so the 10M bias resistors contribute ~10 uV.
+  Inputs must stay below VDD-1.2 V (~2.1 V); everything sits at VBIAS 1.65 V.
+- 10k + 100n at each ADS pin: absorbs the switched-capacitor charge kick,
+  low-pass at 159 Hz.
+- Electrodes enter on shielded Cat6 through a sealed grommet with a drip loop.
+  Shield and the four partner wires land on GND at the board only, never inside
+  the chamber.
+- Chamber is a plain plastic box. No electrical shielding around the dish or
+  the tips; the Cat6 braid is the only screening on the electrode path.
+  `0_physarum-system-overview.html` says "foil-wrapped: dark + Faraday" and
+  does not match the built rig.
+- Channel map, board is the source of truth (Board A rows, confirmed at the
+  bench 2026-08-26):
 
-3. **Placement:**
-   - Mount the sensor inside your enclosure
-   - Keep it away from heat sources (lights)
-   - Ensure good airflow around the sensor
+  | ADS input | app channel | Board A row | Cat6 pair | panel trace |
+  |---|---|---|---|---|
+  | A0 | ch0 | r38L | orange | orange, solid |
+  | A1 | ch1 | r40L | blue | blue, dashed |
+  | A2 | ch2 | r40R | green | green, dotted |
+  | A3 | reference | r38R | brown | grey |
+- The buffers exist because the ADS1115 presents ~710 kOhm differential input
+  impedance at the +/-0.256 V range.
 
-## Software Configuration
+**MCP604 offset is expected.** Each follower adds a few mV of fixed offset.
+Constant per channel, so it is a baseline shift, not noise: record a baseline
+with electrodes in plain saline and subtract per channel. Zero-drift upgrade
+option is a MCP6V14 (SMD).
 
-1. **Update the API URL in the frontend:**
-   ```javascript
-   // In slime_frontend.html, update this line:
-   apiUrl: 'http://YOUR_PI_IP:5000',
-   ```
+Source impedance interacts with the 10M bias resistor: a 3 MOhm protoplasmic
+tube against 10M to VBIAS attenuates by 0.77.
 
-2. **Configure the Pi for autostart (optional):**
-   ```bash
-   # Create systemd service
-   sudo nano /etc/systemd/system/slime-monitor.service
-   ```
+**Data rate 8 SPS, set 2026-08-22** (`ADC_DATA_RATE` in `api/config.py`).
+Previously unset, so the library default 128 SPS applied. 125 ms integration
+per conversion instead of 7.8 ms; three channels is 375 ms, inside the 1 s
+cadence.
 
-   Add:
-   ```ini
-   [Unit]
-   Description=Slime Mould Monitor API
-   After=network.target
+Measured effect, same beaker and electrodes, 45 min apart:
 
-   [Service]
-   Type=simple
-   User=pi
-   WorkingDirectory=/home/pi
-   Environment="PATH=/var/www/sllm/api/venv/bin:/usr/bin:/usr/local/bin"
-   ExecStart=/var/www/sllm/api/venv/bin/python /var/www/sllm/api/app.py
-   Restart=always
+| channel | sd at 128 SPS | sd at 8 SPS |
+|---|---|---|
+| ch0 | 1.80 mV | 0.051 mV |
+| ch1 | 0.69 mV | 0.045 mV |
+| ch2 | 2.82 mV | 0.109 mV |
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
+15-35x, against ~4x predicted from averaging alone. The excess was 50 Hz
+pickup aliasing through a conversion window shorter than one mains cycle;
+125 ms spans several cycles and cancels it. Noise floor is now ~50 uV, ~6 LSB.
 
-   Enable the service:
-   ```bash
-   sudo systemctl enable slime-monitor.service
-   sudo systemctl start slime-monitor.service
-   ```
+### Two bench tests, and what each isolates
 
-## Testing the Setup
+| test | setup | isolates |
+|---|---|---|
+| **shorted leads** | all four electrode leads clipped together at the far end | buffer + ADC offset only. Board A build step 5 expects all three channels ~0 mV |
+| **common bath** | all four tips in one beaker of saline, wired normally | buffer offset + electrode mismatch |
 
-1. **Test Electrical Readings:**
-   - Run `python slime_api.py`
-   - Access `http://YOUR_PI_IP:5000/api/readings`
-   - You should see voltage values
+Bath reading minus shorted reading is the electrode contribution. Run the
+shorted test first.
 
-2. **Test Camera:**
-   - Access `http://YOUR_PI_IP:5000/api/capture-image` with POST request
-   - Should return an image
+### Chloridization, as built
 
-3. **Test Light Control:**
-   - POST to `http://YOUR_PI_IP:5000/api/trigger-light` with `{"state": "on"}`
-   - LED should turn on
+Electrolytic. 5 mm tip of electrode wire as anode, a second silver wire as
+cathode, 9V battery with 1k in line, 13 minutes, 100 mL distilled water with
+6 g table salt (~1 M). All four electrodes plated in the same bath.
 
-## Troubleshooting
+- Current ~8 mA. Tip area 0.08-0.16 cm2 at 0.5-1 mm wire, so 50-100 mA/cm2.
+  Convention is ~1 mA/cm2. Expect a thick, loosely-adherent film.
+- Iodide contamination ruled out: 6 g iodized salt carries ~1.6 umol iodide
+  against 103 mmol chloride, and the bath passed ~62 umol of charge.
 
-### No Electrical Readings:
-- Check I2C is enabled: `sudo raspi-config` > Interface Options > I2C
-- Verify ADS1115 connection: `i2cdetect -y 1` (should show 48)
-- Check aluminum tape connections
+Wire diameter: **TBC**.
 
-### Camera Issues:
-- For USB cameras, check with `ls /dev/video*`
-- For Pi Camera, enable in `raspi-config`
-- May need to add user to video group: `sudo usermod -a -G video $USER`
+### Common-bath offsets, 2026-08-22
 
-### Permission Errors:
-- GPIO access requires root or gpio group membership
-- Add user to gpio group: `sudo usermod -a -G gpio $USER`
-- Logout and login again
+All four tips in 1 g / 100 mL saline, wired normally through the buffers.
+True potential difference between tips in one bath is zero, so the reading is
+offset. First 3 minutes after immersion, still settling:
 
-### Socket.IO Connection Issues:
-- Ensure firewall allows port 5000: `sudo ufw allow 5000`
-- Check that the frontend has the correct Pi IP address
-- Verify Socket.IO is running: Check console for connection messages
+| pair | mean | sd | drift over 3 min |
+|---|---|---|---|
+| ch0 - A3 | +8.95 mV | 1.80 | -0.72 mV |
+| ch1 - A3 | +6.11 mV | 0.69 | -0.56 mV |
+| ch2 - A3 | +3.81 mV | 2.82 | -2.64 mV |
 
-### DHT22 Sensor Issues:
-- If sensor not detected, system continues without it
-- Common issue: "Unable to set line handle" - reboot Pi
-- Check wiring, especially the pull-up resistor
-- Try `sudo` if permission errors persist
+All three positive. Electrode batch mismatch is excluded - one bath, four
+electrodes. Consistent with MCP604 follower offset, which the wiring guide
+already expects at a few mV per channel: each reading is Vos(n) - Vos(A3), so
+one offset follower on A3 shifts all three the same way. The shorted-lead test
+separates the two.
 
-## Safety Notes
+Fixed offset of this size is not a problem at gain 16 - 9 mV against
++/-256 mV of range. Drift is what matters.
 
-- Keep exposure light duration short to avoid harming the slime mould
-- Maintain proper humidity in the enclosure
-- Handle the slime mould gently
-- Keep the setup away from direct sunlight
+Superseded: the 0.7-2.8 mV sd was the 128 SPS conversion window, not front-end
+noise. See the data rate note above. At 8 SPS the same setup reads 0.045-0.109
+mV, and the offsets scatter either side of zero (+2.5, -0.5, -2.6 mV) rather
+than all positive.
+
+### Agar geometry
+
+As built: one continuous bed. Reference buried in it, three recording
+electrodes just below the surface.
+
+The bed conducts and shunts the source. Protoplasmic tube resistance is ~3 MΩ
+(Adamatzky 2014). Spreading resistance between mm-scale tips a few cm apart in
+the bed is 10–100 kΩ, a divider of 30:1 to 300:1: a 5 mV tube potential
+reaches the buffer as 17–170 µV, against a 7.8 µV step and tens of mV of
+drift.
+
+Measure it with a multimeter across two electrode leads. kΩ = shunted.
+
+Depth split is a second effect. The bed loses water from the top, raising
+surface ion concentration, so there is an electrochemical gradient between the
+buried reference and the near-surface recorders. It appears on all three
+channels because they share that reference.
+
+### Target geometry — islands
+
+1. One island of non-nutrient 2% agar per electrode, bare dish floor between
+   them, gaps ~10 mm.
+2. Reference island at the centre, plasmodium inoculated there.
+3. All four tips flat on the dish floor under their blob, at one depth.
+4. Bare oat flake on each recording island.
+
+Electrode spacing sets apparent period: 2–3 cm gives 30–40 min (Adamatzky and
+Jones 2011), 2–3 mm gives 60–180 s (Kishimoto 1958). Keep the recording pair
+close; the arena is 150 mm.
+
+### Reading a bench test
+
+Read from the running logger rather than starting a second process:
+
+```bash
+tail -f /var/www/sllm/data/readings/electrodes_$(date +%Y%m%d).csv
+```
+
+Do not run `gpio/adc.py watch` while `sllm-api` is active - both drive the same
+ADS1115 over I2C. Stop the unit first if you want the standalone tool.
+
+Allow 20-30 min to settle before reading. Tip source impedance cannot be
+measured from the ADC; the buffers block it.
+
+## Illumination
+
+Two sources, never in the same frame.
+
+**IR flood (imaging).** 850nm, always on, not GPIO-switched, takes no part in
+the capture sequence.
+
+- Emitter / part: **TBC**
+- Power source: **TBC**
+- Mounting height and standoff to the diffuser: **TBC**
+
+**Fault, 2026-08-19: flood is uneven.** 6×6 luminance grid over the dish crop,
+three frames spanning 18 hours: stable ~20:1 gradient, bottom-right quadrant
+clipped at 255 over ~¼ of the dish, top-left at 10–25. Fixed geometry — single
+near-field emitter, close under the diffuser, off-axis toward bottom-right.
+Clipped pixels are unrecoverable.
+
+### Replacement rig — target geometry
+
+Dish is 150mm. 8 Lambertian emitters on a ring, illuminance across the 75mm
+radius, best ring radius per standoff:
+
+| Standoff to diffuser | Best ring diameter | max/min |
+|---|---|---|
+| 20mm | — | 5.8 |
+| 30mm | 106mm | 2.8 |
+| 40mm | 112mm | 1.7 |
+| 50mm | 120mm | 1.4 |
+| 75mm | 144mm | 1.1 |
+
+Build: 8 emitters on a 110–120mm circle, 40–50mm below the diffuser, firing
+straight up. Ring diameter is ~0.75× the dish; a ring matched to the dish edge
+over-lights the rim.
+
+At ~30mm add a 9th emitter at the centre: 8-on-a-ring is 2.8, 8+1 is 2.0, 12+1
+is 1.6. Below ~25mm no ring geometry works at this dish width — use two spaced
+diffuser layers and white cavity walls.
+
+Table assumes wide-angle emitters; narrow domes at 40mm print discs. Figures
+are illuminance before diffusion.
+
+Drive: 4 strings of 2 LEDs across 5V, ~22Ω 0.5W per string, ~400mA total at
+100mA per emitter. One resistor per string — 850nm Vf is ~1.4–1.6V and
+paralleled emitters current-hog.
+
+Order of work:
+
+1. Standoff and diffusion. Uniformity is set by emitter-to-diffuser distance,
+   not emitter count. Two spaced layers beat one sheet.
+2. Ring geometry per the table, emitters pointing up, not inward. Inward-aimed
+   gives a bright rim and dark centre.
+3. Line the cavity sides and floor with white card.
+4. Centre the array on the optical axis.
+5. Lock camera exposure and gain.
+6. Flat-field correction in software. Normalises a 2:1 gradient; cannot
+   recover clipped pixels.
+
+Measure with `./scripts/py scripts/flatfield.py` on matched-exposure frames.
+Baseline 2026-08-19: ratio 23.2, clipped 9.2%. Target: ratio under 2, nothing
+clipped.
+
+2026-08-20: first replacement string browned out the fan relay and was removed.
+8 emitters draw ~65mA against a 4A supply, so check that wiring for a short
+before rebuilding. Old single emitter back in service; the 23:1 gradient stands.
+
+**Matrix red (disabled).** `IMAGING_RED = False` in `gpio/leds.py`. The panel is
+a bare 10mm-pitch array with no diffuser, so it photographs as a grid of 256
+dots. Exposures differ by an order of magnitude — ~8ms for red at
+`IMAGING_BRIGHTNESS` against ~60ms for the flood. Re-enable only with a
+diffuser above the panel and the IR flood removed.
+
+The capture sequence blanks the panel before every exposure, which keeps the
+barrier zone out of frame.
+
+## Matrix — WS2812B 16×16
+
+**Fault: unplugged. Shorted from condensation inside the chamber.** Date
+unplugged: **TBC**. Humidity railed at 99.9-100.0% for the whole 20260821 run.
+The panel sits under the dish inside the humid box; any rebuild needs the
+matrix sealed against condensation.
+
+`sllm-matrixd` reports success with the panel unpowered - writes go out over
+GPIO 18 and there is no readback. Software state is not evidence the panel lit.
+
+
+**Never write white.** 256 pixels at full white draws ~15A. `MAX_BRIGHTNESS` in
+`gpio/leds.py` caps globally; one zone of blue at `STIM_BRIGHTNESS` is under
+100mA.
+
+Data on BCM 18 (**physical header pin 12**) through a 74AHCT125 level shifter.
+Shifter pinout: `gpio/matrix_diag.py`. Zone geometry, brightness caps, current
+budget: `led_matrix.md`.
+
+The panel is owned exclusively by `sllm-matrixd` running as root — the only
+privileged process in the system. Everything else talks to it over a unix
+socket at `/run/sllm/matrix.sock` (root:sllm, 0660) via `gpio/matrix_client.py`,
+which presents the same methods as `leds.Matrix`. Stop the unit before driving
+GPIO 18 directly.
+
+## Camera
+
+Camera Module 3 NoIR on the CSI ribbon. Not hot-pluggable — power down first.
+Cable orientation and attach procedure: `bring_up.md`.
+
+From `api/config.py`:
+
+- `CAMERA_RESOLUTION = (2304, 1296)` — IMX708 binned full-field mode.
+- `CAMERA_FOCUS_DIOPTRES = 9.3` — measured 2026-08-13, sweep peak at 16×
+  contrast. Locked, not hunting.
+- `IMAGE_CAPTURE_INTERVAL = 300` seconds.
+
+UVC camera on USB supported as an alternative (`CAMERA_SOURCE`,
+`USB_CAMERA_RESOLUTION`, `USB_CAMERA_FLUSH_FRAMES`). List attached cameras with
+`./scripts/py gpio/camera.py info`.
+
+## Chamber fan
+
+Noctua NF-A6x25 5V on a relay. Runs on a timed cycle for mould prevention.
+Humidity and temperature are not setpoints and do not gate it.
+
+```
+relay IN  -> physical pin 16 = BCM 23, active-high (HIGH closes)
+fan PWM   -> physical pin 32 = BCM 12, held HIGH as a level while running
+```
+
+The PWM line is a held level, not a waveform. Without it the relay closes and
+the fan does not turn: the pin idles as an input with the pull-down on, and the
+fan reads 0% duty. See the `Relay` docstring in `gpio/sensor.py`.
+
+Cycle: 60s on in every 300s (20% duty), 30s minimum on, 60s minimum off.
+`FAN_RH_ON` / `FAN_RH_OFF` saturation ventilation is off by default.
+
+## Environment sensor
+
+SHT31 at `0x44` (`0x45` with ADDR high), read once a second.
+
+## Quick checks
+
+```bash
+i2cdetect -y 1                    # expect 44 and 48
+./scripts/py gpio/adc.py watch    # electrode millivolts
+./scripts/py gpio/sensor.py watch # temperature and humidity
+./scripts/py gpio/camera.py info  # what camera is attached
+sudo systemctl stop sllm-matrixd && sudo python3 gpio/leds.py zones
+```
+
+Deeper diagnostics, polkit/systemd layout, panel debugging: `bring_up.md`.
