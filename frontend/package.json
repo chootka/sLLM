@@ -14,7 +14,8 @@
     "chartjs-plugin-zoom": "^2.2.0",
     "date-fns": "^4.4.0",
     "socket.io-client": "^4.5.4",
-    "vue": "^3.4.0"
+    "vue": "^3.4.0",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

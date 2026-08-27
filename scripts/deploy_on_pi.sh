@@ -140,14 +140,18 @@ rsync -a --delete "${RSYNC_DRY[@]}" \
     --exclude='.lgd-nfy*' \
     api/ "$API_DIR/"
 
-# gpio/, llm/ and scripts/ are deployed rather than run from the checkout
+# gpio/, llm/, scripts/ and processing/ are deployed rather than run from the
+# checkout
 # because the loop reads the CSV the *service* writes, under $DEPLOY_DIR/data.
 # Run from ~/sllm it resolves its own empty data directory and reports 0
 # samples, which looks exactly like a dead ADC and is not.
-for component in gpio llm scripts; do
+for component in gpio llm scripts processing; do
     mkdir -p "$DEPLOY_DIR/$component"
+    # processing/ also holds the archived Processing sketches, ~570 KB of .pde
+    # and PNG that the service never reads. Only the DSP module is deployed.
     rsync -a --delete "${RSYNC_DRY[@]}" \
         --exclude='__pycache__' --exclude='*.pyc' --exclude='.lgd-nfy*' \
+        --exclude='_old' --exclude='phygraph' \
         "$component/" "$DEPLOY_DIR/$component/"
 done
 
@@ -169,7 +173,8 @@ fix_perms() {
     run find "$root" -name venv -prune -o -exec chown "$CODE_OWNER" {} +
     run find "$root" -name venv -prune -o -exec chmod u=rwX,go=rX {} +
 }
-for tree in "$API_DIR" "$DEPLOY_DIR/gpio" "$DEPLOY_DIR/llm" "$DEPLOY_DIR/scripts"; do
+for tree in "$API_DIR" "$DEPLOY_DIR/gpio" "$DEPLOY_DIR/llm" "$DEPLOY_DIR/scripts" \
+            "$DEPLOY_DIR/processing"; do
     fix_perms "$tree"
 done
 

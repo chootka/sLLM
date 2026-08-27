@@ -57,6 +57,7 @@ except ImportError:
 
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'gpio'))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from adc import ElectrodeMonitor
 from bus import SwitchGate
@@ -281,6 +282,126 @@ def get_readings_range():
         "points": points,
     })
 
+
+# Bounded: the chain is seconds of CPU on a wide window and the dashboard
+# re-requests the same span on every theme toggle and tab focus.
+_PROCESSED_CACHE = {}
+_PROCESSED_CACHE_MAX = 8
+
+
+@app.route('/api/readings/processed', methods=['GET'])
+def get_readings_processed():
+    """Slime-attributable signal over a window.
+
+    `signal` is the band-limited trace zeroed wherever the gate is shut, so a
+    flat line reads as "no organism" rather than "dead feed" -- pair it with
+    `ghost`, the high-passed raw, which is never flat while data is arriving.
+
+    Reads WARMUP seconds before `start`. The high-pass needs run-in and the
+    periodogram needs a full window; without the lead-in the first hour of
+    every view would show a false gate=0.
+
+    Method, thresholds and validation: documentation/signal_processing.md
+    """
+    import numpy as np
+    from processing.slime import chain, step_for, WARMUP
+
+    log = getattr(electrodes, 'log', None)
+    if log is None:
+        return jsonify({"error": "disk logging is disabled"}), 503
+
+    start = request.args.get('start', type=float)
+    end = request.args.get('end', type=float)
+    if start is None or end is None:
+        return jsonify({"error": "start and end are required, unix seconds"}), 400
+    if end <= start:
+        return jsonify({"error": "end must be after start"}), 400
+
+    buckets = max(1, min(request.args.get('buckets', 800, type=int), 5000))
+    mode = request.args.get('mode') or None
+    channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
+
+    key = (round(start), round(end), buckets, mode)
+    if key in _PROCESSED_CACHE:
+        return jsonify(_PROCESSED_CACHE[key])
+
+    rows = []
+    for name in _reading_modes(mode):
+        rows.extend(log.between(start - WARMUP, end, mode=name))
+    if len(rows) < 2:
+        return jsonify({"start": start, "end": end, "buckets": buckets,
+                        "samples": 0, "channels": [str(c) for c in channels],
+                        "warmup": WARMUP, "points": []})
+    rows.sort(key=lambda r: float(r["timestamp"]))
+
+    stamps, series = [], {c: [] for c in channels}
+    for row in rows:
+        try:
+            t = float(row["timestamp"])
+            values = {c: float(row[f"ch{c}_mv"]) for c in channels}
+        except (KeyError, ValueError, TypeError):
+            continue
+        stamps.append(t)
+        for c in channels:
+            series[c].append(values[c])
+    if len(stamps) < 2:
+        return jsonify({"error": "no parseable rows in window"}), 503
+
+    stamps = np.asarray(stamps)
+    grid = np.arange(stamps[0], stamps[-1], 1.0)
+    step = step_for(end - start, buckets)
+
+    out = {}
+    for c in channels:
+        x = np.interp(grid, stamps, np.asarray(series[c]))
+        out[c] = chain(x, step=step)
+
+    # Drop the lead-in: it exists to make the gate honest at the left edge, not
+    # to be drawn.
+    keep = (grid >= start) & (grid <= end)
+    kept = grid[keep]
+    if kept.size == 0:
+        return jsonify({"error": "window has no samples"}), 503
+
+    width = (end - start) / buckets
+    index = np.clip(((kept - start) / width).astype(int), 0, buckets - 1)
+
+    points = []
+    for b in np.unique(index):
+        m = index == b
+        entry = {"t": float(start + (b + 0.5) * width), "channels": {}}
+        for c in channels:
+            r = out[c]
+            sig = r["signal"][keep][m]
+            gho = r["ghost"][keep][m]
+            entry["channels"][str(c)] = {
+                "signal_min": round(float(sig.min()), 4),
+                "signal_max": round(float(sig.max()), 4),
+                "signal": round(float(sig.mean()), 4),
+                "ghost_min": round(float(gho.min()), 4),
+                "ghost_max": round(float(gho.max()), 4),
+                "gate": round(float(r["gate"][keep][m].mean()), 3),
+                "provisional": round(float(r["provisional"][keep][m].mean()), 3),
+                "presence": round(float(r["presence"][keep][m].mean()), 3),
+                "activity": round(float(r["activity"][keep][m].mean()), 3),
+                "period": round(float(r["period"][keep][m].mean()), 1),
+            }
+        points.append(entry)
+
+    payload = {
+        "start": start,
+        "end": end,
+        "buckets": buckets,
+        "samples": int(keep.sum()),
+        "channels": [str(c) for c in channels],
+        "warmup": WARMUP,
+        "step": step,
+        "points": points,
+    }
+    if len(_PROCESSED_CACHE) >= _PROCESSED_CACHE_MAX:
+        _PROCESSED_CACHE.pop(next(iter(_PROCESSED_CACHE)))
+    _PROCESSED_CACHE[key] = payload
+    return jsonify(payload)
 
 @app.route('/api/phase-lock', methods=['GET'])
 def get_phase_lock():

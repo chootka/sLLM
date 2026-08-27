@@ -183,7 +183,28 @@
       
       <!-- Electrical Readings Panel -->
       <div class="panel chart-panel panel-wide">
-        <h2>Electrical Activity</h2>
+        <div class="chart-head">
+          <h2>{{ signalMode ? 'Slime Signal' : 'Electrical Activity' }}</h2>
+          <!-- Raw is the voltage as recorded, drift and condensation included.
+               Signal is the gated 90-200 s trace: flat at zero means no
+               organism, and the ghost behind it is the high-passed raw, so a
+               flat line is distinguishable from a dead feed. -->
+          <span v-if="signalMode && chartView === 'live'" class="chart-note">
+            {{ signalCadence }}
+          </span>
+          <div class="mode-toggle">
+            <button
+              class="control-button"
+              :class="{ active: !signalMode }"
+              @click="setSignalMode(false)"
+            >raw</button>
+            <button
+              class="control-button"
+              :class="{ active: signalMode }"
+              @click="setSignalMode(true)"
+            >signal</button>
+          </div>
+        </div>
         <!-- Three differential channels against the reference electrode, not
              one. The panel used to show channel 0 alone at one decimal, which
              renders a real 0.03 mV sample as "0.0" and looks like dead
@@ -280,6 +301,23 @@ Chart.register(...registerables)
 // Chart itself, so it is available to every chart in the app rather than
 // configured per instance.
 Chart.register(zoomPlugin)
+
+// Live window, shared by both chart modes. 300 samples at 1 Hz -- the span
+// trimChart has always used for raw, matched here so the raw/signal toggle
+// does not change the timescale.
+const LIVE_SPAN_S = 300
+
+// Signal mode refetches rather than appending: the gate needs a server-side
+// window. Held low because store.between() scans the whole day's CSV per call
+// (~126 ms and growing with the file), not because the DSP is expensive -- the
+// chain itself is ~36 ms for three channels. The label reads from this so the
+// two cannot drift apart.
+const SIGNAL_REFRESH_MS = 10000
+
+// The ghost band is two datasets per channel -- gh<n> upper, gl<n> lower --
+// because Chart.js fills between datasets, not within one. They are context,
+// not series to read values off, so they stay out of the legend and tooltip.
+const isGhost = (label = '') => /^g[hl]\d/.test(label)
 // The page is set in a monospace face; the chart is part of the page, not a
 // widget dropped into it, so its axes and legend follow.
 Chart.defaults.font.family = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace"
@@ -308,6 +346,12 @@ export default {
       channels: {},              // channel id -> mV, straight from the ADC
       referenceChannel: 3,       // ADS1115 mux: 0,1,2 are read against A3
       lastReadingTimestamp: 0,   // dedupe, see updateChart
+      // Raw or slime-attributable. The chain needs a 1 h window and a 10 min
+      // high-pass run-in, so it cannot run per-sample in the browser: signal
+      // mode always reads the server endpoint, live included.
+      signalMode: false,
+      gateFraction: {},          // per channel, fraction of the window gated
+      signalUpdatedAt: null,     // ms since epoch, last successful refetch
       readingsHistory: [],
       chart: null,
       // 'live' follows the socket, 'range' reads a window back from the daily
@@ -453,6 +497,14 @@ export default {
       // whatever the ADC dict happened to yield.
       return Object.keys(this.channels).sort((a, b) => Number(a) - Number(b))
     },
+    signalCadence() {
+      // Cadence plus the last stamp: the first says how often to expect
+      // movement, the second says it is still happening.
+      const every = `every ${Math.round(SIGNAL_REFRESH_MS / 1000)}s`
+      if (!this.signalUpdatedAt) return every
+      return `${every} \u00b7 ${this.stampDate(this.signalUpdatedAt, true).slice(-8)}`
+    },
+
     playButtonLabel() {
       if (this.isPreloading) return 'Cancel loading'
       return this.isPlaying ? 'Pause' : 'Play timelapse'
@@ -511,6 +563,7 @@ export default {
   },
   
   beforeUnmount() {
+    clearInterval(this._signalTimer)
     // Clean up
     if (this.socket) {
       this.socket.disconnect()
@@ -626,10 +679,17 @@ export default {
                 display: true,
                 // padding is the gap between legend entries; the default 10 packs
                 // the dots close enough that the colours read as one swatch strip.
-                labels: { color: '#c8c8c8', boxWidth: 22, usePointStyle: true, padding: 26 }
+                labels: {
+                  color: '#c8c8c8',
+                  boxWidth: 22,
+                  usePointStyle: true,
+                  padding: 26,
+                  filter: (item) => !isGhost(item.text)
+                }
               },
               tooltip: {
                 enabled: true,
+                filter: (item) => !isGhost(item.dataset && item.dataset.label),
                 callbacks: {
                   label: (item) =>
                     `${item.dataset.label}: ${item.parsed.y.toFixed(3)} mV`,
@@ -909,8 +969,11 @@ export default {
       }
       this.chart.options.plugins.legend.labels.color = ink.legend
       for (const dataset of this.chart.data.datasets) {
-        const colour = this.channelColour(dataset.label.slice(2))
+        const channel = dataset.label.slice(2)
+        const ghost = dataset.label.startsWith('gh') || dataset.label.startsWith('gl')
+        const colour = ghost ? this.ghostColour(channel) : this.channelColour(channel)
         dataset.borderColor = colour
+        if (ghost && dataset.fill) dataset.backgroundColor = this.ghostColour(channel, 0.13)
       }
       this.chart.update('none')
     },
@@ -1068,7 +1131,37 @@ export default {
       delete this.chart.options.scales.x.min
       delete this.chart.options.scales.x.max
       this.chart.update('none')
+      if (this.signalMode) {
+        // The chain needs a server-side window, so live here is a trailing
+        // refetch rather than a socket append. 10 s: a cold call costs the Pi
+        // ~0.3 s and the gate moves on the timescale of a tube arriving, so
+        // there is nothing to gain from going faster.
+        await this.refreshSignalLive()
+        clearInterval(this._signalTimer)
+        this._signalTimer = setInterval(() => this.refreshSignalLive(), SIGNAL_REFRESH_MS)
+        return
+      }
       await this.loadReadingsHistory()
+    },
+
+    async refreshSignalLive() {
+      if (!this.signalMode || this.chartView !== 'live' || !this.chart) return
+      const end = Date.now() / 1000
+      // Match raw live exactly. Raw is trimChart(300) -- 300 samples at 1 Hz,
+      // five minutes. Anything else and toggling raw/signal silently changes
+      // the timescale under you. The span buttons are how you widen it, and
+      // they already work in signal mode.
+      const start = end - LIVE_SPAN_S
+      const seq = ++this.rangeRequest
+      try {
+        const drawn = await this.loadProcessed(start, end, seq)
+        if (drawn === null) return
+        this.chart.options.scales.x.min = start * 1000
+        this.chart.options.scales.x.max = end * 1000
+        this.chart.update('none')
+      } catch (error) {
+        console.warn('Could not refresh signal:', error.message)
+      }
     },
 
     async showRange(seconds) {
@@ -1161,6 +1254,115 @@ export default {
       this._viewTimer = setTimeout(() => this.loadRange(), 250)
     },
 
+    setSignalMode(on) {
+      if (this.signalMode === on) return
+      this.signalMode = on
+      this.gateFraction = {}
+      // Datasets differ between modes -- signal adds a two-dataset ghost band
+      // per channel and the band's fill targets its partner by position. Empty
+      // them and the stale ones persist, so drop them outright.
+      this.chart.data.datasets.length = 0
+      this.clearChart()
+      clearInterval(this._signalTimer)
+      this._signalTimer = null
+      if (this.chartView === 'range') {
+        this.loadRange()
+      } else {
+        this.goLive()
+      }
+    },
+
+    // Ghost = high-passed raw, drawn faint behind the gated trace. Its only
+    // job is liveness: a flat signal line means no organism, but a frozen
+    // feed draws the same picture, and the ghost is never flat while data is
+    // arriving.
+    // Two adjacent datasets per channel, upper then lower, filled between. A
+    // single mean line hides spikes narrower than a bucket -- the same reason
+    // the raw endpoint carries min/max -- and plotting only the max drew a
+    // one-sided envelope sitting above the flat line instead of straddling it.
+    //
+    // The fill targets '+1', i.e. the next dataset by position, so the pair
+    // must stay adjacent. loadProcessed builds all bands before any signal
+    // trace to keep that true.
+    ghostBandFor(channel) {
+      const upper = `gh${channel}`
+      if (this.chart.data.datasets.find(d => d.label === upper)) return
+      this.chart.data.datasets.push({
+        label: upper,
+        data: [],
+        borderColor: this.ghostColour(channel),
+        backgroundColor: this.ghostColour(channel, 0.13),
+        borderWidth: 1,
+        borderDash: [],
+        pointRadius: 0,
+        tension: 0,
+        fill: '+1',
+        order: 10          // behind the signal trace
+      })
+      this.chart.data.datasets.push({
+        label: `gl${channel}`,
+        data: [],
+        borderColor: this.ghostColour(channel),
+        borderWidth: 1,
+        borderDash: [],
+        pointRadius: 0,
+        tension: 0,
+        fill: false,
+        order: 10
+      })
+    },
+
+    ghostColour(channel, alpha = 0.22) {
+      const base = this.channelColour(channel)
+      const m = base.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+      if (!m) return base
+      const [r, g, b] = m.slice(1).map(h => parseInt(h, 16))
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    },
+
+    async loadProcessed(start, end, seq) {
+      // One bucket per sample at most: a five-minute window against the 600
+      // buckets a day needs would ask for half-second buckets, and every other
+      // one would come back empty.
+      const buckets = Math.max(60, Math.min(600, Math.round(end - start)))
+      const response = await axios.get(`${this.apiUrl}/api/readings/processed`, {
+        params: { start, end, buckets }
+      })
+      if (seq !== this.rangeRequest) return null
+      const { points = [], channels = [] } = response.data || {}
+      this.clearChart()
+      // Bands first, as a block: the fill targets the next dataset by
+      // position, so each upper/lower pair has to stay adjacent.
+      for (const channel of channels) this.ghostBandFor(channel)
+      for (const channel of channels) this.datasetFor(channel)
+      const gated = {}
+      const seen = {}
+      for (const point of points) {
+        const at = point.t * 1000
+        for (const dataset of this.chart.data.datasets) {
+          const channel = dataset.label.slice(2)
+          const stats = (point.channels || {})[channel]
+          if (!stats) continue
+          if (dataset.label.startsWith('gh')) {
+            dataset.data.push({ x: at, y: stats.ghost_max })
+          } else if (dataset.label.startsWith('gl')) {
+            dataset.data.push({ x: at, y: stats.ghost_min })
+          } else {
+            dataset.data.push({ x: at, y: stats.signal })
+            gated[channel] = (gated[channel] || 0) + stats.gate
+            seen[channel] = (seen[channel] || 0) + 1
+          }
+        }
+      }
+      const fraction = {}
+      for (const channel of Object.keys(seen)) {
+        fraction[channel] = gated[channel] / seen[channel]
+      }
+      this.gateFraction = fraction
+      this.signalUpdatedAt = Date.now()   // ms: stampDate feeds new Date()
+      return points.length
+    },
+
     async loadRange() {
       if (!this.chart) return
       const end = this.rangeEnd
@@ -1175,6 +1377,15 @@ export default {
         if (seq === this.rangeRequest) this.rangeLoading = true
       }, 400)
       try {
+        if (this.signalMode) {
+          const drawn = await this.loadProcessed(start, end, seq)
+          if (drawn === null || this.chartView !== 'range') return
+          this.chart.options.scales.x.min = start * 1000
+          this.chart.options.scales.x.max = end * 1000
+          this.chart.update('none')
+          console.log(`\ud83e\uddec Signal: ${drawn} buckets`)
+          return
+        }
         const response = await axios.get(`${this.apiUrl}/api/readings/range`, {
           // Buckets, not samples: a day at 1 Hz is 86400 points and the canvas
           // is a few hundred pixels wide. The API returns min/max/mean per
@@ -1215,6 +1426,9 @@ export default {
 
     updateChart(reading) {
       if (!this.chart || !this.chart.data) return
+      // Signal mode draws server-computed buckets; a raw sample appended here
+      // would land on the same axis in different units.
+      if (this.signalMode) return
       // Scrolled back into history: appending a live sample here would drag the
       // view back to now on the next tick, which is exactly what makes
       // scrollback unusable. Nothing is lost -- the sample is on disk, and
