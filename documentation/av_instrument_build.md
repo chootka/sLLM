@@ -20,6 +20,11 @@ Doing that turned up three things about the board that are worth checking at
 the bench. None of them were observed on the hardware — they fall out of the
 component values, so they are hypotheses, not findings.
 
+The page plays the live electrodes by default. Add a start time to the address
+and it replays a stored stretch instead: where to start, how many minutes of
+recording to play, and how many times faster than real time. Those three, and
+three more that change the sound, are listed under URL parameters below.
+
 The visuals are a field of terminal block characters. Interference between the
 oscillators makes the pattern; where they agree it goes bright, where they
 disagree it goes dark. Nothing is drawn as a chart or a readout.
@@ -28,12 +33,50 @@ disagree it goes dark. Nothing is drawn as a chart or a readout.
 
 | | |
 |---|---|
-| page | `/drift`, live. `/drift?from=<unix>&mins=&speed=` replays a stored window |
+| page | `/drift`. Live with no parameters, replay with `from`. Parameters below |
 | audio engine | `frontend/public/ring-processor.js`, one AudioWorkletProcessor |
 | page | `frontend/src/views/Drift.vue` |
 | route | `frontend/src/router.js` (vue-router 4; v5 needs vite >= 7) |
 
 No synthesis library and no `OscillatorNode`. Plain JS per-sample at 48 kHz.
+
+## URL parameters
+
+All optional. Out-of-range values are clamped, not rejected. Parsed in
+`Drift.vue`.
+
+| parameter | unit | default | range | what it does |
+|---|---|---|---|---|
+| `from` | unix seconds | none | — | start of the replay window. Absent means live |
+| `mins` | minutes of recording | 24 | 1-240 | length of the window played |
+| `speed` | multiplier | 24 | 1-240 | recorded seconds per wall-clock second |
+| `cap` | multiplier on the 47n timing caps | 2.13 | 0.5-4 | pitch of the bank. 2.13 is 100n, an octave down |
+| `mix` | three weights, comma separated | `0.45,1,1` | 0-1 each | mixer resistor ratios, osc1/osc2/osc3 |
+| `vco` | level | 0.35 | 0-1 | PLL channel, right output. `vco=0` silences it |
+
+Playback length is `mins / speed` minutes: `mins=180&speed=12` is 15 minutes.
+Replays loop.
+
+`from` needs 2.17 h of record before it, since the endpoint reads WARMUP
+seconds ahead of the window.
+
+## How a channel drives its vactrol
+
+Per channel, from `/api/readings/processed`. `gate` and `signal` are defined in
+`signal_processing.md`.
+
+    drive = gate > 0.5 ? 0.12 + 0.62 * clamp(signal / 2.0 + 0.5, 0, 1)
+                       : 0.12
+
+- 0.12 is the free-run floor: LED dark, oscillators uncoupled. 0.74 is the
+  ceiling the formula can reach.
+- ch0 drives vactrol A, ch1 B, ch2 C.
+- A shut gate forces the floor, so a channel with no organism cannot modulate
+  anything however large its raw trace is.
+
+The page requests `buckets = min(2000, span_seconds)`, so a 180 min replay
+steps every 5.4 s of recording. Live reads the last 300 s and refetches every
+10 s.
 
 **Test it headless.** The same file runs in Node by stubbing three globals.
 Every number below was measured this way, without a browser:
@@ -115,8 +158,6 @@ off-centre point in the field is the mux selection, and it never moves.
 - The square wave is deliberate and stays. The 10k/10n stage is implemented but
   defaults off.
 
-URL overrides, all optional: `?cap=`, `?mix=a,b,c`, `?vco=`.
-
 ## What the organism does to it
 
 Measured by feeding real run-6 drives through the model. ch1's oscillation
@@ -135,6 +176,12 @@ this happens.
 | ch2 bridges | `/drift?from=1787606130&mins=180&speed=12` |
 | both driving | `/drift?from=1787609358&mins=24&speed=24` |
 | ch1 retracts | `/drift?from=1787709900&mins=120&speed=12` |
+| run 8, ch0 driving | `/drift?from=1787889600&mins=180&speed=12` |
+| run 7 blank, nothing driving | `/drift?from=1787810400&mins=180&speed=12` |
+
+Run 8 measured over its window: ch0 drive 0.12-0.74, at the floor in 159 of
+2000 steps; ch1 0.12-0.74, at the floor in 764; ch2 pinned at 0.12, never
+bridged in run 8. The run 7 blank: all three pinned at 0.12 for all 2000 steps.
 
 Recorded range 2026-08-05 06:48 to now. `from` needs 2.17 h of record ahead of
 it, since the endpoint reads WARMUP before the window.
