@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-08-26 21:20 CEST. This is the only current-state document. If
+Updated 2026-09-01 22:40 CEST. This is the only current-state document. If
 another file disagrees with this one, this one is right.
 
 ## In plain language
@@ -14,18 +14,28 @@ The slime mould starts on the reference block and grows outward. When it
 reaches a probe, it connects that probe to the reference, and that site can
 then be measured.
 
-Two of the three probes have been reached. Both show the voltage rising and
-falling about every two minutes, by up to 1.8 thousandths of a volt. The
-unreached probe does not. Nothing showed it before the organism arrived. The
-same rhythm at the same speed and size is reported in the published work.
+All three probes have now been reached, ch1 and ch2 in run 6 and ch0 in run 8.
+Each one, once reached, shows the voltage rising and falling about every two
+minutes, by up to 1.8 thousandths of a volt. Probes the organism has not
+reached do not. The same rhythm at the same speed and size is reported in the
+published work.
+
+Runs 7 and 8 were the same dish twice: one day with no organism and fresh agar,
+then the organism back in on the same blocks and the same probes. The two-minute
+bump is absent for all 14 hours of the empty day on every probe, present in 19
+of 21 hours on ch0 with the organism in, and absent again after removal. That
+is the organism-in / organism-out difference, and it holds.
+
+It does not yet say which biological thing makes it. Two candidates fit
+everything measured: the organism's own electrical rhythm, or chemistry at the
+metal surface where the organism is touching it. Removing the organism removes
+both at once, so a removal blank cannot separate them. The test that does is
+stimulus and response -- change something the organism cares about, blue light,
+with it still connected, and see whether the rhythm changes. Surface chemistry
+has no reason to respond to a light.
 
 The half-hour rhythm this rig was designed around is not present. It is ten
 times smaller than expected.
-
-It is not yet proven that the two-minute rhythm comes from the organism. It
-appeared when the organism arrived, which is not the same as being caused by
-it. The test that settles this is removing the organism and seeing whether the
-rhythm stops.
 
 ## What the evidence terms mean
 
@@ -81,13 +91,14 @@ those three files and is not required to record.
 
 | | |
 |---|---|
-| run | `20260826T191540Z-test`, started 2026-08-26 21:15:40 CEST |
-| elapsed | step 7 blank, 18-24 h target |
-| dish | organism removed, fresh agar blobs, electrodes in the same configuration |
-| services | `sllm-api` active, `sllm-loop` inactive |
+| run | still tagged `20260827T210834Z-live`; step 8 ended 2026-08-29 00:00 |
+| dish | organism out since 2026-08-29 00:00. Nothing recording from the dish |
+| electrodes | flat since 2026-08-29 00:00: all three at -1.7 mV, 0.016 mV per sample, 90-200 s RMS 0.02-0.09 mV. Below every level ever recorded with electrodes in agar |
+| record | continuous 2026-08-27 23:08:34 to 2026-08-29 16:41:50, then paused by the user, resumed 2026-09-01 21:07:22. Not a fault |
+| services | `sllm-api` active since 2026-08-29 00:01:36, `sllm-loop` inactive |
 | recovery mode | ON since 2026-08-23, panel dark, LEDs blocked |
-| chamber | 25.6 C, 99.5% RH |
 | camera | working, 300 s timelapse |
+| lighting | rebuilt 2026-08-27 22:22. Frames stable at mean 117, 1.45% clipped |
 | matrix | unplugged |
 
 ## Channel map
@@ -96,10 +107,10 @@ Board A rows are the source of truth.
 
 | ADS | channel | row | Cat6 pair | state |
 |---|---|---|---|---|
-| A0 | ch0 | r38L | orange | never colonised |
+| A0 | ch0 | r38L | orange | bridged 2026-08-28 ~01:00, run 8, carried the signal to 2026-08-29 00:00. Not colonised in run 6 |
 | A1 | ch1 | r40L | blue | bridged 2026-08-24 13:24:30, tube retracted 2026-08-26 ~04:05 |
 | A2 | ch2 | r40R | green | bridged 2026-08-24 23:15:30 |
-| A3 | reference | r38R | brown | inoculated at t=0 |
+| A3 | reference | r38R | brown | inoculated at t=0; re-inoculated 2026-08-27 21:47 for run 8 |
 
 ## Established
 
@@ -118,6 +129,51 @@ Board A rows are the source of truth.
   noise 0.032 -> 0.188 mV. The 100-160 s line on ch1 fell to +0.48/+0.89/+0.77
   dex against +1.20 to +1.90 before; all three below every pre-value, exact
   rank test p = 0.012. ch2 held inside its prior range over the same hours.
+
+- **ch0 bridged, run 8, 2026-08-28 ~01:00.** Tube seen in the dish by the user.
+  Time is dated from ch0's per-sample noise, not the timelapse: 0.154 mV at
+  23:08, first sustained crossing below the step 7 blank floor of 0.101 mV at
+  ~01:00, 0.037-0.061 mV from 01:58 on. Run 6 reference 0.032 connected, 0.188
+  unconnected. ch1 (0.10-0.48) and ch2 (0.09-0.70) unchanged at blank levels.
+  Uncertainty +-30 min; the 00:28 and 01:24 disturbances bracket it. Refine from
+  the timelapse.
+
+- **The 00:28-02:48 DC excursion is temperature, not the bridge.** ch0 +27.4 mV
+  peak to trough, ch1 +16.9, ch2 +13.7, all three together, pairwise r
+  0.83-0.91. Against chamber temperature ch0 r = +0.73 at +8.1 mV/C, ch1 +0.66,
+  ch2 +0.52. Chamber 25.31 -> 26.43 C at 01:57 -> 26.01, channels followed up
+  and back. Run 6's bridge transient had r = 0.04 with temperature.
+
+- **Run 8 against the run 7 blank: the line requires the organism.** Same dish,
+  same agar blobs, same electrodes, blank then organism, back to back. Hours
+  with p <= 0.01 in the 60-200 s band:
+
+  | window | ch0 | ch1 | ch2 |
+  |---|---|---|---|
+  | blank, 08-27 07:15-21:45, 14 h | 0/14, +0.57 to +0.91 dex | 0/14, +0.45 to +1.08 | 0/14, +0.55 to +1.00 |
+  | organism, 08-28 03:00 - 08-29 00:00, 21 h | 19/21, +1.64 to +3.22 dex, 120-164 s | 9/21, +0.59 to +2.39 | 0/21, +0.50 to +1.16 |
+  | after removal, 08-29 01:00-16:00, 14 h | 0/14, +0.48 to +1.02 | 0/14, +0.37 to +0.95 | 0/14, +0.56 to +0.88 |
+
+  The line is on ch0, the channel run 6 used as its never-colonised control, at
+  2.0-2.7 min -- run 6's band on a different electrode. ch1 carries a weaker
+  version at the same period in the same hours. ch2 shows nothing and its
+  per-sample noise stayed at 0.182 mV, the unconnected signature; ch0 0.034,
+  ch1 0.051.
+
+  Band amplitude does not separate the windows: 90-200 s RMS is ~0.5 mV on ch0
+  in both. The difference is concentration, not size. The blank's band energy is
+  broadband noise from a channel running 3x noisier per sample, 0.111 against
+  0.034 mV.
+
+  The post-removal window is weak evidence on its own. At 0.016 mV per sample it
+  is a disconnected or dry input, not a blank with electrodes in agar.
+
+  Estimator caveat: run 2026-09-01 from a re-implementation of the
+  pre-registered statistic, in the session scratchpad, not in the repo. On run
+  6's post-bridge hours it returns +2.3 to +2.7 dex where +1.2 to +1.9 is
+  recorded here. Rankings and p-values hold; absolute dex is not comparable
+  across the two implementations. Every number in the table above is from the
+  one implementation.
 
 ## Observed 2026-08-26 10:45, unconfirmed
 
@@ -144,7 +200,11 @@ sclerotia formation, and growth away from the oat flake.
 - The 30-40 min band. 0.23-0.47 mV against 4-5 mV expected. Ten times under.
   Do not expect it to appear.
 - Whether the 2.2 min oscillation is the organism or electrochemistry at a
-  colonised electrode. This is the open scientific question.
+  colonised electrode. This is the open scientific question. Runs 7 and 8 do not
+  touch it: removal takes away the organism and the material on the electrode
+  surface together. A stimulus-response test separates them.
+- Replication beyond this rig. n = 1 dish, one organism, two colonisation
+  events.
 
 ## Known problems
 
@@ -155,8 +215,8 @@ sclerotia formation, and growth away from the oat flake.
    Not responsible for the 2026-08-26 ch1 noise rise -- that was the tube
    retracting. Humidity recovered to 99.9% while ch1's noise stayed 8-10x high.
    Per-sample noise tracks electrode connection, not humidity.
-2. **ch0 not colonised.** Useful as a running control; a problem only if a third
-   measuring site is required.
+2. **ch0 not colonised.** Closed 2026-08-28: ch0 bridged in run 8. Run 8 has no
+   never-colonised control channel unless ch1 or ch2 stays unreached.
 3. **Camera frontend timeouts.** Two on 2026-08-26, 04:18:36 and 11:06:07. Both
    followed handling of the rig, per the user. I2C to the sensor answers during
    the fault (module ID 0x0708), so the control pins are fine and the CSI data
@@ -170,12 +230,13 @@ sclerotia formation, and growth away from the oat flake.
 
 ## Next
 
-1. Step 7 is running. Analyse against the pre-registration below, not before
-   the 18 h mark.
-2. Fix condensation before the next run.
-3. Light stimulus test, if the organism is kept: blue LED on/off blocks, 20 min
-   each, four repeats, times recorded. Blocked on the matrix, which is
+1. Light stimulus test, next run. Organism in, blue LED on for some minutes,
+   off again, repeated, times recorded. This is the test that separates the
+   organism from interface electrochemistry. Needs a light source; the matrix is
    unplugged after a condensation short.
+2. Fix condensation before the next run.
+3. Decide the stimulus block length and repeat count, and write them down before
+   the run starts.
 
 ## Deferred
 
@@ -201,8 +262,9 @@ sclerotia formation, and growth away from the oat flake.
 | bench 4 | verify island isolation | — | — | done 2026-08-24 |
 | 5 | noise floor, no organism | `test` | 12 h | not run; the pre-bridge window of run 6 is serving as the blank |
 | 6 | organism in | `live` | 24 h from bridge, 36 max | done, 2026-08-24 02:42 - 2026-08-26 21:15 |
-| 7 | organism removed | `test` | ends 2026-08-27 18:00 CEST, 20.75 h, discard first 10 h | running since 2026-08-26 21:15 |
-| 8 | organism back in, same blobs | `live` | 24 h from bridge, runs unattended | starts 2026-08-27 18:00 CEST |
+| 7 | organism removed | `test` | 2026-08-26 21:15 - 2026-08-27 21:47, 24.5 h, discard first 10 h | done, not yet analysed |
+| 8 | organism back in, same blobs | `live` | 24 h from bridge | done, 2026-08-27 23:08 - 2026-08-29 00:00. 21 h analysed post-bridge |
+| 9 | blue light stimulus, organism in | `live` | not scheduled | not run |
 
 Steps 6 and 8: the 24 h counts from tube bridge, not inoculation. In run 6 the
 first bridge came 10.7 h after inoculation, so budget ~36 h wall clock for
@@ -247,6 +309,16 @@ was opened or the rig was handled. Any `sllm-api` restart gap.
 
 No other statistic will be substituted after the data is seen.
 
+**Result, scored 2026-09-01.** Analysis window 2026-08-27 07:15 - 21:45, 14 h.
+Every hour on every channel fell between +0.45 and +1.08 dex, and the only hour
+at or above +1.0 dex was ch1 at +1.08, p = 0.070. Decision rule row 2: the line
+does not reproduce without the organism.
+
+**Actual run, recorded after the fact.** Ended 2026-08-27 21:47 CEST when the
+organism went back in, 24.5 h. Analysis window h+10 to end = 2026-08-27 07:15 -
+21:47, 14.5 h. Longer than the 20.75 h scheduled; statistic and decision rule
+unchanged. The 21:47 - 23:08:34 tail is excluded.
+
 ## Excluded data
 
 | window | reason |
@@ -255,6 +327,11 @@ No other statistic will be substituted after the data is seen.
 | 2026-08-26 ~04:14 - 04:18 | camera ribbon pulled and reseated, lid open. RH fell to 72% |
 | 2026-08-26 04:23:41 - 04:23:57 | `sllm-api` restarted to recover the camera. 15 s gap. run_id preserved |
 | 2026-08-26 11:08:32 - 11:08:39 | `sllm-api` restarted after a second camera frontend timeout at 11:06:07. 7 s gap. run_id preserved |
+| 2026-08-27 21:47:00 - 21:53:00 | lid opened, organism inoculated. Per-second std 69.8/68.9/62.8 mV against ~1.7 mV baseline |
+| 2026-08-27 21:47 - 23:08:34 | organism in the dish, still tagged `20260826T191540Z-test` / `test`. 81 min. Excluded from step 7, not part of step 8 |
+| 2026-08-28 00:00 - 03:00 | temperature excursion, all three channels. Excluded from the step 8 analysis window |
+| 2026-08-29 00:00 - 00:05 | organism removed. Per-sample noise 0.895/0.398/2.625 mV against ~0.03 baseline. Everything after this is a dry or disconnected input, not a blank |
+| 2026-08-29 16:41:50 - 2026-09-01 21:07:22 | recording paused by the user. Not a fault, no run in progress |
 
 ## Other documents
 
@@ -273,7 +350,8 @@ No other statistic will be substituted after the data is seen.
 # Briefing notes — 2026-08-27
 
 Facts as of 2026-08-26 05:00 CEST. Numbers here come from run
-`20260824T004220Z-live`. Current state is in `STATUS.md`.
+`20260824T004220Z-live`, which ended 2026-08-26 21:15 CEST. Current state is at
+the top of this file.
 
 ## What the project is
 

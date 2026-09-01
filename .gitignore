@@ -11,3 +11,7 @@ venv/
 # Local machine config - each checkout and each deploy keeps its own
 api/config.py
 data/logs/
+
+# Build output and ad-hoc bench scripts
+exhibit/object/
+/scratch/
