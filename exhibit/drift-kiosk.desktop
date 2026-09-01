@@ -1,0 +1,7 @@
+# Chromium in kiosk mode, one page, no chrome, sound without a click.
+# Install to ~/.config/autostart/drift-kiosk.desktop on the object.
+[Desktop Entry]
+Type=Application
+Name=drift
+Exec=/usr/bin/chromium-browser --kiosk --incognito --noerrdialogs --disable-infobars --hide-scrollbars --disable-pinch --overscroll-history-navigation=0 --autoplay-policy=no-user-gesture-required --check-for-update-interval=31536000 --disable-features=Translate,TranslateUI http://127.0.0.1:8080/drift
+X-GNOME-Autostart-enabled=true
