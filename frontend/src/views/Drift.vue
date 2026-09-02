@@ -90,7 +90,7 @@ export default {
       bundled: null,
       // Mirrors state.drives for the panel. state itself is deliberately not
       // reactive -- it is touched every animation frame.
-      live: { drives: [FREE_RUN, FREE_RUN, FREE_RUN], gates: [0, 0, 0], period: [0, 0, 0] }
+      live: { drives: [FREE_RUN, FREE_RUN, FREE_RUN], gates: [0, 0, 0], period: [0, 0, 0], seen: [false, false, false] }
     }
   },
   computed: {
@@ -186,6 +186,11 @@ export default {
     // a pin already connected when the page opens is a starting condition, not
     // an event, and must not flash.
     this.prevGates = [null, null, null]
+    // Whether each pin has been connected at any point in the current pass.
+    // "not yet connected" is true before a pin is first reached and wrong
+    // after it has been reached and lost, which on a recording that contains
+    // both is most of the loop. Reset when the loop wraps.
+    this.seen = [false, false, false]
     this.buffer = [[], [], []]
     this.cursor = 0
     this.t0 = performance.now()
@@ -345,7 +350,9 @@ export default {
     // Written for the panel, in the panel's terms: is this channel driving
     // anything, and how hard.
     chanLine(c) {
-      if (this.live.gates[c] <= 0.5) return 'not yet connected'
+      if (this.live.gates[c] <= 0.5) {
+        return this.live.seen[c] ? 'no longer connected' : 'not yet connected'
+      }
       const push = Math.round((this.live.drives[c] - FREE_RUN) / DEPTH * 100)
       const p = this.live.period[c]
       const rhythm = p > 0 ? `, rhythm every ${(p / 60).toFixed(1)} min` : ''
@@ -358,7 +365,10 @@ export default {
       this.cursor += 0.05 * this.pace
       // Replays loop, so one can be left running in a room.
       const loops = this.replay || this.bundled
-      if (this.cursor > buf.length - 1) this.cursor = loops ? 0 : buf.length - 1
+      if (this.cursor > buf.length - 1) {
+        this.cursor = loops ? 0 : buf.length - 1
+        if (loops) this.seen = [false, false, false]
+      }
       const i = Math.floor(this.cursor)
       const drives = []
       for (let c = 0; c < 3; c++) {
@@ -368,6 +378,7 @@ export default {
           : FREE_RUN)
         // The organism reaching a pin, once, as it happens. Replays loop, so a
         // loop replays the connection too.
+        if (s.gate > 0.5) this.seen[c] = true
         const was = this.prevGates[c]
         if (was !== null && was <= 0.5 && s.gate > 0.5) this.state.flash[c] = performance.now()
         this.prevGates[c] = s.gate
@@ -383,7 +394,8 @@ export default {
         this.live = {
           drives,
           gates: [0, 1, 2].map(c => (this.buffer[c][i] || {}).gate || 0),
-          period: [0, 1, 2].map(c => (this.buffer[c][i] || {}).period || 0)
+          period: [0, 1, 2].map(c => (this.buffer[c][i] || {}).period || 0),
+          seen: this.seen.slice()
         }
       }
     },
