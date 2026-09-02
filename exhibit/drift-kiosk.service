@@ -38,9 +38,21 @@ Requires=drift-server.service
 After=drift-server.service seatd.service systemd-user-sessions.service getty@tty1.service
 Conflicts=getty@tty1.service
 
+# Measured on the object, not guessed: while the piece played and clicked, the
+# ALSA stream went XRUN six times in thirty seconds, cycling SETUP -> PREPARED
+# between them -- chromium losing the device and reopening it, and the reopen
+# is the click. No chromium thread had real-time priority at all while the
+# renderer sat at 100% of a core.
+#
+# LimitRTPRIO is what lets chromium's request for a real-time audio thread
+# succeed; without it the call fails and the thread stays at normal priority
+# against a busy renderer.
 [Service]
 Type=simple
 User=chootka
+LimitRTPRIO=95
+LimitNICE=-15
+Nice=-10
 PAMName=login
 TTYPath=/dev/tty1
 StandardInput=tty
