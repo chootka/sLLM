@@ -32,6 +32,19 @@ const LOCK_TAU = 1e6 * 1e-6       // lock detect, 1M + 1uF
 // built. A square wave carries every odd harmonic with no rolloff, so the
 // harshness is the waveform, not the pitch; this is what tames it.
 const OUT_TAU = 10e3 * 10e-9
+// 4051 input wiring: which oscillator each address selects.
+//
+// Y0 carried osc1 originally, and the mux never re-points (see below), so the
+// PLL sat on osc1 forever. osc1 is the one voice the organism barely moves:
+// it is modulated only by vactrol C, and on a window where that channel never
+// connects, its coupling is pinned at the free-run floor. Measured over the
+// shipped 3 h window it ran 65.2-67.5 Hz, so the right output was a bare
+// square at a fixed pitch for the whole loop.
+//
+// Moving osc2 to Y0 puts the PLL on a voice that actually swings. Same
+// measurement: VCO spread 8.2 Hz -> 68.9 Hz. On the board this is which
+// oscillator's output goes to which 4051 input pin, not a new part.
+const MUX = [1, 2, 0]
 
 class RingProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -98,8 +111,9 @@ class RingProcessor extends AudioWorkletProcessor {
     this.loop = 0.35          // control voltage into pin 9
     this.vcoPhase = 0
     this.vcoOut = 0
-    // 4051: Y0..Y2 carry osc1..osc3, Y3..Y7 are grounded on the board, so
-    // those addresses feed the comparator silence and it never locks there.
+    // 4051 address from the 4040. Y0..Y2 carry the oscillators in MUX order,
+    // Y3..Y7 are grounded on the board, so those addresses feed the
+    // comparator silence and it never locks there.
     this.addr = 0
     // Lock detect: 1M + 1uF off the comparator node into a spare 40106 gate.
     // Locked, the average sits still and never crosses the Schmitt; unlocked,
@@ -199,7 +213,7 @@ class RingProcessor extends AudioWorkletProcessor {
       this.clock++
 
       // --- 4051 -> 4046 -> 4040 ---------------------------------------
-      const sigIn = this.addr < 3 ? this.osc[this.addr].out : 0
+      const sigIn = this.addr < 3 ? this.osc[MUX[this.addr]].out : 0
       // Phase comparator II: the 4046's phase-frequency detector, pin 13. Two
       // edge-set flags that cancel each other, so it discriminates frequency
       // as well as phase and will pull in from anywhere. PC1's XOR only holds
@@ -270,7 +284,9 @@ class RingProcessor extends AudioWorkletProcessor {
         coh: this.coh.slice(),
         freq: this.freq.slice(),
         lum: this.vac.map(v => v.lum),
-        addr: this.addr,
+        // The oscillator being tracked, not the raw address -- the field
+        // draws the VCO's rings on that voice's source point.
+        addr: this.addr < 3 ? MUX[this.addr] : this.addr,
         vcoHz: Math.round(Math.max(0, Math.min(1, this.loop)) * PLL_FMAX),
         locked: this.addr < 3 && Math.abs(this.lockV - this.loop) < 0.05
       })

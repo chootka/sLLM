@@ -136,8 +136,38 @@ compress the VCO range independently of the span, or biasing the lock-detect
 node with a divider so it straddles the band. Do this before concluding the
 topology needs changing.
 
-So `/drift` currently shows the PLL latched on osc1 forever. The bright
-off-centre point in the field is the mux selection, and it never moves.
+**Divider sweep, 2026-09-01: not the answer.** Measured headless against the
+shipped 3 h window, feedback dividers of 2, 4 and 8 all give 0 clocks. The
+lock-detect node still never reaches 0.66. The reason is arithmetic rather than
+component choice: the node tracks the control voltage, which is proportional to
+frequency, so clocking needs the tracked voice to swing by at least
+0.66 / 0.32 = 2.06x. The bank swings 33.2 -> 67.5 Hz, a ratio of 2.03. It is
+short, and no divider changes a ratio. Widening it needs gain on that node, or
+a narrower Schmitt band, and neither is on the board.
+
+So the PLL stays latched on one address forever. That part is unresolved and
+this note does not resolve it.
+
+**What was audible, and was fixed separately.** Latched is survivable; latched
+onto the *wrong voice* is not. Y0 carried osc1, and osc1 is modulated only by
+vactrol C. On the shipped window that channel never connects, so its coupling
+sits at the free-run floor all the way through and the right output was a bare
+square at a fixed pitch for fifteen minutes.
+
+Measured over that window, after lock settles:
+
+| 4051 Y0 carries | VCO range | spread | sd | clocks |
+|---|---|---|---|---|
+| osc1, as built | 62.9-71.1 Hz | 8.2 | 0.76 | 0 |
+| osc2 | 13.1-82.0 Hz | 68.9 | 15.82 | 0 |
+| osc3 | 16.9-88.7 Hz | 71.8 | 13.06 | 0 |
+
+`MUX` in `ring-processor.js` now puts osc2 on Y0. On the board this is which
+oscillator output goes to which 4051 input pin -- a jumper, not a new part. The
+mux still never moves; it is simply parked somewhere worth listening to.
+
+The bright off-centre point in the field is the mux selection, and it still
+never moves -- it now sits on osc2's source.
 
 ## Sound decisions, with the measurement behind each
 
