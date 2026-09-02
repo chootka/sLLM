@@ -201,6 +201,20 @@ The date on that line is rendered in the *viewer's* timezone, so it reads
 "August 28" on a Pi set to CEST and "August 27" on a machine in the Americas.
 Set the object's timezone before it ships.
 
+**`speed` does not mean the same thing on the website as it does here**, and
+the two differ by a factor of five for this window. `advance()` steps `speed`
+*array indices* per second, and the arrays are built differently:
+
+| | array | one index is | `speed=12` gives |
+|---|---|---|---|
+| website | `buckets = min(2000, span)` from the API | 5.4 s of record, for a 3 h window | ~65x real time, a pass every 2.8 min |
+| object | `replay.json`, 1 Hz | 1 s of record, always | a true 12x, a pass every 15 min |
+
+So a `speed` that sounded right on `sllm.visceral.systems/drift` is not the
+same tempo once the window is frozen, and the object's is the honest one --
+the label's "15 minutes" is true here and wrong on the website, where the
+bucketing is not accounted for. 12 was chosen on the object after hearing both.
+
 ## Not in the box
 
 No organism, no agar, no electrodes, no rig. The work is the instrument and the
