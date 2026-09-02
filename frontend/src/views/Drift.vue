@@ -61,6 +61,12 @@ const FREE_RUN = 0.12
 const DEPTH = 0.62
 const SCALE_MV = 2.0
 const FLASH_MS = 600
+// Cap the field at ~30 fps. The whole grid is recomputed every frame -- one
+// interference calculation per character, tens of thousands of them at 1080p
+// -- and on a Pi 4 that competes with the audio worklet for CPU and shows up
+// as clicking. Nothing in the field moves fast enough for 60 to read
+// differently from 30.
+const FRAME_MS = 33
 
 // The exhibition object ships the recording beside the page and has no API
 // behind it. scripts/export_replay.py writes this shape: signal per second,
@@ -443,6 +449,9 @@ export default {
     // light marks extend the ramp at the dark end without breaking the grid.
     draw() {
       this.raf = requestAnimationFrame(this.draw)
+      const nowMs = performance.now()
+      if (nowMs - (this._lastFrame || 0) < FRAME_MS) return
+      this._lastFrame = nowMs
       const c = this.$refs.cv
       if (!c) return
       this.resize()
