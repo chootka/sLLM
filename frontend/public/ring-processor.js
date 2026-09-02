@@ -32,6 +32,27 @@ const LOCK_TAU = 1e6 * 1e-6       // lock detect, 1M + 1uF
 // built. A square wave carries every odd harmonic with no rolloff, so the
 // harshness is the waveform, not the pitch; this is what tames it.
 const OUT_TAU = 10e3 * 10e-9
+// 4040 #2, the feedback divider between VCO OUT and the comparator.
+//
+// 1 is FB jumpered straight from the VCO, which is the schematic's setting for
+// audio-rate references, and it is what the mux mostly carries. /4096 is the
+// other case on the drawing: it would let the VCO phase-lock to the organism's
+// own ~0.011 Hz rhythm on Y5.
+//
+// Measured, and the reason this is 1: at /16 the loop parks on SLIME 69-93% of
+// the time and the VCO sits at 0.3 Hz, which is silence on the right channel.
+// At /1 it stays audible throughout and, on run 6, chases 51-144 Hz.
+const PLL_FBDIV = 1
+// Lock detect: a spare 40106 wired as a relaxation oscillator, 1M from its own
+// output back to its input, 1u to ground. Free-running it clocks the 4040 about
+// every 1.4 s. 4046 pin 1 (PCP_OUT, the phase pulses) clamps that input while
+// the loop is locked, which stops it. So the mux walks only while the PLL is
+// failing to hold, and parks when it finds something it can keep.
+//
+// The gating is the mechanism, not the node. A plain RC on pin 1 never clocks:
+// averaging any of these nodes gives a DC once locked. It has to be an
+// oscillator that lock switches off.
+const LOCKOSC_TAU = 1e6 * 1e-6
 
 class RingProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -101,12 +122,31 @@ class RingProcessor extends AudioWorkletProcessor {
     // 4051: Y0..Y2 carry osc1..osc3, Y3..Y7 are grounded on the board, so
     // those addresses feed the comparator silence and it never locks there.
     this.addr = 0
+    // 4013 (or the spare 4040) dividing OSC1 for the Y3/Y4 sub-octave taps,
+    // and the 4040 #2 feedback divider.
+    this.d0Prev = 0
+    this.d2 = 0
+    this.d4 = 0
+    this.fbCnt = 0
+    this.fb = 0
+    // Y5. The three measuring electrodes summed through the unity buffer and
+    // biased to Vdd/2, squared up by the 4046's own input comparator. This is
+    // the organism's rhythm as a logic level, and it is the only reference on
+    // the mux the loop cannot simply lock and hold.
+    this.slimeIn = 0
     // Lock detect: 1M + 1uF off the comparator node into a spare 40106 gate.
     // Locked, the average sits still and never crosses the Schmitt; unlocked,
     // it swings at the beat rate and clocks the counter, which walks the mux
     // to the next source. Hunt until locked, entirely in the passives.
+    // Relaxation-oscillator state for the lock detector above.
     this.lockV = 0.5
     this.lockOut = 1
+    // 4046 pin 1. The phase-frequency detector runs whichever comparator
+    // drives the loop, and its pulses are wide when hunting, vanishing when
+    // locked.
+    this.up = 0
+    this.dn = 0
+    this.pcp = 1
     this.count = 0            // 4040, Q1..Q3 drive the address lines
 
     this.coh = [0, 0, 0]      // ring pairs 0-1, 1-2, 2-0
@@ -136,6 +176,8 @@ class RingProcessor extends AudioWorkletProcessor {
         this.capScale = Math.max(0.5, Math.min(4, d.capScale))
         for (const o of this.osc) o.c = 47e-9 * this.capScale
       }
+      // Sign of the summed electrode signal: the SLIME net, already squared.
+      if (typeof d.slime === 'number') this.slimeIn = d.slime > 0 ? 1 : 0
       if (typeof d.running === 'boolean') this.running = d.running
     }
   }
@@ -199,47 +241,70 @@ class RingProcessor extends AudioWorkletProcessor {
       this.clock++
 
       // --- 4051 -> 4046 -> 4040 ---------------------------------------
-      const sigIn = this.addr < 3 ? this.osc[this.addr].out : 0
-      // Phase comparator II: the 4046's phase-frequency detector, pin 13. Two
-      // edge-set flags that cancel each other, so it discriminates frequency
-      // as well as phase and will pull in from anywhere. PC1's XOR only holds
-      // a lock it already has -- it cannot acquire one.
-      if (sigIn === 1 && this.sigPrev === 0) this.up = 1
-      if (this.vcoOut === 1 && this.vcoPrev === 0) this.dn = 1
-      if (this.up && this.dn) { this.up = 0; this.dn = 0 }
-      this.sigPrev = sigIn
+      // 4013 (or spare 4040): D2 = OSC1/2, D4 = OSC1/4.
+      if (this.osc[0].out === 1 && this.d0Prev === 0) {
+        this.d2 ^= 1
+        if (this.d2 === 1) this.d4 ^= 1
+      }
+      this.d0Prev = this.osc[0].out
+      const x12 = this.osc[0].out ^ this.osc[1].out          // 4070 XOR
+      // 4051 as wired: Y0-Y2 the oscillators, Y3 D2, Y4 D4, Y5 SLIME, Y6 X12,
+      // Y7 n/c -- the schematic's "hunts vs nothing".
+      const muxIn = [this.osc[0].out, this.osc[1].out, this.osc[2].out,
+                     this.d2, this.d4, this.slimeIn, x12, 0]
+      const sigIn = muxIn[this.addr]
+
+      // 4040 #2: the divided VCO is what the comparator actually sees.
+      if (this.vcoOut === 1 && this.vcoPrev === 0) {
+        this.fbCnt = (this.fbCnt + 1) % PLL_FBDIV
+        if (this.fbCnt === 0) this.fb ^= 1
+      }
       this.vcoPrev = this.vcoOut
-      const pump = this.up - this.dn
-      this.pc = pump > 0 ? 1 : (pump < 0 ? 0 : 0.5)
-      // The board's loop filter is 10k in SERIES with 100n, not a plain lag.
-      // The cap integrates, which is what kills steady-state phase error, and
-      // the series resistor adds a proportional term across it -- that is the
-      // damping. Model it as an integrator alone and the loop hunts about
-      // +-8 Hz around the target instead of settling, which is exactly what
-      // happened before this was fixed.
-      this.cap += pump * dt * 4.0
+
+      // Phase comparator I -- the 4046's XOR on pin 2, which is what the
+      // schematic calls for. PC2 locks cleanly and holds, and its output mean
+      // sits at half rail whatever happens, so the lock detector downstream can
+      // never see anything. PC1's mean is the signal: 0.5 while locked at 90
+      // degrees, sweeping the rail when it is hunting.
+      const pcOut = sigIn ^ this.fb
+      const err = pcOut - 0.5
+      this.cap += err * dt * 4.0
       if (this.cap < 0.001) this.cap = 0.001
       if (this.cap > 1) this.cap = 1
-      this.pumpF += (pump - this.pumpF) * (1 - Math.exp(-dt / LOOP_TAU))
+      this.pumpF += (err - this.pumpF) * (1 - Math.exp(-dt / LOOP_TAU))
       this.loop = Math.max(0.001, Math.min(1, this.cap + 0.06 * this.pumpF))
+      this.pc = pcOut
       const vcoF = Math.max(0, Math.min(1, this.loop)) * PLL_FMAX
       this.vcoPhase += vcoF * dt
       if (this.vcoPhase >= 1) this.vcoPhase -= 1
       this.vcoOut = this.vcoPhase < 0.5 ? 1 : 0
 
-      // 1M + 1uF hangs off the loop-filter node, so what it averages is the
-      // VCO control voltage, not the comparator output. That matters: the
-      // comparator's mean sits at half rail locked or not, so watching it the
-      // detector can never cross the Schmitt and the 4040 never clocks at all.
-      // The control voltage tracks frequency, so a voice moving far enough
-      // does trip it -- which is what re-points the mux.
-      this.lockV += (this.loop - this.lockV) * (1 - Math.exp(-dt / LOCK_TAU))
+      // 4046 pin 1, PHASE PULSES. The chip's PFD runs alongside PC1: two
+      // edge-set flags that cancel. While the loop hunts they are set a long
+      // time each cycle; locked, they cancel almost immediately.
+      if (sigIn === 1 && this.sigPrev === 0) this.up = 1
+      if (this.fb === 1 && this.fbPrev === 0) this.dn = 1
+      if (this.up && this.dn) { this.up = 0; this.dn = 0 }
+      this.sigPrev = sigIn
+      this.fbPrev = this.fb
+      this.pcp = (this.up || this.dn) ? 1 : 0
+
+      // The spare 40106 as a gated relaxation oscillator. Its input charges
+      // toward its own output through the 1M; pin 1 holds that node down while
+      // the loop is locked, so it only runs when the PLL is failing.
+      if (this.pcp === 1) {
+        const k = 1 - Math.exp(-dt / LOCKOSC_TAU)
+        this.lockV += (this.lockOut - this.lockV) * k
+      } else {
+        this.lockV += (0 - this.lockV) * (1 - Math.exp(-dt / (LOCKOSC_TAU * 0.1)))
+      }
       const prevLock = this.lockOut
       if (this.lockOut === 1 && this.lockV > VT_HI) this.lockOut = 0
       else if (this.lockOut === 0 && this.lockV < VT_LO) this.lockOut = 1
+      // 4040 #1: Q1..Q3 to the address lines, so it advances every 2 clocks.
       if (prevLock === 0 && this.lockOut === 1) {
         this.count = (this.count + 1) & 0xfff
-        this.addr = (this.count >> 1) & 7   // Q1,Q2,Q3 -> A,B,C
+        this.addr = (this.count >> 1) & 7
       }
 
       // Passive mixer into a coupling cap: centre it, then soft-limit so a

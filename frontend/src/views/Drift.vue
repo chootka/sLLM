@@ -373,7 +373,12 @@ export default {
         this.prevGates[c] = s.gate
       }
       this.state.drives = drives
-      if (this.node) this.node.port.postMessage({ drives })
+      // The SLIME net on 4051 Y5: all three measuring electrodes summed
+      // through the unity buffer. Not gated -- the buffer sees the electrode
+      // whether or not the organism has reached it, and the gate only decides
+      // what drives a vactrol.
+      const slime = [0, 1, 2].reduce((a, c) => a + ((this.buffer[c][i] || {}).signal || 0), 0)
+      if (this.node) this.node.port.postMessage({ drives, slime })
       if (this.about) {
         this.live = {
           drives,
