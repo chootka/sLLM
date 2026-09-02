@@ -195,6 +195,10 @@ export default {
     this.cursor = 0
     this.t0 = performance.now()
     document.body.classList.add('bare')
+    // The scoped rule on .field covers the page, but the pointer can still be
+    // drawn over the root element before the app has mounted, or by the
+    // compositor itself. Setting it on <html> leaves nowhere for it to show.
+    this.hideCursor()
     this.resize()
     // Layout is not final on mount, and fullscreen changes the box without
     // always firing a window resize.
@@ -211,6 +215,8 @@ export default {
   },
   beforeUnmount() {
     document.body.classList.remove('bare')
+    document.documentElement.style.cursor = ''
+    if (this._cursorTimer) clearInterval(this._cursorTimer)
     cancelAnimationFrame(this.raf)
     window.removeEventListener('resize', this.resize)
     document.removeEventListener('fullscreenchange', this.resize)
@@ -248,6 +254,17 @@ export default {
       // Setting canvas.width resets context state, so the transform goes on
       // after it, never before.
       c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0)
+    },
+
+    // No mouse is attached to the object, so nothing should ever draw a
+    // pointer. isObject is false until replay.json has loaded, so this is
+    // rechecked for a few seconds rather than once at mount.
+    hideCursor() {
+      let tries = 0
+      this._cursorTimer = setInterval(() => {
+        if (this.isObject) document.documentElement.style.cursor = 'none'
+        if (++tries > 20 || this.isObject) clearInterval(this._cursorTimer)
+      }, 250)
     },
 
     // On the object this is deliberately inert -- see the template.
