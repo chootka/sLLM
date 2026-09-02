@@ -29,6 +29,61 @@ The visuals are a field of terminal block characters. Interference between the
 oscillators makes the pattern; where they agree it goes bright, where they
 disagree it goes dark. Nothing is drawn as a chart or a readout.
 
+## The circuit in plain English
+
+**1 — three oscillators that lean on each other.** A 40106 gate flips when its
+input crosses a threshold. Wire a resistor from its output back to its input
+with a capacitor to ground and it can never settle: the cap charges until the
+gate flips, then discharges until it flips back. That is one oscillator, and
+its speed is set by that R and that C. There are three, trimmed a few Hz apart.
+
+Then the ring. Each oscillator's output drives an LED shining at a
+light-dependent resistor -- the vactrol -- and that LDR sits in the *next*
+oscillator's timing path. So oscillator 1 bleeds current into oscillator 2's
+capacitor and nudges when it crosses its threshold. 1 to 2, 2 to 3, 3 to 1,
+closed.
+
+The organism sets how brightly each LED shines. Dim, the three run
+independently and you hear them beating against each other. Bright, each drags
+the next hard enough that they snap into step and become one tone. The piece
+lives on that edge, trimmed to sit just below locking so small changes tip it
+in and out.
+
+**2 — the passive mixer.** Three 100k resistors into one node, 10uF to block
+DC. That is the left channel: three square waves summed, nothing active.
+
+**3 — the multiplexer.** The 4051 is an eight-way switch; three address pins
+pick which input reaches the output. It is fed the three oscillators, two
+divided-down copies of oscillator 1, an XOR of oscillators 1 and 2, the
+electrode signal, and one empty input.
+
+**4 — the phase-locked loop.** The 4046 holds a comparator, which reports
+whether its two inputs are in step, and a VCO, whose pitch follows a voltage.
+Feed the VCO's output back to the comparator and the loop hunts until the VCO
+matches whatever the mux selected, then holds. The 10k/100n between them
+smooths the correction so it settles instead of jittering. The VCO's output is
+the right channel: a fourth voice chasing one of the others.
+
+**5 — reconfiguration on failure.** The design wants the piece to rewire itself
+when it cannot cohere: if the loop will not lock, move the switch and try a
+different reference.
+
+That needs a signal meaning "not locked". Averaging the VCO control voltage
+does not work -- once locked that is a steady DC, so it never moves and nothing
+ever fires. Averaging *any* node in the loop has the same flaw, PC1's output
+included: its mean sits at half rail whether the loop is holding or wildly off.
+
+4046 pin 1, PCP_OUT, is the phase-pulse output, and it pulses whenever the loop
+is struggling. It gates a spare 40106 wired as its own slow relaxation
+oscillator -- 1M from that gate's output back to its input, 1u to ground. While
+the loop fails, the oscillator runs and clocks the 4040; the counter's outputs
+are the mux address lines, so the switch steps on. The moment the loop locks,
+pin 1 clamps the oscillator's input and the stepping stops.
+
+Failure makes it move, success makes it stay. It searches until it finds
+something it can hold, and holds until the organism pushes the bank far enough
+to break the lock.
+
 ## Where it lives
 
 | | |
