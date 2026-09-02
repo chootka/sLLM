@@ -18,6 +18,14 @@
 #   Restart=always
 #       The buyer unplugs it. If chromium or cage ever dies, this brings the
 #       piece back rather than leaving a console prompt on the wall.
+#   Conflicts=getty@tty1.service
+#       getty owns tty1 by default and cage cannot take a console another
+#       process is holding. Without this the service starts, exits cleanly with
+#       no error output at all, and restarts forever while the display shows a
+#       login prompt. Also run once, by hand:
+#           sudo systemctl disable --now getty@tty1
+#       Conflicts stops it for as long as the piece runs; disable stops it
+#       coming back on the next boot. Ctrl+Alt+F2 still gets a console.
 #   The browser is /usr/bin/chromium
 #       Trixie's name for it. Bookworm and earlier called it
 #       chromium-browser -- correct this line if the object is ever rebuilt on
@@ -27,7 +35,8 @@
 [Unit]
 Description=drift, the piece
 Requires=drift-server.service
-After=drift-server.service seatd.service systemd-user-sessions.service
+After=drift-server.service seatd.service systemd-user-sessions.service getty@tty1.service
+Conflicts=getty@tty1.service
 
 [Service]
 Type=simple

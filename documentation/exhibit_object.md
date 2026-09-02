@@ -143,10 +143,22 @@ API, which is what `sllm.visceral.systems/drift` does.
         sudo systemctl daemon-reload
         sudo systemctl enable --now seatd drift-server drift-kiosk
 
-3. Screen blanking off (`sudo raspi-config nonint do_blanking 1`), and set the
+3. Stop getty owning the console, or cage can never take it:
+
+        sudo systemctl disable --now getty@tty1
+
+   Without this the kiosk unit starts, exits cleanly with no error output, and
+   restarts forever while the display sits on a login prompt.
+4. Screen blanking off (`sudo raspi-config nonint do_blanking 1`), and set the
    timezone (`sudo timedatectl set-timezone Europe/Berlin`) -- the panel prints
    the recording's date in the object's own timezone.
-4. Check it survives a power cut, which is the thing a buyer will actually do:
+5. Set the volume and store it. There are no controls on a sealed object, so
+   whatever is stored is what the buyer gets on power-up. `Digital` at 70% was
+   right on the HiFiBerry DAC+ Pro with powered speakers:
+
+        amixer -c 2 sset Digital 70%
+        sudo alsactl store
+6. Check it survives a power cut, which is the thing a buyer will actually do:
    `sudo reboot`, and the piece should come back on its own with sound
    available on the first touch.
 5. Make the DAC the default ALSA output and prove it before sealing: `aplay -l`
