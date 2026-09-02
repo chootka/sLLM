@@ -179,6 +179,77 @@ reached, and that does not belong baked into the circuit.
 The bright off-centre point in the field is the mux selection, and it never
 moves.
 
+## Model vs schematic — known deviations
+
+Checked 2026-09-01 against `schematics/sllm-cmos-stage-schematic.svg`. The
+software model is not the schematic. These are the differences, worst first.
+
+| | schematic | model |
+|---|---|---|
+| mux Y5 | **SLIME** — the electrode signal through a unity buffer, biased to Vdd/2 | tied to 0 |
+| mux Y3, Y4, Y6 | D2 (OSC1/2), D4 (OSC1/4), X12 (4070 XOR of OSC1/OSC2) | tied to 0 |
+| phase comparator | **PC1**, the XOR on pin 2 | PC2, the phase-frequency detector |
+| lock detect taps | PC1 OUT (2), through 1M/1u | the loop-filter node |
+| 4040 #2 | ÷N feedback divider; ÷4096 puts a 0.011 Hz rhythm at a ~45 Hz VCO | absent, feedback is direct |
+| bank | ≈200 / 204 / 209 Hz on 47n, a few Hz apart | 67.3 / 35.8 / 34.2 Hz on 100n, an octave apart |
+| C1 | 1n | 33n |
+| R2 (12) | n/c, no offset | n/c — agrees |
+
+**Y5 is the important one.** It is a missing signal path, not a tuning value:
+the PLL is supposed to be able to lock to the organism's own signal, and in the
+model that input is grounded. Per the user, all three channels feed the unity
+buffer, one op-amp section each, converging on the single SLIME net.
+
+**The lock detector, restated.** Earlier notes here concluded the detector
+could not trip as built and blamed the topology. That conclusion was drawn from
+this model, not from the schematic, so it does not stand. What is measured, on
+the model with PC1 and the detector moved to PC1 OUT: the node sits at 0.500
+while locked, which is exactly the designed behaviour -- STEP is meant to fire
+on *losing* lock. Slowing the loop (Trim 2) makes it swing 0.40-0.81, crossing
+the upper threshold but never returning under 0.32, so STEP still gets no
+rising edge. Slower still and the VCO cannot reach the reference at all and the
+beat averages back to 0.5. Unresolved, and not to be re-diagnosed until Y5 and
+PC1 are in.
+
+**Bank tuning as it stands**, for the record, so the retune is a deliberate
+step and not a silent drift:
+
+| | R | C | free-run |
+|---|---|---|---|
+| osc1 | 104.7k | 100.1n | 67.3 Hz |
+| osc2 | 197k | 100.1n | 35.8 Hz |
+| osc3 | 206k | 100.1n | 34.2 Hz |
+
+C is 47n x the `?cap=` default of 2.13. To reach the schematic's figures on 47n
+the trims are 75.1k / 73.6k / 71.8k. That is a different instrument -- a bank a
+few Hz apart beats and fuses, a bank an octave apart cannot -- so it is a
+deliberate change to make once the loop works, not before.
+
+**Order of work.** Y5 and the other mux sources, then PC1 with the detector on
+PC1 OUT, then re-measure the hunt. Retune the bank after that, not before:
+changing the tuning and the loop together makes the result uninterpretable.
+
+## No hardware is in this loop
+
+`/drift` is entirely software. The AudioWorklet is a numerical model of the
+CMOS stage; nothing in this repo drives the physical breadboard. There is no
+MCP4728 code anywhere in the tree -- the DAC exists on the schematic and on the
+bench, and the path from the session log through it into the real circuit is
+not built here. (`DAC` in `exhibit_object.md` is the exhibition object's audio
+output, an unrelated part.)
+
+What `/drift` reads:
+
+| address | source |
+|---|---|
+| `/drift` | live, the API's last 300 s, refetched every 10 s |
+| `/drift?from=...` | the session log, that stored window, from the API |
+| the exhibition object | neither -- `replay.json` beside the page, no API at all |
+
+So the live / session-log distinction holds on the website, as intended. The
+object is a third case: `loadBundled()` returns early, and `from` and `mins` are
+ignored there.
+
 ## Sound decisions, with the measurement behind each
 
 - **No limiter.** A `tanh(x*3)` on the mix was removed: it is not on the board,
