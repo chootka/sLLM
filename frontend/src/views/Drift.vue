@@ -68,6 +68,26 @@ const FLASH_MS = 600
 // differently from 30.
 const FRAME_MS = 33
 
+// Math.sin runs three or four times per character, tens of thousands of
+// characters a frame. A table costs a multiply, a truncate and an index. The
+// ramp quantises the field into seven levels, so a 4096-entry table is far
+// finer than anything that can show: worst-case error is ~0.0015 against a
+// level step of 0.29.
+//
+// Phases are reduced mod 2pi once per frame before they get here, so the
+// argument stays small and the |0 truncate cannot overflow on an object that
+// has been running for a month.
+const TAU = Math.PI * 2
+const SIN_N = 4096
+const SIN = new Float32Array(SIN_N)
+for (let i = 0; i < SIN_N; i++) SIN[i] = Math.sin(i * TAU / SIN_N)
+const SIN_SCALE = SIN_N / TAU
+function fsin(x) {
+  let i = (x * SIN_SCALE) | 0
+  i &= SIN_N - 1
+  return SIN[i]
+}
+
 // The exhibition object ships the recording beside the page and has no API
 // behind it. scripts/export_replay.py writes this shape: signal per second,
 // gate as index runs, period per minute.
@@ -423,12 +443,12 @@ export default {
       }
     },
 
-    field(x, y, t, st, src, k, vco) {
+    field(x, y, src, k, ph, vco) {
       let v = 0
       for (let i = 0; i < 3; i++) {
         const dx = x - src[i][0], dy = y - src[i][1]
         const d = Math.sqrt(dx * dx + dy * dy)
-        v += Math.sin(d * k[i] - t * (0.30 + 0.10 * i) + st.coh[i] * 2.2)
+        v += fsin(d * k[i] - ph[i])
       }
       // The VCO is a fourth oscillator, so it is a fourth source -- not a
       // readout bolted on. Its rings sit on whichever input the 4051 selected.
@@ -437,7 +457,7 @@ export default {
       // the thing you watch resolve.
       if (vco) {
         const dx = x - vco.x, dy = y - vco.y
-        v += vco.amp * Math.sin(Math.sqrt(dx * dx + dy * dy) * vco.k - t * 0.45)
+        v += vco.amp * fsin(Math.sqrt(dx * dx + dy * dy) * vco.k - vco.ph)
       }
       return v / (3 + (vco ? vco.amp : 0))
     },
@@ -507,7 +527,7 @@ export default {
           vx = cx + Math.cos(a) * base * 0.40
           vy = cy + Math.sin(a) * base * 0.40
         }
-        vco = { x: vx, y: vy, k: vk, amp: st.locked ? 1.15 : 0.55 }
+        vco = { x: vx, y: vy, k: vk, amp: st.locked ? 1.15 : 0.55, ph: (t * 0.45) % TAU }
       }
 
       // A pin that has just connected blooms yellow at its own source and
@@ -528,6 +548,12 @@ export default {
       // Two passes so the field has depth: everything at low brightness, then
       // the top of the ramp again, brighter. Row-at-a-time, because one
       // fillText per character would be tens of thousands of calls a frame.
+      // Reduced once per frame, not once per character.
+      const ph = [
+        (t * 0.30 - st.coh[0] * 2.2) % TAU,
+        (t * 0.40 - st.coh[1] * 2.2) % TAU,
+        (t * 0.50 - st.coh[2] * 2.2) % TAU
+      ]
       const dim = []
       const hot = []
       for (let r = 0; r < rows; r++) {
@@ -537,7 +563,7 @@ export default {
         let f0 = '', f1 = '', f2 = ''
         const y = r * ch
         for (let q = 0; q < cols; q++) {
-          const v = this.field(q * cw, y, t, st, src, k, vco)
+          const v = this.field(q * cw, y, src, k, ph, vco)
           let n = Math.round((v * 0.5 + 0.5) * (RAMP.length - 1))
           if (n < 0) n = 0
           if (n > RAMP.length - 1) n = RAMP.length - 1
