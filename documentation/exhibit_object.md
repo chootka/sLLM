@@ -27,7 +27,7 @@ Nothing in the box is alive and nothing in the box needs a network.
 | behaviour | powers on, boots into the piece. Two touch targets, nothing else |
 | touch | `SOUND ON/OFF` top right, `SOUND LOG` top left. 56 px minimum targets |
 | content | `exhibit/object/` -- page, audio worklet, recording, static server |
-| size on disk | 764 KB |
+| size on disk | 4.0 MB |
 | network | none required at any point |
 | writes | none at runtime |
 
@@ -38,25 +38,40 @@ signal chain runs once at export time; the object replays the result.
 
 | | |
 |---|---|
-| window | 2026-08-28 06:00:00 to 09:00:00 CEST, 3.0 h |
-| loop | 15 minutes, one pass, at `?speed=12` |
-| organism | in the dish throughout; inoculated 2026-08-27 21:47, removed 2026-08-29 00:00 |
-| ch0 | connected for 100% of the loop |
-| ch1 | connected for 62.6% of the loop, cutting in and out |
-| ch2 | never connected -- silent for the whole loop |
-| file | `exhibit/replay.json`, 171 KB, signal per second, gate as index runs, period per minute |
+| length | 62.5 h |
+| loop | 5.2 hours, one pass, at `?speed=12` |
+| ch0 | 33.6% |
+| ch1 | 77.5% |
+| ch2 | 35.1% |
+| file | `exhibit/replay.json`, 3.4 MB, signal per second, gate as index runs, period per minute |
 
-This is the middle of run 8 rather than the whole of it: the organism is
-already on both electrodes when the loop starts and still there when it ends,
-so there is no arrival and no removal in the window. What a viewer hears is
-three hours of the two-minute rhythm at its most sustained -- the first voice
-pushed the whole time, the second cutting in and out as its tube comes and
-goes, the third silent -- compressed into fifteen minutes.
+Three windows end to end, all of them recordings in which the organism was in
+the dish:
 
-The earlier 27.9 h real-time export, which does contain the arrival at
-02:08:46 and the silence after removal, is in git history at c6c9ed2 and can be
-regenerated with the build command below using
-`--start '2026-08-27 23:08:34' --end '2026-08-29 03:00:00'`.
+| | window | what happens |
+|---|---|---|
+| A | 2026-08-24 05:00 - 08-25 00:35, 19.6 h | silence, then ch1 arrives at h+9.4 |
+| B | 2026-08-25 06:05 - 08-26 04:00, 21.9 h | ch1 and ch2 both driving |
+| C | 2026-08-28 03:00 - 08-29 00:00, 21.0 h | ch0 driving, ch1 in and out |
+
+What a listener passes through, in loop time: nine hours of three uncoupled
+voices with nothing on any electrode, a first pin arriving, ten hours of one
+voice pulling, a second pin arriving and the ring beginning to couple, twenty
+hours of both, then the pair falling away as a different electrode picks up and
+carries the last twenty hours on its own. Then it begins again.
+
+**Why these three and not the whole record.** Every window in which the rig was
+handled is left out -- the lid coming off on 2026-08-26 at 04:05, the camera
+ribbon being reseated, both `sllm-api` restarts. Those register as several mV
+against a 1.7 mV baseline and would be the loudest events in the piece, and
+they are the sound of a person, not an organism. Segment A stops and B resumes
+around 2026-08-25 00:35-06:05 for a different reason: ch0 gates there, and ch0
+was never colonised in run 6, so those are the cross-talk false positives
+`signal_processing.md` documents. Sonifying them would drive a vactrol from a
+connection that did not exist.
+
+The joins land on gate changes, so they read as a pin arriving or dropping
+rather than as an edit.
 
 ## Touch
 
@@ -102,9 +117,15 @@ restores sound and closes the log. Neither is built.
 
 ## Build
 
-    ./scripts/py scripts/export_replay.py \
-        --start '2026-08-28 06:00:00' --end '2026-08-28 09:00:00' \
-        --out exhibit/replay.json --note '...'
+    # three windows, then joined end to end
+    ./scripts/py scripts/export_replay.py --start '2026-08-24 05:00:00' \
+        --end '2026-08-25 00:35:00' --out /tmp/seg_A.json
+    ./scripts/py scripts/export_replay.py --start '2026-08-25 06:05:00' \
+        --end '2026-08-26 04:00:00' --out /tmp/seg_B.json
+    ./scripts/py scripts/export_replay.py --start '2026-08-28 03:00:00' \
+        --end '2026-08-29 00:00:00' --out /tmp/seg_C.json
+    ./scripts/py scripts/splice_replay.py /tmp/seg_A.json /tmp/seg_B.json \
+        /tmp/seg_C.json --out exhibit/replay.json --note '...'
     ./exhibit/build.sh                      # -> exhibit/object/
     python3 exhibit/object/serve.py 8080    # test at /drift
 
@@ -205,9 +226,12 @@ to be confirmed against the parts once they are in hand.
 ## Playback
 
 `?speed=` on the kiosk URL timelapses the file without a rebuild, and the
-shipped kiosk URL carries `?speed=12`, which plays the 3 h window in 15
-minutes. Drop the parameter and the same file plays in real time over three
-hours. The panel's first line states which is running.
+shipped kiosk URL carries `?speed=12`, which plays the 62.5 h in 5.2 hours.
+Drop the parameter and the same file runs in real time, which is two and a half
+days a pass.
+
+5.2 hours is chosen so that nobody in a gallery hears it repeat, and so that
+whoever owns it keeps finding parts of it they have not heard. The panel's first line states which is running.
 
 The date on that line is rendered in the *viewer's* timezone, so it reads
 "August 28" on a Pi set to CEST and "August 27" on a machine in the Americas.
@@ -235,14 +259,14 @@ record. The organism this record came from was removed from the dish on
 
 ## Draft listing
 
-**Title.** drift — a slime mould plays a CMOS circuit (sealed player, 27.9 h loop)
+**Title.** drift — a slime mould plays a CMOS circuit (sealed player, 5-hour cycle)
 
 **Spec.**
 
 - Sealed player: Raspberry Pi, touch screen, stereo audio out. Plug in and it
   runs. Two things to touch: one starts the sound, one explains what you are
   hearing.
-- Plays one continuous 27.9 h recording of *Physarum polycephalum* on a loop, in real time.
+- Plays 62.5 hours of recorded *Physarum polycephalum* activity on a 5-hour cycle.
 - Sound and image are generated live from that recording by a software model of
   a CMOS oscillator circuit, not video playback.
 - No network, no account, no app, no writes. It runs the same in fifty years as
@@ -260,6 +284,7 @@ and beat. The picture is the same three oscillators drawn as interference
 rings. It is not a rendering of the data; it is the data pushing a circuit
 around.
 
-The recording is dated and specific: three hours of one morning, 06:00 to
-09:00 on 2026-08-28, with the organism on two of the three electrodes
-throughout. Fifteen minutes of playing time, then it begins again.
+The recording is dated and specific: 62.5 hours drawn from late August 2026.
+It opens before the organism has reached anything, and over the cycle two
+electrodes are reached, held, and lost, and a third picks up. Five hours of
+playing time, then it begins again.
