@@ -342,6 +342,7 @@ unchanged. The 21:47 - 23:08:34 tail is excluded.
 | `method_basis.md` | why the rig is built this way, with citations |
 | `growth_run.md` | pre-registered protocol for the LLM-loop run |
 | `av_instrument.md` | future A/V direction, not a spec |
+| `exhibit_object.md` | the sealed touch-screen player that ships to a show, and what it plays |
 | `led_matrix.md`, `DEPLOYMENT.md`, `TAILSCALE_SETUP.md` | subsystem reference |
 | `nature_brief_20260827.md` | briefing notes for the 2026-08-27 editor visit |
 | `archive/` | superseded session notes, kept for the timeline and evidence |

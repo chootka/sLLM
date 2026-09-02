@@ -1,8 +1,12 @@
 <template>
-  <div class="field" @click="toggleFull">
+  <div class="field" :class="{ object: isObject }" @click="tapField">
     <canvas ref="cv"></canvas>
-    <!-- Sound and fullscreen are separate gestures on purpose: a sound button
-         should not seize the display. Click the field for fullscreen. -->
+    <!-- Two targets, and only two: one starts the sound, one opens the log.
+         Sound and fullscreen are separate gestures on purpose: a sound button
+         should not seize the display. Click the field for fullscreen -- but
+         only on the web. The object is already fullscreen under kiosk, it has
+         no pointer and no keyboard, and a visitor's stray tap must not be able
+         to change what the display is doing. -->
     <button class="sound" @click.stop="toggleSound">
       {{ running ? 'SOUND OFF' : 'SOUND ON' }}
     </button>
@@ -41,7 +45,10 @@
       </dl>
     </div>
     <div v-if="err" class="err">{{ err }}</div>
-    <router-link to="/" class="back" @click.stop>&larr;</router-link>
+    <!-- The way back to the dashboard, which the object does not have and
+         must not offer: there is no API behind it there, so a tap in the
+         corner would strand a visitor on a broken page with no route home. -->
+    <router-link v-if="!isObject" to="/" class="back" @click.stop>&larr;</router-link>
   </div>
 </template>
 
@@ -125,6 +132,15 @@ export default {
       if (this.replay) return this.replay.speed
       const v = Number((this.$route && this.$route.query || {}).speed)
       return Number.isFinite(v) ? Math.max(1, Math.min(240, v)) : 1
+    },
+
+    // Running as the sealed exhibition object rather than as the website.
+    // The bundled recording is the thing that is actually true about the
+    // object, so it decides, rather than a flag on the kiosk URL that can be
+    // left off. `?kiosk=1` is for previewing that behaviour on a laptop.
+    isObject() {
+      const q = (this.$route && this.$route.query) || {}
+      return !!this.bundled || String(q.kiosk) === '1'
     },
 
     sourceLine() {
@@ -227,6 +243,12 @@ export default {
       // Setting canvas.width resets context state, so the transform goes on
       // after it, never before.
       c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0)
+    },
+
+    // On the object this is deliberately inert -- see the template.
+    tapField() {
+      if (this.isObject) return
+      return this.toggleFull()
     },
 
     async toggleFull() {
@@ -517,7 +539,20 @@ export default {
   background: #000;
   cursor: pointer;
   overflow: hidden;
+  /* Touch panel hardening. Without these a finger gets double-tap zoom, a
+     text-selection drag over the field, and a long-press callout menu, none
+     of which a sealed object can recover from. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
+/* No mouse is attached to the object, so an arrow parked over the field is
+   just a blemish that never moves again. */
+.field.object,
+.field.object button,
+.field.object a { cursor: none; }
 /* CSS is the only thing that sizes the canvas. JS reads this back and matches
    the backing store to it. */
 canvas {
@@ -531,9 +566,10 @@ canvas {
   max-height: none;
   max-width: none;
 }
-.sound {
+/* One rule for both, so the two targets cannot drift apart in size. */
+.sound, .about {
   position: absolute;
-  top: 18px; right: 20px;
+  top: 18px;
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.22);
   /* Explicit: some platforms round native buttons by default. */
@@ -546,29 +582,23 @@ canvas {
   letter-spacing: 0.28em;
   padding: 7px 12px;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
-.sound:hover {
+.sound { right: 20px; }
+.about { left: 20px; }
+.sound:hover, .about:hover {
   color: rgba(255, 255, 255, 0.95);
   border-color: rgba(255, 255, 255, 0.55);
 }
-.about {
-  position: absolute;
-  top: 18px; left: 20px;
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 0;
-  -webkit-appearance: none;
-  appearance: none;
-  color: rgba(255, 255, 255, 0.55);
-  font-family: inherit;
-  font-size: 0.58rem;
-  letter-spacing: 0.28em;
-  padding: 7px 12px;
-  cursor: pointer;
-}
-.about:hover {
-  color: rgba(255, 255, 255, 0.95);
-  border-color: rgba(255, 255, 255, 0.55);
+/* :hover never fires on glass, so it is the only feedback a finger gets that
+   the tap landed. Held only while the finger is down. */
+.sound:active, .about:active {
+  color: #000;
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.9);
 }
 .panel {
   position: absolute;
@@ -596,6 +626,38 @@ canvas {
 }
 .panel dt { color: rgba(255, 255, 255, 0.38); letter-spacing: 0.12em; }
 .panel dd { margin: 0; }
+/* A finger, not a cursor -- the touch panel on the object, and phones. Keyed
+   to the input device rather than to object mode, because the sizes below are
+   wrong for a mouse and right for a finger wherever the page is running.
+   ~56px is the smallest target that is reliably hit first time; the type goes
+   up with it because 0.58rem is unreadable at gallery viewing distance. */
+@media (pointer: coarse) {
+  .sound, .about {
+    top: 24px;
+    min-height: 56px;
+    min-width: 132px;
+    padding: 18px 26px;
+    font-size: 0.72rem;
+    /* Brighter, because on the object these are the only two things a visitor
+       is meant to find. */
+    color: rgba(255, 255, 255, 0.72);
+    border-color: rgba(255, 255, 255, 0.34);
+  }
+  .sound { right: 24px; }
+  .about { left: 24px; }
+  .panel {
+    top: 96px;
+    left: 24px;
+    width: min(560px, calc(100vw - 48px));
+    max-height: calc(100vh - 140px);
+    padding: 22px 24px;
+    font-size: 0.78rem;
+    line-height: 1.85;
+    -webkit-overflow-scrolling: touch;
+  }
+  .panel .now { grid-template-columns: 6.5em 1fr; }
+}
+
 .err {
   position: absolute;
   top: 52px; right: 20px;
