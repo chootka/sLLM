@@ -292,12 +292,13 @@ class RingProcessor extends AudioWorkletProcessor {
       // The spare 40106 as a gated relaxation oscillator. Its input charges
       // toward its own output through the 1M; pin 1 holds that node down while
       // the loop is locked, so it only runs when the PLL is failing.
-      if (this.pcp === 1) {
-        const k = 1 - Math.exp(-dt / LOCKOSC_TAU)
-        this.lockV += (this.lockOut - this.lockV) * k
-      } else {
-        this.lockV += (0 - this.lockV) * (1 - Math.exp(-dt / (LOCKOSC_TAU * 0.1)))
-      }
+      // One time constant, both directions. An earlier version discharged ten
+      // times faster than it charged, which was invented rather than taken
+      // from the circuit: pin 1 is pulses, not a level, and against a 25% duty
+      // a 10x pull-down wins every time. The node then topped out at 0.487
+      // against a 0.66 threshold and the counter never clocked on any window.
+      const k = 1 - Math.exp(-dt / LOCKOSC_TAU)
+      this.lockV += ((this.pcp === 1 ? this.lockOut : 0) - this.lockV) * k
       const prevLock = this.lockOut
       if (this.lockOut === 1 && this.lockV > VT_HI) this.lockOut = 0
       else if (this.lockOut === 0 && this.lockV < VT_LO) this.lockOut = 1
