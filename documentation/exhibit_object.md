@@ -27,7 +27,7 @@ Nothing in the box is alive and nothing in the box needs a network.
 | behaviour | powers on, boots into the piece. Two touch targets, nothing else |
 | touch | `SOUND ON/OFF` top right, `SOUND LOG` top left. 56 px minimum targets |
 | content | `exhibit/object/` -- page, audio worklet, recording, static server |
-| size on disk | 2.1 MB |
+| size on disk | 764 KB |
 | network | none required at any point |
 | writes | none at runtime |
 
@@ -38,19 +38,25 @@ signal chain runs once at export time; the object replays the result.
 
 | | |
 |---|---|
-| window | 2026-08-27 23:08:34 to 2026-08-29 03:00, 27.9 h |
-| loop | real time, one pass per 27.9 h |
-| organism | inoculated 2026-08-27 21:47, removed 2026-08-29 00:00 |
-| ch0 | connects 02:08:46, holds to 00:56:25 -- 81.8% of the loop |
-| ch1 | connects 02:28:58, six runs with gaps -- 63.0% of the loop |
+| window | 2026-08-28 06:00:00 to 09:00:00 CEST, 3.0 h |
+| loop | 15 minutes, one pass, at `?speed=12` |
+| organism | in the dish throughout; inoculated 2026-08-27 21:47, removed 2026-08-29 00:00 |
+| ch0 | connected for 100% of the loop |
+| ch1 | connected for 62.6% of the loop, cutting in and out |
 | ch2 | never connected -- silent for the whole loop |
-| file | `exhibit/replay.json`, 1.6 MB, signal per second, gate as index runs, period per minute |
+| file | `exhibit/replay.json`, 171 KB, signal per second, gate as index runs, period per minute |
 
-What a viewer hears across one pass: three uncoupled notes for the first two
-hours, a yellow bloom and the first voice starting to pull as ch0 connects,
-twenty hours of the two-minute rhythm with the second voice cutting in and out,
-then the drives falling away after the organism is removed and the notes going
-still for the last two hours.
+This is the middle of run 8 rather than the whole of it: the organism is
+already on both electrodes when the loop starts and still there when it ends,
+so there is no arrival and no removal in the window. What a viewer hears is
+three hours of the two-minute rhythm at its most sustained -- the first voice
+pushed the whole time, the second cutting in and out as its tube comes and
+goes, the third silent -- compressed into fifteen minutes.
+
+The earlier 27.9 h real-time export, which does contain the arrival at
+02:08:46 and the silence after removal, is in git history at c6c9ed2 and can be
+regenerated with the build command below using
+`--start '2026-08-27 23:08:34' --end '2026-08-29 03:00:00'`.
 
 ## Touch
 
@@ -97,7 +103,7 @@ restores sound and closes the log. Neither is built.
 ## Build
 
     ./scripts/py scripts/export_replay.py \
-        --start '2026-08-27 23:08:34' --end '2026-08-29 03:00:00' \
+        --start '2026-08-28 06:00:00' --end '2026-08-28 09:00:00' \
         --out exhibit/replay.json --note '...'
     ./exhibit/build.sh                      # -> exhibit/object/
     python3 exhibit/object/serve.py 8080    # test at /drift
@@ -136,6 +142,30 @@ written in the file itself. The four that will cost a show if they are dropped:
 - `--check-for-update-interval=31536000`. A Chromium update prompt over the
   field is the one piece of platform infrastructure the work does not need.
 
+## Raspberry Pi OS Lite
+
+The object runs Lite, which ships no browser, no display server and no audio.
+Three packages cover it:
+
+    sudo apt install -y chromium cage seatd pipewire pipewire-pulse wireplumber
+    sudo systemctl enable --now seatd
+    sudo usermod -aG _seatd,video,input,render chootka   # then log out and in
+
+`cage` is a kiosk Wayland compositor: it runs one fullscreen app straight from
+a TTY with no desktop behind it. `seatd` is what lets it take a seat when the
+session is not on the physical console -- without it cage fails with
+"Could not open target tty: Permission denied", and the `_seatd` group does not
+exist until the package is installed.
+
+Two names to watch: trixie calls the browser `chromium`, not
+`chromium-browser`, and `drift-kiosk.desktop` still says the latter and assumes
+a desktop autologin. Neither is right for Lite, so that file does not yet
+describe how this object starts. Running it by hand is:
+
+    python3 ~/sLLM/exhibit/object/serve.py 8080 &
+    cage -- chromium --kiosk --autoplay-policy=no-user-gesture-required \
+        'http://127.0.0.1:8080/drift?speed=12'
+
 ## Hardware
 
 Settled 2026-09-01: **Raspberry Pi 4, touch panel, DAC for audio out.** Still
@@ -162,9 +192,14 @@ to be confirmed against the parts once they are in hand.
 
 ## Playback
 
-Real time by default. `?speed=` on the kiosk URL timelapses the same file
-without a rebuild: `?speed=24` plays the 27.9 h in 70 minutes. The panel's
-first line states which of the two is running.
+`?speed=` on the kiosk URL timelapses the file without a rebuild, and the
+shipped kiosk URL carries `?speed=12`, which plays the 3 h window in 15
+minutes. Drop the parameter and the same file plays in real time over three
+hours. The panel's first line states which is running.
+
+The date on that line is rendered in the *viewer's* timezone, so it reads
+"August 28" on a Pi set to CEST and "August 27" on a machine in the Americas.
+Set the object's timezone before it ships.
 
 ## Not in the box
 
@@ -199,6 +234,6 @@ and beat. The picture is the same three oscillators drawn as interference
 rings. It is not a rendering of the data; it is the data pushing a circuit
 around.
 
-The recording is dated and specific: the organism reached the first electrode
-at 02:08:46 on 2026-08-28. The loop contains that moment, the day of rhythm
-that followed, and the silence after removal.
+The recording is dated and specific: three hours of one morning, 06:00 to
+09:00 on 2026-08-28, with the organism on two of the three electrodes
+throughout. Fifteen minutes of playing time, then it begins again.
