@@ -1,0 +1,64 @@
+# The piece, on Raspberry Pi OS Lite. Install to /etc/systemd/system/ and
+#   sudo systemctl enable --now drift-kiosk
+#
+# Lite has no desktop and no display manager, so there is no ~/.config/autostart
+# to put a .desktop file in. cage is a kiosk Wayland compositor: it takes the
+# console, runs one fullscreen client, and nothing else. That is the whole
+# session.
+#
+# Load-bearing details:
+#
+#   PAMName=login + TTYPath=/dev/tty1
+#       Gives the unit a real login session on seat0. Without it cage cannot
+#       take a seat and dies with "Could not open target tty: Permission
+#       denied".
+#   XDG_RUNTIME_DIR
+#       systemd does not set it for a service. cage exits immediately without
+#       it. 1000 is the first user; check with `id -u chootka` if that differs.
+#   Restart=always
+#       The buyer unplugs it. If chromium or cage ever dies, this brings the
+#       piece back rather than leaving a console prompt on the wall.
+#   The browser is /usr/bin/chromium
+#       Trixie's name for it. Bookworm and earlier called it
+#       chromium-browser -- correct this line if the object is ever rebuilt on
+#       an older image.
+#   ?speed=12
+#       One pass of the 3 h window every 15 minutes. Drop it for real time.
+[Unit]
+Description=drift, the piece
+Requires=drift-server.service
+After=drift-server.service seatd.service systemd-user-sessions.service
+
+[Service]
+Type=simple
+User=chootka
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+TTYReset=yes
+TTYVHangup=yes
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=LIBSEAT_BACKEND=seatd
+ExecStart=/usr/bin/cage -- /usr/bin/chromium \
+    --kiosk \
+    --incognito \
+    --noerrdialogs \
+    --disable-infobars \
+    --hide-scrollbars \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --touch-events=enabled \
+    --autoplay-policy=no-user-gesture-required \
+    --check-for-update-interval=31536000 \
+    --disable-session-crashed-bubble \
+    --restore-last-session=false \
+    --password-store=basic \
+    --disable-features=Translate,TranslateUI \
+    http://127.0.0.1:8080/drift?speed=12
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

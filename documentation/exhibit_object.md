@@ -116,9 +116,18 @@ API, which is what `sllm.visceral.systems/drift` does.
 ## On the object
 
 1. Copy `exhibit/object/` to `/home/chootka/drift` on the Pi.
-2. `exhibit/drift-server.service` to `/etc/systemd/system/`, enable and start.
-3. `exhibit/drift-kiosk.desktop` to `~/.config/autostart/`.
-4. Autologin to desktop, screen blanking off (`sudo raspi-config nonint do_blanking 1`).
+2. Both units to `/etc/systemd/system/`, then enable:
+
+        sudo cp exhibit/drift-server.service exhibit/drift-kiosk.service /etc/systemd/system/
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now seatd drift-server drift-kiosk
+
+3. Screen blanking off (`sudo raspi-config nonint do_blanking 1`), and set the
+   timezone (`sudo timedatectl set-timezone Europe/Berlin`) -- the panel prints
+   the recording's date in the object's own timezone.
+4. Check it survives a power cut, which is the thing a buyer will actually do:
+   `sudo reboot`, and the piece should come back on its own with sound
+   available on the first touch.
 5. Make the DAC the default ALSA output and prove it before sealing: `aplay -l`
    to find the card, set it in `/etc/asound.conf`, then `speaker-test -c2
    -twav` to hear both channels come out of the actual speakers.
@@ -157,14 +166,17 @@ session is not on the physical console -- without it cage fails with
 "Could not open target tty: Permission denied", and the `_seatd` group does not
 exist until the package is installed.
 
-Two names to watch: trixie calls the browser `chromium`, not
-`chromium-browser`, and `drift-kiosk.desktop` still says the latter and assumes
-a desktop autologin. Neither is right for Lite, so that file does not yet
-describe how this object starts. Running it by hand is:
+Trixie calls the browser `chromium`, not `chromium-browser`. Running it by
+hand, to check before enabling autostart:
 
     python3 ~/sLLM/exhibit/object/serve.py 8080 &
     cage -- chromium --kiosk --autoplay-policy=no-user-gesture-required \
         'http://127.0.0.1:8080/drift?speed=12'
+
+Autostart is `exhibit/drift-kiosk.service`, which replaced the old
+`drift-kiosk.desktop` -- Lite has no desktop session and no `~/.config/autostart`
+to put a .desktop file in. It runs cage on tty1 through a real login session,
+which is what lets it take seat0.
 
 ## Hardware
 
