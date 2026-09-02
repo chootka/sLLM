@@ -91,18 +91,23 @@ function fsin(x) {
 // The exhibition object ships the recording beside the page and has no API
 // behind it. scripts/export_replay.py writes this shape: signal per second,
 // gate as index runs, period per minute.
+// Typed arrays, one set per channel, not an object per sample. At 62.5 h that
+// is the difference between three flat buffers and 675,000 short-lived objects
+// -- and the collector works through a graph that size for minutes afterwards,
+// pausing the audio thread each time. That was heard as clicking for the first
+// few minutes after every start, settling once the graph aged into old space.
 function expand(ch, n) {
   const gate = new Uint8Array(n)
   for (const r of ch.gate_runs || []) gate.fill(1, r[0], r[1])
-  const out = new Array(n)
-  for (let i = 0; i < n; i++) {
-    out[i] = {
-      gate: gate[i],
-      signal: ch.signal[i] || 0,
-      period: ch.period[Math.floor(i / 60)] || 0
-    }
-  }
-  return out
+  const signal = new Float32Array(n)
+  const src = ch.signal || []
+  for (let i = 0; i < n; i++) signal[i] = src[i] || 0
+  // period stays per-minute, as exported; the readers divide.
+  const pn = Math.ceil(n / 60)
+  const period = new Float32Array(pn)
+  const psrc = ch.period || []
+  for (let i = 0; i < pn; i++) period[i] = psrc[i] || 0
+  return { n, gate, signal, period }
 }
 
 export default {
@@ -380,13 +385,20 @@ export default {
         const pts = data.points || []
         if (!pts.length) return
         for (let c = 0; c < 3; c++) {
-          this.buffer[c] = pts.map(p => {
-            const s = (p.channels || {})[String(c)] || {}
-            return { gate: s.gate || 0, signal: s.signal || 0, period: s.period || 0 }
-          })
+          const m = pts.length
+          const gate = new Uint8Array(m)
+          const signal = new Float32Array(m)
+          const period = new Float32Array(Math.ceil(m / 60) || 1)
+          for (let i = 0; i < m; i++) {
+            const v = (pts[i].channels || {})[String(c)] || {}
+            gate[i] = v.gate ? 1 : 0
+            signal[i] = v.signal || 0
+            if (i % 60 === 0) period[(i / 60) | 0] = v.period || 0
+          }
+          this.buffer[c] = { n: m, gate, signal, period }
         }
         // Live picks up near the newest sample; a replay starts at the top.
-        this.cursor = r ? 0 : Math.max(0, this.buffer[0].length - POLL_MS / 1000)
+        this.cursor = r ? 0 : Math.max(0, this.buffer[0].n - POLL_MS / 1000)
       } catch (e) { /* keep free-running */ }
     },
 
@@ -404,40 +416,42 @@ export default {
 
     advance() {
       const buf = this.buffer[0]
-      if (!buf || !buf.length) return
+      if (!buf || !buf.n) return
       this.cursor += 0.05 * this.pace
       // Replays loop, so one can be left running in a room.
       const loops = this.replay || this.bundled
-      if (this.cursor > buf.length - 1) {
-        this.cursor = loops ? 0 : buf.length - 1
+      if (this.cursor > buf.n - 1) {
+        this.cursor = loops ? 0 : buf.n - 1
         if (loops) this.seen = [false, false, false]
       }
       const i = Math.floor(this.cursor)
       const drives = []
       for (let c = 0; c < 3; c++) {
-        const s = this.buffer[c][i] || { gate: 0, signal: 0 }
-        drives.push(s.gate > 0.5
-          ? FREE_RUN + DEPTH * Math.max(0, Math.min(1, s.signal / SCALE_MV + 0.5))
+        const b = this.buffer[c]
+        const gate = b ? b.gate[i] : 0
+        const signal = b ? b.signal[i] : 0
+        drives.push(gate > 0.5
+          ? FREE_RUN + DEPTH * Math.max(0, Math.min(1, signal / SCALE_MV + 0.5))
           : FREE_RUN)
         // The organism reaching a pin, once, as it happens. Replays loop, so a
         // loop replays the connection too.
-        if (s.gate > 0.5) this.seen[c] = true
+        if (gate > 0.5) this.seen[c] = true
         const was = this.prevGates[c]
-        if (was !== null && was <= 0.5 && s.gate > 0.5) this.state.flash[c] = performance.now()
-        this.prevGates[c] = s.gate
+        if (was !== null && was <= 0.5 && gate > 0.5) this.state.flash[c] = performance.now()
+        this.prevGates[c] = gate
       }
       this.state.drives = drives
       // The SLIME net on 4051 Y5: all three measuring electrodes summed
       // through the unity buffer. Not gated -- the buffer sees the electrode
       // whether or not the organism has reached it, and the gate only decides
       // what drives a vactrol.
-      const slime = [0, 1, 2].reduce((a, c) => a + ((this.buffer[c][i] || {}).signal || 0), 0)
+      const slime = [0, 1, 2].reduce((a, c) => a + (this.buffer[c] ? this.buffer[c].signal[i] : 0), 0)
       if (this.node) this.node.port.postMessage({ drives, slime })
       if (this.about) {
         this.live = {
           drives,
-          gates: [0, 1, 2].map(c => (this.buffer[c][i] || {}).gate || 0),
-          period: [0, 1, 2].map(c => (this.buffer[c][i] || {}).period || 0),
+          gates: [0, 1, 2].map(c => (this.buffer[c] ? this.buffer[c].gate[i] : 0)),
+          period: [0, 1, 2].map(c => (this.buffer[c] ? this.buffer[c].period[(i / 60) | 0] || 0 : 0)),
           seen: this.seen.slice()
         }
       }
