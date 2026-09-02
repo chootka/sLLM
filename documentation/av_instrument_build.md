@@ -53,7 +53,6 @@ All optional. Out-of-range values are clamped, not rejected. Parsed in
 | `cap` | multiplier on the 47n timing caps | 2.13 | 0.5-4 | pitch of the bank. 2.13 is 100n, an octave down |
 | `mix` | three weights, comma separated | `0.45,1,1` | 0-1 each | mixer resistor ratios, osc1/osc2/osc3 |
 | `vco` | level | 0.35 | 0-1 | PLL channel, right output. `vco=0` silences it |
-| `mux` | three oscillator indices | `0,1,2` | perms of 0-2 | which oscillator each 4051 address selects |
 
 Playback length is `mins / speed` minutes: `mins=180&speed=12` is 15 minutes.
 Replays loop.
@@ -138,50 +137,47 @@ node with a divider so it straddles the band. Do this before concluding the
 topology needs changing.
 
 **Divider sweep, 2026-09-01: not the answer.** Measured headless against the
-shipped 3 h window, feedback dividers of 2, 4 and 8 all give 0 clocks. The
-lock-detect node still never reaches 0.66. The reason is arithmetic rather than
-component choice: the node tracks the control voltage, which is proportional to
-frequency, so clocking needs the tracked voice to swing by at least
-0.66 / 0.32 = 2.06x. The bank swings 33.2 -> 67.5 Hz, a ratio of 2.03. It is
-short, and no divider changes a ratio. Widening it needs gain on that node, or
-a narrower Schmitt band, and neither is on the board.
+run 8 export, feedback dividers of 2, 4 and 8 all give 0 clocks.
 
-So the PLL stays latched on one address forever. That part is unresolved and
-this note does not resolve it.
+The reason is arithmetic, not component choice. The lock-detect node tracks the
+VCO control voltage, which is proportional to frequency, so clocking needs the
+tracked voice to swing by at least 0.66 / 0.32 = **2.06x**. Measured across the
+window, the widest-moving voices swing:
 
-**What was audible, and was fixed separately.** Latched is survivable; latched
-onto the *wrong voice* is not. Y0 carried osc1, and osc1 is modulated only by
-vactrol C. On the shipped window that channel never connects, so its coupling
-sits at the free-run floor all the way through and the right output was a bare
-square at a fixed pitch for fifteen minutes.
+| voice | range | ratio |
+|---|---|---|
+| osc1 | 65.2-67.5 Hz | 1.03x |
+| osc2 | 33.4-67.3 Hz | 2.02x |
+| osc3 | 33.2-67.3 Hz | 2.03x |
 
-Measured over that window, after lock settles:
+No divider changes a ratio, which is why none of them helped. The gap is about
+1.5%: even the fullest organism drive this data produces lands just under what
+the Schmitt band demands.
 
-| 4051 Y0 carries | VCO range | spread | sd | clocks |
-|---|---|---|---|---|
-| osc1, as built | 62.9-71.1 Hz | 8.2 | 0.76 | 0 |
-| osc2 | 13.1-82.0 Hz | 68.9 | 15.82 | 0 |
-| osc3 | 16.9-88.7 Hz | 71.8 | 13.06 | 0 |
+**So is the lock detector broken, or is this the data?** Neither exactly.
 
-`?mux=` sets which oscillator each 4051 address selects, defaulting to the
-board as jumpered, `0,1,2`. On the board it is which oscillator output goes to
-which 4051 input pin -- a jumper, not a new part. The mux still never moves;
-the setting only decides where it is parked.
+- On osc1, which is what the mux is parked on as built, there is no swing to
+  speak of because ch2 never connected in run 8 -- the organism did not grow to
+  that electrode. Vactrol C's drive sits at the free-run floor throughout. That
+  is a result, correctly represented, and not a thing to fix.
+- On osc2 and osc3, which the organism *does* drive hard through ch0 and ch1,
+  the swing is real and still 1.5% short of tripping the detector. That part is
+  the circuit, not the data. A stronger signal would trip it; this organism's
+  does not.
 
-**This is a per-export choice, not a correction.** ch2 having no connection in
-run 8 is a result -- the organism did not grow to that electrode -- and it is
-represented honestly: vactrol C's drive sits at the free-run floor throughout,
-exactly as it should. Nothing fills that silence in. What `?mux=1,2,0` does is
-point the PLL at osc2, which moves because ch0 and ch1 *are* driving it. The
-movement is real signal from electrodes the organism did reach.
+Widening the margin means gain on the lock-detect node, a narrower Schmitt band,
+or a wider drive range -- board changes, none of them tried. Until then the mux
+stays parked wherever it powers up, and on a run 8 export that means the right
+output holds a near-constant pitch for the whole loop. `vco=0` silences that
+channel if it is unwanted for a particular export.
 
-Leaving the default is equally defensible: a right channel that sits still is a
-true statement about an electrode nothing arrived at. Decide per export, and on
-a run 6 window, where ch1 and ch2 both connect, the default is the right answer
-anyway.
+The instrument is left exactly as jumpered. An earlier attempt here moved osc2
+onto Y0 to give the right channel movement; it was reverted, because which
+oscillator is worth listening to depends on which electrodes a given run
+reached, and that does not belong baked into the circuit.
 
-The bright off-centre point in the field is the mux selection, and it still
-never moves -- it now sits on osc2's source.
+The bright off-centre point in the field is the mux selection, and it never
+moves.
 
 ## Sound decisions, with the measurement behind each
 
