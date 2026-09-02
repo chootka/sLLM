@@ -53,6 +53,7 @@ All optional. Out-of-range values are clamped, not rejected. Parsed in
 | `cap` | multiplier on the 47n timing caps | 2.13 | 0.5-4 | pitch of the bank. 2.13 is 100n, an octave down |
 | `mix` | three weights, comma separated | `0.45,1,1` | 0-1 each | mixer resistor ratios, osc1/osc2/osc3 |
 | `vco` | level | 0.35 | 0-1 | PLL channel, right output. `vco=0` silences it |
+| `mux` | three oscillator indices | `0,1,2` | perms of 0-2 | which oscillator each 4051 address selects |
 
 Playback length is `mins / speed` minutes: `mins=180&speed=12` is 15 minutes.
 Replays loop.
@@ -162,9 +163,22 @@ Measured over that window, after lock settles:
 | osc2 | 13.1-82.0 Hz | 68.9 | 15.82 | 0 |
 | osc3 | 16.9-88.7 Hz | 71.8 | 13.06 | 0 |
 
-`MUX` in `ring-processor.js` now puts osc2 on Y0. On the board this is which
-oscillator output goes to which 4051 input pin -- a jumper, not a new part. The
-mux still never moves; it is simply parked somewhere worth listening to.
+`?mux=` sets which oscillator each 4051 address selects, defaulting to the
+board as jumpered, `0,1,2`. On the board it is which oscillator output goes to
+which 4051 input pin -- a jumper, not a new part. The mux still never moves;
+the setting only decides where it is parked.
+
+**This is a per-export choice, not a correction.** ch2 having no connection in
+run 8 is a result -- the organism did not grow to that electrode -- and it is
+represented honestly: vactrol C's drive sits at the free-run floor throughout,
+exactly as it should. Nothing fills that silence in. What `?mux=1,2,0` does is
+point the PLL at osc2, which moves because ch0 and ch1 *are* driving it. The
+movement is real signal from electrodes the organism did reach.
+
+Leaving the default is equally defensible: a right channel that sits still is a
+true statement about an electrode nothing arrived at. Decide per export, and on
+a run 6 window, where ch1 and ch2 both connect, the default is the right answer
+anyway.
 
 The bright off-centre point in the field is the mux selection, and it still
 never moves -- it now sits on osc2's source.

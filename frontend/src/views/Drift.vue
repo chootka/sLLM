@@ -134,6 +134,19 @@ export default {
       return Number.isFinite(v) ? Math.max(1, Math.min(240, v)) : 1
     },
 
+    // ?mux=1,2,0 -- which oscillator each 4051 address selects. Default is
+    // the board as jumpered, 0,1,2. This exists because the PLL never
+    // re-points, so whatever is on Y0 is the only voice it ever tracks, and
+    // the right voice depends on which electrodes the organism reached in the
+    // window being played. It does not touch the electrode-to-vactrol map.
+    muxOrder() {
+      const q = (this.$route && this.$route.query) || {}
+      if (!q.mux) return [0, 1, 2]
+      const m = String(q.mux).split(',').map(v => Number(v) | 0)
+      if (m.length !== 3 || m.some(v => v < 0 || v > 2) || new Set(m).size !== 3) return [0, 1, 2]
+      return m
+    },
+
     // Running as the sealed exhibition object rather than as the website.
     // The bundled recording is the thing that is actually true about the
     // object, so it decides, rather than a flag on the kiosk URL that can be
@@ -286,7 +299,8 @@ export default {
         this.node.connect(this.ctx.destination)
         this.node.port.postMessage({
           gain: 0.22, running: true, drives: this.state.drives,
-          capScale: this.capScale, mix: this.mixWeights, vco: this.vcoLevel
+          capScale: this.capScale, mix: this.mixWeights, vco: this.vcoLevel,
+          muxOrder: this.muxOrder
         })
         await this.ctx.resume()
         this.running = true

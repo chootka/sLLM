@@ -32,19 +32,21 @@ const LOCK_TAU = 1e6 * 1e-6       // lock detect, 1M + 1uF
 // built. A square wave carries every odd harmonic with no rolloff, so the
 // harshness is the waveform, not the pitch; this is what tames it.
 const OUT_TAU = 10e3 * 10e-9
-// 4051 input wiring: which oscillator each address selects.
+// 4051 input wiring: which oscillator each address selects. As built, Y0..Y2
+// carry osc1..osc3 in order, and that is the default here.
 //
-// Y0 carried osc1 originally, and the mux never re-points (see below), so the
-// PLL sat on osc1 forever. osc1 is the one voice the organism barely moves:
-// it is modulated only by vactrol C, and on a window where that channel never
-// connects, its coupling is pinned at the free-run floor. Measured over the
-// shipped 3 h window it ran 65.2-67.5 Hz, so the right output was a bare
-// square at a fixed pitch for the whole loop.
+// It is a setting rather than a constant because the mux never re-points (see
+// the lock detector, below), so whatever sits on Y0 is the only voice the PLL
+// will ever track -- and which voice is worth tracking depends on which
+// electrodes the organism actually reached in the window being played. osc1 is
+// modulated only by vactrol C, so on a run where ch2 never connects, osc1
+// never moves and the right output is a fixed pitch. Run 8 is such a run;
+// run 6 is not.
 //
-// Moving osc2 to Y0 puts the PLL on a voice that actually swings. Same
-// measurement: VCO spread 8.2 Hz -> 68.9 Hz. On the board this is which
-// oscillator's output goes to which 4051 input pin, not a new part.
-const MUX = [1, 2, 0]
+// This does NOT change which electrode drives which vactrol. ch0 drives A,
+// ch1 B, ch2 C, always. It changes which oscillator output is jumpered to
+// which 4051 input pin.
+const MUX_AS_BUILT = [0, 1, 2]
 
 class RingProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -115,6 +117,8 @@ class RingProcessor extends AudioWorkletProcessor {
     // Y3..Y7 are grounded on the board, so those addresses feed the
     // comparator silence and it never locks there.
     this.addr = 0
+    // Per-export, set from ?mux=. Defaults to the board as jumpered.
+    this.muxOrder = MUX_AS_BUILT.slice()
     // Lock detect: 1M + 1uF off the comparator node into a spare 40106 gate.
     // Locked, the average sits still and never crosses the Schmitt; unlocked,
     // it swings at the beat rate and clocks the counter, which walks the mux
@@ -149,6 +153,11 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.capScale === 'number') {
         this.capScale = Math.max(0.5, Math.min(4, d.capScale))
         for (const o of this.osc) o.c = 47e-9 * this.capScale
+      }
+      // One oscillator index per 4051 address; [1,2,0] puts osc2 on Y0.
+      if (Array.isArray(d.muxOrder) && d.muxOrder.length === 3) {
+        const m = d.muxOrder.map(v => Math.max(0, Math.min(2, v | 0)))
+        if (new Set(m).size === 3) this.muxOrder = m
       }
       if (typeof d.running === 'boolean') this.running = d.running
     }
@@ -213,7 +222,7 @@ class RingProcessor extends AudioWorkletProcessor {
       this.clock++
 
       // --- 4051 -> 4046 -> 4040 ---------------------------------------
-      const sigIn = this.addr < 3 ? this.osc[MUX[this.addr]].out : 0
+      const sigIn = this.addr < 3 ? this.osc[this.muxOrder[this.addr]].out : 0
       // Phase comparator II: the 4046's phase-frequency detector, pin 13. Two
       // edge-set flags that cancel each other, so it discriminates frequency
       // as well as phase and will pull in from anywhere. PC1's XOR only holds
@@ -286,7 +295,7 @@ class RingProcessor extends AudioWorkletProcessor {
         lum: this.vac.map(v => v.lum),
         // The oscillator being tracked, not the raw address -- the field
         // draws the VCO's rings on that voice's source point.
-        addr: this.addr < 3 ? MUX[this.addr] : this.addr,
+        addr: this.addr < 3 ? this.muxOrder[this.addr] : this.addr,
         vcoHz: Math.round(Math.max(0, Math.min(1, this.loop)) * PLL_FMAX),
         locked: this.addr < 3 && Math.abs(this.lockV - this.loop) < 0.05
       })
