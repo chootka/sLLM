@@ -250,6 +250,16 @@ software model is not the schematic. These are the differences, worst first.
 | C1 | 1n | 33n |
 | R2 (12) | n/c, no offset | n/c — agrees |
 
+**Open, not being worked on: the SLIME buffer is unity gain.** Confirmed with
+the user 2026-09-01. The electrodes give ~1.4 mV; the 4046's SIG IN needs
+roughly 100-400 mV p-p to switch. So as built, Y5 hands the comparator a flat
+line and behaves like Y7 -- the mux lands on it, finds nothing, walks off. It
+fails silently, and the software model will not show it, because the model
+squares the summed signal with what is effectively an ideal comparator. Fixing
+it means gain of ~100x or more between the buffer and the mux, or a comparator
+there. Deliberately deferred; the piece runs without it, since the organism
+still drives the ring through the vactrols.
+
 **Y5 is the important one.** It is a missing signal path, not a tuning value:
 the PLL is supposed to be able to lock to the organism's own signal, and in the
 model that input is grounded. Per the user: all three measuring *electrodes*
