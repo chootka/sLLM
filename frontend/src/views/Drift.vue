@@ -60,7 +60,7 @@ const SPAN_S = 300
 const FREE_RUN = 0.12
 const DEPTH = 0.62
 const SCALE_MV = 2.0
-const FLASH_MS = 1800
+const FLASH_MS = 600
 
 // The exhibition object ships the recording beside the page and has no API
 // behind it. scripts/export_replay.py writes this shape: signal per second,
