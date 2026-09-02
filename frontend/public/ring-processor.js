@@ -54,6 +54,36 @@ const PLL_FBDIV = 1
 // oscillator that lock switches off.
 const LOCKOSC_TAU = 1e6 * 1e-6
 
+// Everything below is constant for the life of the processor, and every one of
+// them used to be recomputed inside the per-sample loop. At 48 kHz that is a
+// few hundred thousand transcendental calls a second in the audio thread.
+const DT = 1 / sampleRate
+const A_UP = 1 - Math.exp(-DT / 0.005)     // vactrol light rising
+const A_DN = 1 - Math.exp(-DT / 0.050)     // and falling
+const K_COH = 1 - Math.exp(-DT / 0.30)
+const K_LOOP = 1 - Math.exp(-DT / LOOP_TAU)
+const K_LOCK = 1 - Math.exp(-DT / LOCKOSC_TAU)
+const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
+
+// LDR conductance against light, interpolated in log resistance. This was a
+// Math.pow per vactrol per sample. The curve is exponential in lum, so a
+// linear index over 0..1 gives a constant ratio per step -- 0.74% at 1024
+// entries -- and interpolating between entries keeps it smooth enough not to
+// zipper as the light moves.
+const G_N = 1024
+const G_LUT = new Float64Array(G_N + 1)
+for (let i = 0; i <= G_N; i++) {
+  G_LUT[i] = 1 / (R_DARK * Math.pow(R_LIT / R_DARK, i / G_N))
+}
+function conductance(lum) {
+  const x = lum * G_N
+  if (x <= 0) return G_LUT[0]
+  if (x >= G_N) return G_LUT[G_N]
+  const i = x | 0
+  const f = x - i
+  return G_LUT[i] + (G_LUT[i + 1] - G_LUT[i]) * f
+}
+
 class RingProcessor extends AudioWorkletProcessor {
   constructor() {
     super()
@@ -149,6 +179,11 @@ class RingProcessor extends AudioWorkletProcessor {
     this.pcp = 1
     this.count = 0            // 4040, Q1..Q3 drive the address lines
 
+    // Reused every sample. Allocating here instead of in the loop is the
+    // difference between no garbage in the audio thread and 48000 short-lived
+    // arrays a second, which the collector eventually stops to clean up and
+    // which is heard as sporadic clicking.
+    this.g = [0, 0, 0]
     this.coh = [0, 0, 0]      // ring pairs 0-1, 1-2, 2-0
     this.freq = [0, 0, 0]     // smoothed instantaneous, Hz
     this.lastEdge = [0, 0, 0]
@@ -188,21 +223,19 @@ class RingProcessor extends AudioWorkletProcessor {
     if (!out) return true
     if (!this.running) { out.fill(0); if (out2) out2.fill(0); return true }
 
-    const dt = 1 / sampleRate
+    const dt = DT
     // Vactrol lag: light comes up in milliseconds and falls over tens of them.
     // That asymmetry is what makes the ring fuse to one tone under drive
     // instead of just sounding frequency-modulated.
-    const aUp = 1 - Math.exp(-dt / 0.005)
-    const aDn = 1 - Math.exp(-dt / 0.050)
+    const g = this.g
 
     for (let n = 0; n < out.length; n++) {
-      for (const v of this.vac) {
+      for (let k = 0; k < 3; k++) {
+        const v = this.vac[k]
         const target = v.drive
-        v.lum += (target - v.lum) * (target > v.lum ? aUp : aDn)
+        v.lum += (target - v.lum) * (target > v.lum ? A_UP : A_DN)
+        g[k] = conductance(v.lum)
       }
-      // Conductance is interpolated in log resistance, which is roughly how an
-      // LDR actually behaves across its range.
-      const g = this.vac.map(v => 1 / (R_DARK * Math.pow(R_LIT / R_DARK, v.lum)))
 
       let mix = 0
       for (let i = 0; i < 3; i++) {
@@ -232,7 +265,7 @@ class RingProcessor extends AudioWorkletProcessor {
 
       // Pairwise coherence around the ring, low-passed hard enough that only
       // the beat survives.
-      const kCoh = 1 - Math.exp(-dt / 0.30)
+      const kCoh = K_COH
       for (let k = 0; k < 3; k++) {
         const a = this.osc[k].out, b = this.osc[(k + 1) % 3].out
         const prod = (a - 0.5) * (b - 0.5) * 4      // +1 in phase, -1 anti
@@ -271,7 +304,7 @@ class RingProcessor extends AudioWorkletProcessor {
       this.cap += err * dt * 4.0
       if (this.cap < 0.001) this.cap = 0.001
       if (this.cap > 1) this.cap = 1
-      this.pumpF += (err - this.pumpF) * (1 - Math.exp(-dt / LOOP_TAU))
+      this.pumpF += (err - this.pumpF) * K_LOOP
       this.loop = Math.max(0.001, Math.min(1, this.cap + 0.06 * this.pumpF))
       this.pc = pcOut
       const vcoF = Math.max(0, Math.min(1, this.loop)) * PLL_FMAX
@@ -297,7 +330,7 @@ class RingProcessor extends AudioWorkletProcessor {
       // from the circuit: pin 1 is pulses, not a level, and against a 25% duty
       // a 10x pull-down wins every time. The node then topped out at 0.487
       // against a 0.66 threshold and the counter never clocked on any window.
-      const k = 1 - Math.exp(-dt / LOCKOSC_TAU)
+      const k = K_LOCK
       this.lockV += ((this.pcp === 1 ? this.lockOut : 0) - this.lockV) * k
       const prevLock = this.lockOut
       if (this.lockOut === 1 && this.lockV > VT_HI) this.lockOut = 0
@@ -322,7 +355,7 @@ class RingProcessor extends AudioWorkletProcessor {
       s = (s - this.dc) * 2
       // Two poles of the 10k/10n stage: one is barely audible against a square
       // this dense, two rolls the upper harmonics off properly.
-      const aOut = 1 - Math.exp(-dt / OUT_TAU)
+      const aOut = K_OUT
       this.lp += (s - this.lp) * aOut
       this.lp2 += (this.lp - this.lp2) * aOut
       out[n] = (s * (1 - this.tone) + this.lp2 * this.tone) * this.gain
