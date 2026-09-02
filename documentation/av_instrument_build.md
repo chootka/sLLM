@@ -197,8 +197,9 @@ software model is not the schematic. These are the differences, worst first.
 
 **Y5 is the important one.** It is a missing signal path, not a tuning value:
 the PLL is supposed to be able to lock to the organism's own signal, and in the
-model that input is grounded. Per the user, all three channels feed the unity
-buffer, one op-amp section each, converging on the single SLIME net.
+model that input is grounded. Per the user: all three measuring *electrodes*
+feed the unity buffer, one op-amp section each, converging on the single SLIME
+net. Not the DAC channels -- the electrode signals themselves, ch0/ch1/ch2.
 
 **The lock detector, restated.** Earlier notes here concluded the detector
 could not trip as built and blamed the topology. That conclusion was drawn from
