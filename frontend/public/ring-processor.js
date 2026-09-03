@@ -163,6 +163,11 @@ const GHOST_FMIN = 90                   // fold up until it clears this
 // gives a wall of harmonics, while two smooth ramps give mostly the sum and
 // difference themselves.
 const RING_PAIRS = [[0, 1], [0, 2]]
+
+// How far down a voice goes when its electrode is quiet. The organism's signal
+// only ever spans part of its possible range, so a shallow floor here is what
+// turns a 2 dB wobble into an audible breath.
+const AMP_FLOOR = 0.05
 const FC_BED = 1200                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -491,7 +496,7 @@ class RingProcessor extends AudioWorkletProcessor {
           let a = (this.vac[i].drive - FREE_RUN) / DEPTH
           if (a < 0) a = 0
           else if (a > 1) a = 1
-          w *= 1 - this.ampDepth + this.ampDepth * (0.25 + 0.75 * a)
+          w *= 1 - this.ampDepth + this.ampDepth * (AMP_FLOOR + (1 - AMP_FLOOR) * a)
         }
         this.triV[i] = tri
         mixT += tri * w
