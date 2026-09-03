@@ -111,8 +111,12 @@ p.port.postMessage = d => {
 // --- output ---------------------------------------------------------------
 let aplay = null
 if (!WAV && !DRY) {
+  // A large ALSA buffer is the whole point of being out here: 32768 frames is
+  // 680 ms for aplay to coast on. Without it aplay runs on a small default and
+  // reports underruns of 5-70 ms a couple of times a second.
   aplay = spawn('aplay', [
-    '-D', DEVICE, '-f', 'S16_LE', '-r', String(RATE), '-c', '2', '-t', 'raw', '-'
+    '-D', DEVICE, '-f', 'S16_LE', '-r', String(RATE), '-c', '2', '-t', 'raw',
+    '--buffer-size=32768', '--period-size=4096', '-'
   ], { stdio: ['pipe', 'ignore', 'inherit'] })
   aplay.on('exit', (code, sig) => {
     console.error('aplay exited', code, sig, '-- exiting so systemd restarts us')
@@ -125,10 +129,14 @@ if (!WAV && !DRY) {
 // here has to meet a deadline the way a browser callback does: if this process
 // is late, the pipe simply drains a little, and aplay is holding a large
 // buffer. That is the whole reason for moving out of the browser.
+// Write in chunks, not in 128-frame blocks. 512 bytes per write is thousands
+// of syscalls a second for no reason; 32 blocks is 85 ms of audio per write.
+const CHUNK = 32
 const L = new Float32Array(BLOCK)
 const R = new Float32Array(BLOCK)
 const outs = [[L, R]]
 const pcm = Buffer.alloc(BLOCK * 4)
+const chunk = Buffer.alloc(BLOCK * 4 * CHUNK)
 
 let cursor = Math.floor(N * Math.max(0, Math.min(0.999, SEEK)))
 let nextDrive = 0
@@ -177,12 +185,15 @@ function block () {
   return pcm
 }
 
+// No wall clock here. The pipe and aplay's buffer are the pacing: write until
+// the pipe says stop, resume on drain. Rate-limiting against Date.now() as
+// well meant stopping while the pipe would still have taken more, which is
+// how aplay ended up starving.
 function pump () {
   while (!paused) {
-    const elapsed = (Date.now() - started) / 1000
-    if (generated > elapsed + AHEAD) break
-    const b = block()
-    if (aplay && !aplay.stdin.write(b)) { paused = true; return }
+    for (let i = 0; i < CHUNK; i++) block().copy(chunk, i * BLOCK * 4)
+    if (!aplay) { if (generated > (Date.now() - started) / 1000 + AHEAD) return; continue }
+    if (!aplay.stdin.write(chunk)) { paused = true; return }
   }
 }
 
