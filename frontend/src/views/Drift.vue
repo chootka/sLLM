@@ -812,7 +812,7 @@ canvas {
 .panel .now {
   margin: 0;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1px solid #fff;
   display: grid;
   grid-template-columns: 5.5em 1fr;
   gap: 2px 10px;
