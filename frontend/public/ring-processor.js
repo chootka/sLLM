@@ -92,7 +92,12 @@ const BED_MAKEUP = 1.9
 // rumble still follows what the organism is doing.
 const NOISE_LEVEL = 0.85                // brown noise in the bed
 const TONE_IN_BED = 0.45                // how much filtered square stays under
-const BED_DRIVE = 1.7                   // saturation: thickness, not brightness
+const BED_DRIVE = 1.15                  // saturation: thickness, not brightness
+// Two poles at ~90 Hz. The previous version used coefficients that did not sum
+// to one, giving 10x gain into the saturator -- that was the scrape -- and a
+// second stage at 2.7 kHz, which is hiss rather than rumble.
+const NZ_K = 0.012                      // ~90 Hz per pole
+const NZ_GAIN = 14                      // makeup: two poles leave very little
 const FC_BED = 150                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -477,15 +482,15 @@ class RingProcessor extends AudioWorkletProcessor {
       // Brown noise: white through a leaky integrator, so energy falls with
       // frequency and it sits as bass rather than hiss. Gently rolled off on
       // top of that so nothing up there is sharp.
-      this.nz = this.nz * 0.995 + (Math.random() * 2 - 1) * 0.05
-      this.nzf += (this.nz - this.nzf) * 0.35
+      this.nz += ((Math.random() * 2 - 1) - this.nz) * NZ_K
+      this.nzf += (this.nz - this.nzf) * NZ_K
       // Breathe with the bank, so the rumble follows the beating rather than
       // sitting flat under it.
       const mag = v < 0 ? -v : v
       this.env += (mag - this.env) * 0.0004
       const breathe = 0.55 + 0.9 * this.env
 
-      const bed = this.nzf * NOISE_LEVEL * breathe +
+      const bed = this.nzf * NZ_GAIN * NOISE_LEVEL * breathe +
                   this.sc2 * TONE_IN_BED
       const fwd = this.sc2 * (1 - dry) + v * dry
       // Crossfade bed to foreground as contact comes in, then saturate: even
