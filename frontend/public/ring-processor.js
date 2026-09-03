@@ -58,8 +58,12 @@ const LOCKOSC_TAU = 1e6 * 1e-6
 // them used to be recomputed inside the per-sample loop. At 48 kHz that is a
 // few hundred thousand transcendental calls a second in the audio thread.
 const DT = 1 / sampleRate
-const A_UP = 1 - Math.exp(-DT / 0.005)     // vactrol light rising
-const A_DN = 1 - Math.exp(-DT / 0.050)     // and falling
+// A long tail. 5 ms/50 ms passed every wobble in the data straight through to
+// pitch, which is what made this restless rather than hypnotic. Real LDR
+// vactrols decay over hundreds of milliseconds, so this is closer to the part
+// as well as calmer: the ring drifts between states instead of twitching.
+const A_UP = 1 - Math.exp(-DT / 0.05)      // vactrol light rising
+const A_DN = 1 - Math.exp(-DT / 0.60)      // and falling, slowly
 const K_COH = 1 - Math.exp(-DT / 0.30)
 const K_LOOP = 1 - Math.exp(-DT / LOOP_TAU)
 const K_LOCK = 1 - Math.exp(-DT / LOCKOSC_TAU)
@@ -140,8 +144,8 @@ const SWELL_KNEE = 0.35                 // fraction of full push to be forward
 // contact across six seconds of audio while the visual bloom was instant,
 // which reads as the sound lagging the picture even when they are locked. The
 // piece should arrive with the bloom and leave slowly.
-const SWELL_UP = 0.35                   // seconds to come forward
-const SWELL_DN = 10.0                   // seconds to fall back to the bed
+const SWELL_UP = 1.5                    // seconds to come forward
+const SWELL_DN = 18.0                   // seconds to fall back to the bed
 // Linear below the knee, so the dynamics that survive to here are untouched;
 // only the peaks bend. A tanh across the whole range was tried on this signal
 // before and flattened everything, because a square is already at full scale
@@ -226,7 +230,7 @@ class RingProcessor extends AudioWorkletProcessor {
     // The VCO is a square at constant amplitude that only ever tracks pitch --
     // it takes no part in the fusing, so it reads as a fixed slab under the
     // bank's movement. Its own level, independent of the mixer.
-    this.vcoLevel = 0.35
+    this.vcoLevel = 0.18
     this.running = true
 
     // Reported to the main thread for the visual. The oscillators run at
@@ -502,7 +506,7 @@ class RingProcessor extends AudioWorkletProcessor {
       // sitting flat under it.
       const mag = v < 0 ? -v : v
       this.env += (mag - this.env) * 0.0004
-      const breathe = 0.55 + 0.9 * this.env
+      const breathe = 0.80 + 0.35 * this.env
 
       const bed = this.nzf * NZ_GAIN * NOISE_LEVEL * breathe +
                   this.sc2 * TONE_IN_BED
