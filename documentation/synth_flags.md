@@ -46,7 +46,7 @@ like and leaves the bed untouched.
 |---|---|---|
 | `--vco` | `0.55` | The PLL: the voice that chases the oscillators, never settles, and goes raspy while hunting. |
 | `--ghost` | `0` (off) | The difference tone as an actual voice -- a sine tracking the gap between the two fastest oscillators, folded up into hearing and glided rather than stepped. This is the thing that rises and falls in the distance; it belongs to no oscillator, so it can only be heard by generating it. |
-| `--amp` | `0` (off) | Sends the organism's rise and fall to **level** as well as pitch, per channel. Whichever electrode is being pushed hardest is the voice that comes up, so a contraction is a swell and not only a bend. |
+| `--amp` | `0.8` | Sends the organism's rise and fall to **level** as well as pitch, per channel. Whichever electrode is being pushed hardest is the voice that comes up, so a contraction is a swell and not only a bend. |
 | `--ring` | `0` (off) | The real sum and difference tones, by multiplying the oscillators against each other. Where `--ghost` reconstructs one artifact from measured frequencies, this **is** the interaction, taken off the signals -- so all the swooping comes free. Measured at contact: 70 Hz goes from 0.0005 to 0.0194 and 210 Hz from 0.0012 to 0.0107, content belonging to no oscillator. |
 
 `--ring` and `--ghost` overlap. `--ring` is the truer of the two; `--ghost` is
