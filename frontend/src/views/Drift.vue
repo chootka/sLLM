@@ -817,7 +817,9 @@ canvas {
   grid-template-columns: 5.5em 1fr;
   gap: 2px 10px;
 }
-.panel dt { color: rgba(255, 255, 255, 0.38); letter-spacing: 0.12em; }
+.panel dt {
+  color: #fff; font-weight: 600; letter-spacing: 0.12em;
+}
 .panel dd { margin: 0; }
 /* A finger, not a cursor -- the touch panel on the object, and phones. Keyed
    to the input device rather than to object mode, because the sizes below are
