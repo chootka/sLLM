@@ -267,6 +267,22 @@ which is what lets it take seat0.
 Settled 2026-09-01: **Raspberry Pi 4, touch panel, DAC for audio out.** Still
 to be confirmed against the parts once they are in hand.
 
+- **The DAC overlay must be `hifiberry-dacplus`, without `-pro`.** The board
+  is an Innomaker PCM5122 HAT. The `-pro` overlay declares that the board
+  carries its own 22.5792 and 24.576 MHz master crystals and that the Pi is the
+  clock slave; this board has no such crystals, so the codec derives its clock
+  the wrong way and runs at exactly double the rate it reports. Found
+  2026-09-03 by timing a known-length file:
+
+        head -c 1920000 /dev/zero > /tmp/10s.raw   # ten seconds at 48k stereo
+        time aplay -D plughw:0,0 -f S16_LE -r 48000 -c 2 -t raw /tmp/10s.raw
+
+  Ten seconds of audio came back in 5.09 s. Symptoms it caused, none of which
+  pointed at the clock: audio an octave high (the "chipmunk voice"), and
+  `aplay` draining the synth's stream at 2x realtime so that generated audio
+  outran the wall clock a second per second until the state timeline hit its
+  cap and the visuals desynced from the sound. Re-run the timing test after any
+  change to the audio hardware; it is the fastest check there is.
 - **Audio out.** The DAC decides this, not the Pi. A Pi 4 does have the 3.5 mm
   jack, but the DAC is the better path and it has to be made the *default*
   ALSA device -- Chromium plays to whatever ALSA hands it, so a DAC that is
@@ -282,9 +298,8 @@ to be confirmed against the parts once they are in hand.
   overlay filesystem is still worth doing; nothing at runtime writes to disk.
 - **Stereo, not mono.** The three oscillator voices come out of the left
   channel and the PLL out of the right. Measured on the built object: left peak
-  0.25, right 0.04. The sound log describes that split to the viewer in so many
-  words, so a mono DAC or a single speaker makes the piece contradict its own
-  wall text.
+  0.25, right 0.04. A mono DAC or a single speaker folds the chasing voice into
+  the three it is chasing and the piece loses the distinction.
 
 ## Playback
 
