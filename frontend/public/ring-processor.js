@@ -78,8 +78,8 @@ const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 // body of it stays. Contact opens the filter and the piece steps forward.
 // Level still moves, but far less than it did: the bed is not meant to be
 // quiet, it is meant to be behind something.
-const REST_LEVEL = 0.55
-const FC_BED = 220                      // Hz, cutoff with nothing connected
+const REST_LEVEL = 0.42
+const FC_BED = 150                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
 // The dry blend was there to stop the bed sounding muffled when the bank sat
