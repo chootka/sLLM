@@ -845,8 +845,8 @@ canvas {
 .field.object .panel {
   top: 150px;
   left: 28px;
-  width: min(1150px, calc(100vw - 56px));
-  max-height: calc(100vh - 180px);
+  width: min(1050px, calc(100vw - 56px));
+  max-height: calc(100vh - 140px);
   padding: 30px 34px;
   font-size: 1.41rem;
   line-height: 1.85;
