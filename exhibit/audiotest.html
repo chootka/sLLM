@@ -1,0 +1,67 @@
+<!doctype html><meta charset=utf-8><title>audio test</title>
+<style>
+ body{background:#000;color:#ccc;font:16px system-ui;margin:0;
+      display:flex;flex-direction:column;gap:14px;padding:24px}
+ button{font:600 20px system-ui;padding:26px;background:#111;color:#eee;
+        border:1px solid #444;border-radius:0}
+ button:active{background:#eee;color:#000}
+ #log{font:13px ui-monospace,monospace;color:#8a8;white-space:pre-wrap}
+</style>
+<button id=a>1 — native OscillatorNode</button>
+<button id=b>2 — trivial AudioWorklet</button>
+<button id=c>3 — heavy AudioWorklet (like the piece)</button>
+<button id=x>STOP</button>
+<div id=log>tap one. listen for 60s.</div>
+<script>
+let ctx, node, osc
+const log = m => document.getElementById('log').textContent = m
+function stop(){
+  if(osc){try{osc.stop()}catch(e){}; osc=null}
+  if(node){node.disconnect(); node=null}
+  if(ctx){ctx.close(); ctx=null}
+  log('stopped')
+}
+document.getElementById('x').onclick = stop
+
+document.getElementById('a').onclick = async () => {
+  stop(); ctx = new AudioContext()
+  osc = ctx.createOscillator(); osc.type='square'; osc.frequency.value=110
+  const g = ctx.createGain(); g.gain.value=0.15
+  osc.connect(g).connect(ctx.destination); osc.start()
+  await ctx.resume(); log('1 native oscillator, '+ctx.sampleRate+' Hz')
+}
+
+const mk = body => URL.createObjectURL(new Blob([`
+class P extends AudioWorkletProcessor{
+  constructor(){super(); this.p=0}
+  process(inputs,outputs){
+    const o=outputs[0], n=o[0].length
+    for(let i=0;i<n;i++){
+      ${body}
+      o[0][i]=v; if(o[1])o[1][i]=v
+    }
+    return true
+  }
+}
+registerProcessor('p',P)`], {type:'text/javascript'}))
+
+async function worklet(body,label){
+  stop(); ctx = new AudioContext()
+  await ctx.audioWorklet.addModule(mk(body))
+  node = new AudioWorkletNode(ctx,'p',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]})
+  node.connect(ctx.destination); await ctx.resume()
+  log(label+', '+ctx.sampleRate+' Hz')
+}
+
+// trivial: one phase accumulator
+document.getElementById('b').onclick = () => worklet(
+  `this.p+=110/sampleRate; if(this.p>=1)this.p-=1; const v=(this.p<0.5?0.15:-0.15)`,
+  '2 trivial worklet')
+
+// heavy: comparable arithmetic load to the piece's three oscillators + PLL
+document.getElementById('c').onclick = () => worklet(
+  `let v=0
+   for(let k=0;k<24;k++){ this.p+=110/sampleRate/24; if(this.p>=1)this.p-=1
+     v+=Math.sin(this.p*6.283185)*0.006 }`,
+  '3 heavy worklet')
+</script>
