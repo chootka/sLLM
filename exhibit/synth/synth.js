@@ -263,7 +263,7 @@ function block () {
 // and bounds memory at the same time -- which is what the clock bound was
 // really for, since without any limit the queue grew a second per second until
 // the state timeline overflowed and the visuals jumped ahead.
-const QUEUE_BYTES = 1 * RATE * 4         // one second of audio in flight
+const QUEUE_BYTES = 2 * RATE * 4         // two seconds of audio in flight
 
 function pump () {
   while (!paused) {
