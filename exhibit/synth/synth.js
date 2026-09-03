@@ -130,7 +130,7 @@ if (!WAV && !DRY) {
   // enough. The cost is only latency, and nothing here is interactive.
   aplay = spawn('aplay', [
     '-D', DEVICE, '-f', 'S16_LE', '-r', String(RATE), '-c', '2', '-t', 'raw',
-    '--buffer-size=131072', '--period-size=8192', '-'
+    '--buffer-size=32768', '--period-size=4096', '-'
   ], { stdio: ['pipe', 'ignore', 'inherit'] })
   aplay.on('exit', (code, sig) => {
     console.error('aplay exited', code, sig, '-- exiting so systemd restarts us')
@@ -263,7 +263,7 @@ function block () {
 // and bounds memory at the same time -- which is what the clock bound was
 // really for, since without any limit the queue grew a second per second until
 // the state timeline overflowed and the visuals jumped ahead.
-const QUEUE_BYTES = 10 * RATE * 4        // ten seconds of audio in flight
+const QUEUE_BYTES = 1 * RATE * 4         // one second of audio in flight
 
 function pump () {
   while (!paused) {
@@ -321,7 +321,7 @@ if (WAV) {
 // what aplay has swallowed self-corrects against whatever rate the hardware
 // actually runs at. What remains is a constant offset -- aplay's own ring plus
 // the OS pipe -- which shifts A/V by a fixed amount rather than a growing one.
-const ALSA_BUF = 131072 / RATE          // --buffer-size, in seconds
+const ALSA_BUF = 32768 / RATE           // --buffer-size, in seconds
 
 function playedSeconds () {
   if (!aplay) return (Date.now() - started) / 1000
