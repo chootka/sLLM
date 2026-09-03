@@ -234,24 +234,32 @@ function block () {
 // fine pacing. The clock says how far ahead to work at all, which is what
 // stops the queue running away -- aplay reads eagerly into its own buffer, so
 // backpressure alone does not bound this.
-// Both limits, and both are needed.
+// Paced by how much is still queued, not by the clock.
 //
-// aplay.stdin.write() keeps returning true, so backpressure alone does not
-// pace this: measured without the clock, generation ran at twice realtime and
-// the lead climbed a second per second -- 30 s, 60 s, 90 s, 120 s -- until the
-// state queue hit its cap, the snapshots matching what was audible were
-// discarded, and the visuals jumped ahead of the sound.
+// The clock was wrong as a pacer. Date.now() and the DAC's crystal are not the
+// same rate, and the DAC wins: producing 48000 samples per second of *system*
+// time is slightly less than it consumes, so the buffer drained until it ran
+// dry, over and over. The interval between underruns scaled with buffer size
+// -- one a second at 680 ms, one every five at 2.7 s -- which is drift, not
+// stalling. Nothing was ever late: there was simply less audio than the card
+// wanted.
 //
-// The bound looked like it caused underruns when I first added it. It did not:
-// that was two objects allocated per 128 samples, found afterwards. Removing
-// the bound and fixing the allocation happened in the wrong order, so each
-// looked like the other's cure.
+// writableLength is what is still waiting to reach aplay. Filling to a byte
+// target means the consumer sets the rate, whatever its crystal actually does,
+// and bounds memory at the same time -- which is what the clock bound was
+// really for, since without any limit the queue grew a second per second until
+// the state timeline overflowed and the visuals jumped ahead.
+const QUEUE_BYTES = 10 * RATE * 4        // ten seconds of audio in flight
+
 function pump () {
   while (!paused) {
-    if (generated > (Date.now() - started) / 1000 + AHEAD) return
+    if (aplay && aplay.stdin.writableLength >= QUEUE_BYTES) return
     for (let i = 0; i < CHUNK; i++) block().copy(chunk, i * BLOCK * 4)
-    if (!aplay) continue
-    if (!aplay.stdin.write(chunk)) { paused = true; return }
+    if (!aplay) {
+      if (generated > (Date.now() - started) / 1000 + AHEAD) return
+      continue
+    }
+    aplay.stdin.write(chunk)
   }
 }
 
@@ -331,8 +339,10 @@ setInterval(() => {
 // than it drains and the visuals will fall behind the sound.
 setInterval(() => {
   const played = (Date.now() - started) / 1000
+  const inflight = aplay ? (aplay.stdin.writableLength / (RATE * 4)).toFixed(2) : 'n/a'
   console.error(`synth: clients ${clients.size}, sent ${sent}/30s, idle ${skipped}, ` +
-                `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s`)
+                `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s, ` +
+                `inflight ${inflight}s`)
   sent = 0; skipped = 0
 }, 30000)
 
