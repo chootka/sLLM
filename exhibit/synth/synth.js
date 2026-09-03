@@ -111,7 +111,7 @@ const p = new Processor()
 p.port.onmessage({ data: {
   // These override the worklet's own defaults, so they are the values that
   // actually ship -- editing the constructor alone does nothing.
-  gain: 0.85, running: true, capScale: 1.0, mix: [0.45, 1, 1], vco: 0.18
+  gain: 1.0, running: true, capScale: 1.0, mix: [0.45, 1, 1], vco: 0.55
 } })
 p.port.postMessage = d => {
   if (d.coh) state.coh = d.coh

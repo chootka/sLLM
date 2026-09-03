@@ -120,6 +120,21 @@ const NZ_GAIN = 14                      // makeup: two poles leave very little
 const VT_MID = (VT_HI + VT_LO) / 2
 const VT_SPAN = VT_HI - VT_LO
 const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
+
+// --- the bird ------------------------------------------------------------
+//
+// The PLL is the only voice here that is not part of the landscape. It runs
+// far above the bank, it chases the oscillators without ever settling, and it
+// goes raspy when it hunts. This branch treats it as the subject and the bank
+// as the ground it flies over: the landscape comes down, the bird comes up and
+// gets a dark echo so its distance is a room rather than just being quiet.
+const LANDSCAPE = 0.40                  // bank level once contact is in
+const BIRD = 0.85                       // PLL level once contact is in
+const ECHO_MS = 380                     // delay time
+const ECHO_FB = 0.52                    // feedback
+const ECHO_MIX = 0.65                   // how much echo against the dry bird
+const ECHO_DARK = 0.22                  // one-pole in the loop: each pass duller
+const ECHO_SPREAD = 0.35                // second tap offset, for width
 const FC_BED = 1200                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -220,6 +235,12 @@ class RingProcessor extends AudioWorkletProcessor {
     // resonance, nothing that rings on a square edge.
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
+    // Echo line for the bird. 1.5 s is plenty at these delay times and the
+    // allocation happens once, not per block.
+    this.echoN = Math.ceil(sampleRate * 1.5)
+    this.echo = new Float32Array(this.echoN)
+    this.echoAt = 0
+    this.echoLp = 0
     this.nz = 0               // brown noise state
     this.nzf = 0
     this.env = 0              // slow envelope of the bank, breathes the noise
@@ -527,7 +548,7 @@ class RingProcessor extends AudioWorkletProcessor {
       // Crossfade bed to foreground as contact comes in, then saturate: even
       // harmonics read as thickness where the raw ones read as tinny.
       const mixed = bed * (1 - nn) + fwd * nn
-      const pad = Math.tanh(mixed * BED_DRIVE) * gn
+      const pad = Math.tanh(mixed * BED_DRIVE) * gn * (1 - (1 - LANDSCAPE) * nn)
       out[n] = soft(pad)
       if (out2) {
         // The bed goes to both channels. Fading the PLL in with contact left
@@ -538,8 +559,24 @@ class RingProcessor extends AudioWorkletProcessor {
         const w = (this.vcoOut - 0.5) * this.vcoLevel
         this.sd1 += (w - this.sd1) * kf
         this.sd2 += (this.sd1 - this.sd2) * kf
-        const pll = (this.sd2 * (1 - dry) + w * dry) * gn
-        out2[n] = soft(pad * (1 - 0.6 * nn) + pll * nn)
+        const bird = (this.sd2 * (1 - dry) + w * dry) * gn * BIRD * nn
+
+        // Two taps off one line, offset so the repeats do not sit on top of
+        // each other -- that offset is what puts the bird in a space rather
+        // than beside the speaker. The loop is low-passed, so each pass is
+        // duller than the last and the tail recedes instead of ringing.
+        const d1 = Math.floor(ECHO_MS * 0.001 * sampleRate)
+        const d2 = Math.floor(d1 * (1 + ECHO_SPREAD))
+        const t1 = this.echo[(this.echoAt + this.echoN - d1) % this.echoN]
+        const t2 = this.echo[(this.echoAt + this.echoN - d2) % this.echoN]
+        this.echoLp += (t1 - this.echoLp) * ECHO_DARK
+        this.echo[this.echoAt] = bird + this.echoLp * ECHO_FB
+        this.echoAt = (this.echoAt + 1) % this.echoN
+
+        const wetL = t2 * ECHO_MIX
+        const wetR = t1 * ECHO_MIX
+        out[n] = soft(pad + bird * 0.45 + wetL)
+        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + wetR)
       }
     }
 
