@@ -154,16 +154,23 @@ let cursor = Math.floor(N * Math.max(0, Math.min(0.999, SEEK)))
 let nextDrive = 0
 let generated = 0            // seconds of audio written
 const started = Date.now()
-// How far ahead of the speakers to generate. Generous, because a short lead
-// starves aplay and the underruns come straight back -- 0.5 s was not enough
-// on this machine.
+// How far ahead of the speakers to generate.
 //
-// A long lead used to cost two things and now costs neither. The visuals stay
-// in step because snapshots are held until their audio plays, so any *stable*
-// lead is fine; it was the runaway to 94 s that broke them. And SOUND OFF is
-// no longer a gain change buried in the queue -- it mutes at the mixer, which
-// is instant however much audio is committed.
-const AHEAD = 2.0
+// Long on purpose. With a big lead, node holds seconds of PCM in its own write
+// buffer and libuv drains it into the pipe on OS events, independent of
+// whether this process's timer fires on schedule. With a short one, feeding
+// depends on setInterval running promptly and any event-loop stall starves
+// aplay -- which is exactly what happened at 0.5 s and again at 2 s, while an
+// unbounded lead was clean.
+//
+// It costs nothing now. The visuals stay in step because snapshots are held
+// until their audio actually plays, so any lead is fine as long as it is
+// stable. And SOUND OFF is not a gain change buried in the queue any more; it
+// mutes at the mixer and is instant however much audio is committed.
+//
+// The bound exists only to stop it running away to 94 s and eating memory.
+// 10 s is about 2 MB of PCM in flight.
+const AHEAD = 10.0
 
 let soundOn = false
 let paused = false
