@@ -72,7 +72,15 @@ const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 // at; the swell is keyed to the vactrol drive, so it follows whatever the data
 // actually does rather than any assumption about which pin connects when.
 // KNEE is the drive at which the piece is fully forward. Both are set by ear.
-const REST_LEVEL = 0.25
+// Most of the contrast is tone, not level. A square wave at full brightness
+// for hours is what makes a listener dizzy, so with nothing connected the bank
+// is rolled off to a rumble -- the harmonics that do the damage are gone, the
+// body of it stays. Contact opens the filter and the piece steps forward.
+// Level still moves, but far less than it did: the bed is not meant to be
+// quiet, it is meant to be behind something.
+const REST_LEVEL = 0.55
+const FC_BED = 150                      // Hz, cutoff with nothing connected
+const FC_OPEN = 9000                    // Hz, cutoff fully foregrounded
 const SWELL_KNEE = 0.35
 // Fast up, slow down. Six seconds in both directions smeared the moment of
 // contact across six seconds of audio while the visual bloom was instant,
@@ -127,6 +135,10 @@ class RingProcessor extends AudioWorkletProcessor {
     ]
     this.gain = 0.25
     this.swell = REST_LEVEL   // master level, follows contact
+    // Two poles per channel for the screen. Cascaded one-poles: gentle, no
+    // resonance, nothing that rings on a square edge.
+    this.sc1 = 0; this.sc2 = 0
+    this.sd1 = 0; this.sd2 = 0
     this.dc = 0
     this.lp = 0               // 10k/10n output stage
     this.lp2 = 0
@@ -249,6 +261,13 @@ class RingProcessor extends AudioWorkletProcessor {
     if (this.vac[2].drive > act) act = this.vac[2].drive
     const swellTo = REST_LEVEL + (1 - REST_LEVEL) *
                     (act < SWELL_KNEE ? act / SWELL_KNEE : 1)
+
+    // Cutoff follows the swell, exponentially in frequency so the sweep sounds
+    // even rather than bunched at the top. Per block: 2.7 ms is far finer than
+    // the swell moves, and an exp() per sample is not worth it here.
+    const norm = (this.swell - REST_LEVEL) / (1 - REST_LEVEL)
+    const fc = FC_BED * Math.pow(FC_OPEN / FC_BED, norm < 0 ? 0 : norm > 1 ? 1 : norm)
+    const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
 
     const dt = DT
     // Vactrol lag: light comes up in milliseconds and falls over tens of them.
@@ -391,8 +410,16 @@ class RingProcessor extends AudioWorkletProcessor {
       this.swell += (swellTo - this.swell) *
                     (swellTo > this.swell ? K_SWELL_UP : K_SWELL_DN)
       const gn = this.gain * this.swell
-      out[n] = (s * (1 - this.tone) + this.lp2 * this.tone) * gn
-      if (out2) out2[n] = (this.vcoOut - 0.5) * gn * this.vcoLevel
+      const v = s * (1 - this.tone) + this.lp2 * this.tone
+      this.sc1 += (v - this.sc1) * kf
+      this.sc2 += (this.sc1 - this.sc2) * kf
+      out[n] = this.sc2 * gn
+      if (out2) {
+        const w = (this.vcoOut - 0.5) * this.vcoLevel
+        this.sd1 += (w - this.sd1) * kf
+        this.sd2 += (this.sd1 - this.sd2) * kf
+        out2[n] = this.sd2 * gn
+      }
     }
 
     // ~30 Hz is plenty for the visual and keeps the message queue quiet.
