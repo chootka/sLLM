@@ -143,7 +143,8 @@ p.port.onmessage({ data: {
   tri: num('tri', 1),                  // the body: capacitor ramp
   sqr: num('sqr', 1),                  // the edge: comparator square
   ghost: num('ghost', 0),              // the difference tone, as a voice
-  amp: num('amp', 0)                   // organism drives level, not just pitch
+  amp: num('amp', 0),                  // organism drives level, not just pitch
+  ring: num('ring', 0)                 // real sum/difference tones off the bank
 } })
 p.port.postMessage = d => {
   if (d.coh) state.coh = d.coh

@@ -149,6 +149,20 @@ const ECHO_SPREAD = 0.35                // second tap offset, for width
 // few Hz and the interesting movement is in how it travels, not its register.
 const GHOST_MULT = 4                    // octave folding of the difference
 const GHOST_FMIN = 90                   // fold up until it clears this
+
+// --- the ring ------------------------------------------------------------
+//
+// The far-off sounds are secondary artifacts: sum and difference tones thrown
+// off by the three oscillators interacting. Multiplying two signals produces
+// exactly those, so this is not an approximation of the effect -- it is the
+// effect, taken off the actual oscillators rather than reconstructed from
+// their measured frequencies the way the ghost is. All the swooping comes
+// free, because it is already in the signals.
+//
+// Taken from the capacitor ramps, not the comparators: multiplying two squares
+// gives a wall of harmonics, while two smooth ramps give mostly the sum and
+// difference themselves.
+const RING_PAIRS = [[0, 1], [0, 2]]
 const FC_BED = 1200                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -286,6 +300,9 @@ class RingProcessor extends AudioWorkletProcessor {
     this.triLevel = 1
     this.sqrLevel = 1
     this.ghostLevel = 0       // off unless asked for; --ghost
+    this.ringLevel = 0        // off unless asked for; --ring
+    this.triV = [0, 0, 0]
+    this.ringLp = 0
     // The organism's rise and fall drives coupling, which moves pitch. This
     // sends the same signal to level as well, so a contraction is heard as a
     // swell in the voice that electrode is pushing and not only as a bend.
@@ -367,6 +384,7 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.sqr === 'number') this.sqrLevel = Math.max(0, Math.min(2, d.sqr))
       if (typeof d.ghost === 'number') this.ghostLevel = Math.max(0, Math.min(2, d.ghost))
       if (typeof d.amp === 'number') this.ampDepth = Math.max(0, Math.min(1, d.amp))
+      if (typeof d.ring === 'number') this.ringLevel = Math.max(0, Math.min(2, d.ring))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -475,6 +493,7 @@ class RingProcessor extends AudioWorkletProcessor {
           else if (a > 1) a = 1
           w *= 1 - this.ampDepth + this.ampDepth * (0.25 + 0.75 * a)
         }
+        this.triV[i] = tri
         mixT += tri * w
         mixS += o.out * w
       }
@@ -619,6 +638,19 @@ class RingProcessor extends AudioWorkletProcessor {
         // each other -- that offset is what puts the bird in a space rather
         // than beside the speaker. The loop is low-passed, so each pass is
         // duller than the last and the tail recedes instead of ringing.
+        let rg = 0
+        if (this.ringLevel > 0) {
+          for (let q = 0; q < RING_PAIRS.length; q++) {
+            const a = this.triV[RING_PAIRS[q][0]] - 0.5
+            const b = this.triV[RING_PAIRS[q][1]] - 0.5
+            rg += a * b * 4
+          }
+          // Gently rolled off: the sum tones land higher than anything else
+          // here and read as glare without this.
+          this.ringLp += (rg - this.ringLp) * 0.12
+          rg = this.ringLp * this.ringLevel * gn * (0.3 + 0.7 * nn)
+        }
+
         let gh = 0
         if (this.ghostLevel > 0 && this.ghostF > 0) {
           this.ghostPh += this.ghostF * dt
@@ -632,13 +664,13 @@ class RingProcessor extends AudioWorkletProcessor {
         const t1 = this.echo[(this.echoAt + this.echoN - d1) % this.echoN]
         const t2 = this.echo[(this.echoAt + this.echoN - d2) % this.echoN]
         this.echoLp += (t1 - this.echoLp) * ECHO_DARK
-        this.echo[this.echoAt] = bird + gh + this.echoLp * ECHO_FB
+        this.echo[this.echoAt] = bird + gh + rg + this.echoLp * ECHO_FB
         this.echoAt = (this.echoAt + 1) % this.echoN
 
         const wetL = t2 * ECHO_MIX
         const wetR = t1 * ECHO_MIX
-        out[n] = soft(pad + bird * 0.45 + gh + wetL)
-        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + gh * 0.8 + wetR)
+        out[n] = soft(pad + bird * 0.45 + gh + rg + wetL)
+        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + gh * 0.8 + rg * 0.85 + wetR)
       }
     }
 
