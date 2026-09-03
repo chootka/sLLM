@@ -697,9 +697,9 @@ export default {
 
       // The PLL reads as a fourth, tighter set of rings centred on whichever
       // source the mux has selected -- present only while it holds lock.
-      g.fillStyle = 'rgba(190,190,190,0.42)'
+      g.fillStyle = 'rgba(198,186,166,0.42)'
       for (let r = 0; r < rows; r++) g.fillText(dim[r], 0, r * ch)
-      g.fillStyle = `rgba(255,255,255,${(0.62 + 0.3 * lock).toFixed(3)})`
+      g.fillStyle = `rgba(255,242,220,${(0.62 + 0.3 * lock).toFixed(3)})`
       for (let r = 0; r < rows; r++) g.fillText(hot[r], 0, r * ch)
       if (flash) {
         const band = [0.95, 0.6, 0.28]
