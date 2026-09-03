@@ -383,9 +383,16 @@ setInterval(() => {
   // reads 192000 while `lead` still climbs, then `generated` is being counted
   // twice somewhere and the fault is my accounting, not the device.
   const rate = wall > 0 ? Math.round(written / wall) : 0
+  // played vs the oldest snapshot still held: if played sits behind
+  // timeline[0].at the release loop can never advance past entry 0, and the
+  // stream wedges on one snapshot forever. gen - played is the assumed
+  // latency; if it exceeds the span the timeline actually holds, that is the
+  // wedge.
+  const oldest = timeline.length ? timeline[0].at.toFixed(2) : 'n/a'
   console.error(`synth: clients ${clients.size}, sent ${sent}/30s, idle ${skipped}, ` +
                 `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s, ` +
-                `inflight ${inflight}s, bytes/s ${rate} (realtime ${RATE * 4})`)
+                `inflight ${inflight}s, bytes/s ${rate} (realtime ${RATE * 4}), ` +
+                `gen ${generated.toFixed(2)} played ${played.toFixed(2)} oldest ${oldest}`)
   sent = 0; skipped = 0
 }, 30000)
 
