@@ -79,11 +79,15 @@ const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 // Level still moves, but far less than it did: the bed is not meant to be
 // quiet, it is meant to be behind something.
 const REST_LEVEL = 0.55
-const FC_BED = 500                      // Hz, cutoff with nothing connected
-// A pure two-pole bed reads as a blanket over the speaker rather than a piece
-// heard from further away. A little unfiltered signal keeps the edges legible
-// so it stays behind something instead of inside something.
-const BED_DRY = 0.15
+const FC_BED = 220                      // Hz, cutoff with nothing connected
+// No raw signal in the bed. A square's edges are instantaneous and full
+// bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
+// The dry blend was there to stop the bed sounding muffled when the bank sat
+// at 200 Hz and the cutoff was below its fundamental; with the bank two octaves
+// down the fundamental is well inside the passband and the blend only adds
+// grit. 220 Hz against a 50 Hz fundamental leaves the first few harmonics and
+// nothing sharp.
+const BED_DRY = 0.0
 // Filtering could never fix the bed, because what makes it painful is not the
 // harmonics but the three fundamentals themselves. At 200/204/209 Hz they beat
 // at 4-9 Hz, which is squarely in the range the ear reads as roughness, and it
