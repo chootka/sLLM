@@ -791,12 +791,14 @@ canvas {
   color: rgba(255, 255, 255, 0.95);
   border-color: rgba(255, 255, 255, 0.55);
 }
-/* :hover never fires on glass, so it is the only feedback a finger gets that
-   the tap landed. Held only while the finger is down. */
+/* :hover never fires on glass, so this is the only feedback a finger gets that
+   the tap landed. Held while the finger is down. Faint: a full white fill
+   reads as a flash against a field this dark, which is worse than no feedback
+   at all. */
 .sound:active, .about:active {
-  color: #000;
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.98);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 .panel {
   position: absolute;
