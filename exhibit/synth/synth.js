@@ -325,22 +325,52 @@ const ALSA_BUF = 32768 / RATE           // --buffer-size, in seconds
 
 let playedSm = 0
 let lastPlayed = 0
+let lastAt = 0
+const TAU = 0.4                        // smoothing, and the lag it costs back
+
+// ALSA publishes exactly how many frames are still to be played, so the
+// hardware side of the latency is a measurement rather than an assumption.
+// Read a few times a second; it moves on the period boundary, not per sample.
+const STATUS = `/proc/asound/card${CARD}/pcm0p/sub0/status`
+let alsaDelay = ALSA_BUF               // seconds, until the first good read
+let alsaSeen = false
+
+function readAlsaDelay () {
+  try {
+    const m = /^\s*delay\s*:\s*(-?\d+)/m.exec(fs.readFileSync(STATUS, 'utf8'))
+    if (m) {
+      const d = parseInt(m[1], 10) / RATE
+      // A stopped or draining device reports 0 or nonsense; keep the last good
+      // value rather than yanking the visuals forward.
+      if (d > 0 && d < 30) { alsaDelay = d; alsaSeen = true }
+    }
+  } catch (e) { /* no status file: keep the configured constant */ }
+}
+setInterval(readAlsaDelay, 250)
 
 function playedSeconds () {
   if (!aplay) return (Date.now() - started) / 1000
   const queued = aplay.stdin.writableLength / (RATE * 4)
-  const raw = Math.max(0, written / (RATE * 4) - queued - ALSA_BUF)
+  const raw = Math.max(0, written / (RATE * 4) - queued - alsaDelay)
   // The raw figure jitters by as much as the whole queue depth, because the
-  // pump fills to the cap and then coasts down. Feeding that straight into the
-  // release index makes the field jump between states instead of moving
-  // through them. A ~0.7 s one-pole tracks the true rate while ignoring the
-  // sawtooth, and the clamp stops the visuals ever stepping backwards, which
-  // reads far worse than being slightly late.
+  // pump fills to the cap and then coasts down. Fed straight into the release
+  // index that makes the field jump between states instead of moving through
+  // them, so it is smoothed -- but a one-pole tracking a steadily rising value
+  // sits behind it by exactly its own time constant, which is real lag. The
+  // position advances at about a second per second, so adding TAU back
+  // cancels that to first order. Time-based rather than per-call, so the rate
+  // the emitter happens to run at cannot change the tuning.
+  const now = Date.now()
+  const dt = lastAt ? Math.min(1, (now - lastAt) / 1000) : 0
+  lastAt = now
   if (playedSm === 0) playedSm = raw
-  else playedSm += (raw - playedSm) * 0.05
-  if (playedSm < lastPlayed) playedSm = lastPlayed
-  lastPlayed = playedSm
-  return playedSm
+  else playedSm += (raw - playedSm) * (1 - Math.exp(-dt / TAU))
+  let p = playedSm + TAU
+  // Never step backwards: rewinding the field reads far worse than being
+  // slightly late.
+  if (p < lastPlayed) p = lastPlayed
+  lastPlayed = p
+  return p
 }
 function snapshot () {
   if (generated - lastSnap < 0.033) return
@@ -402,10 +432,15 @@ setInterval(() => {
   // latency; if it exceeds the span the timeline actually holds, that is the
   // wedge.
   const oldest = timeline.length ? timeline[0].at.toFixed(2) : 'n/a'
+  // Total latency actually in the pipe: what Node still holds plus what ALSA
+  // says is still to be played. This is the number that decides A/V sync.
+  const nodeQ = aplay ? aplay.stdin.writableLength / (RATE * 4) : 0
+  const lat = (nodeQ + alsaDelay).toFixed(2)
   console.error(`synth: clients ${clients.size}, sent ${sent}/30s, idle ${skipped}, ` +
                 `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s, ` +
                 `inflight ${inflight}s, bytes/s ${rate} (realtime ${RATE * 4}), ` +
-                `gen ${generated.toFixed(2)} played ${played.toFixed(2)} oldest ${oldest}`)
+                `gen ${generated.toFixed(2)} played ${played.toFixed(2)} oldest ${oldest}, ` +
+                `latency ${lat}s (alsa ${alsaDelay.toFixed(2)}s ${alsaSeen ? 'measured' : 'ASSUMED'})`)
   sent = 0; skipped = 0
 }, 30000)
 
