@@ -7,10 +7,12 @@
          only on the web. The object is already fullscreen under kiosk, it has
          no pointer and no keyboard, and a visitor's stray tap must not be able
          to change what the display is doing. -->
-    <button class="sound" @click.stop="toggleSound">
+    <button class="sound" :class="{ veiled: !showControls }"
+            @click.stop="reveal(); toggleSound()">
       {{ running ? 'SOUND OFF' : 'SOUND ON' }}
     </button>
-    <button class="about" @click.stop="about = !about">
+    <button class="about" :class="{ veiled: !showControls }"
+            @click.stop="reveal(); about = !about">
       {{ about ? 'CLOSE' : 'SOUND LOG' }}
     </button>
     <div v-if="about" class="panel" @click.stop>
@@ -130,6 +132,10 @@ export default {
       // Set once the out-of-browser synth answers. While it is driving, the
       // page creates no AudioContext at all.
       synth: false,
+      // On the object the two buttons stay out of sight until the screen is
+      // touched, so what is on the wall is the field and nothing else. On the
+      // website they are always there.
+      controlsShown: false,
       // Mirrors state.drives for the panel. state itself is deliberately not
       // reactive -- it is touched every animation frame.
       live: { drives: [FREE_RUN, FREE_RUN, FREE_RUN], gates: [0, 0, 0], period: [0, 0, 0], seen: [false, false, false] }
@@ -174,6 +180,10 @@ export default {
       if (this.replay) return this.replay.speed
       const v = Number((this.$route && this.$route.query || {}).speed)
       return Number.isFinite(v) ? Math.max(1, Math.min(240, v)) : 1
+    },
+
+    showControls() {
+      return !this.isObject || this.controlsShown
     },
 
     // Running as the sealed exhibition object rather than as the website.
@@ -229,6 +239,7 @@ export default {
     // an event, and must not flash.
     this.prevGates = [null, null, null]
     this._lastFlash = [0, 0, 0]
+    this._lastState = 0
     // Whether each pin has been connected at any point in the current pass.
     // "not yet connected" is true before a pin is first reached and wrong
     // after it has been reached and lost, which on a recording that contains
@@ -271,6 +282,8 @@ export default {
     if (this.ro) this.ro.disconnect()
     clearInterval(this._poll)
     clearInterval(this._tick)
+    clearTimeout(this._veil)
+    if (this._stale) clearInterval(this._stale)
     if (this._es) this._es.close()
     if (this.node) this.node.disconnect()
     if (this.ctx) this.ctx.close()
@@ -316,10 +329,22 @@ export default {
       }, 250)
     },
 
-    // On the object this is deliberately inert -- see the template.
+    // A tap anywhere on the object brings the buttons up. It still never
+    // touches fullscreen there: under kiosk the piece is already fullscreen
+    // and nothing in the box could put it back.
     tapField() {
-      if (this.isObject) return
+      if (this.isObject) return this.reveal()
       return this.toggleFull()
+    },
+
+    // Show the buttons, and set them to fade again. Held open while the sound
+    // log is up, so a slow reader is not cut off mid-sentence.
+    reveal() {
+      this.controlsShown = true
+      clearTimeout(this._veil)
+      this._veil = setTimeout(() => {
+        if (!this.about) this.controlsShown = false
+      }, 8000)
     },
 
     async toggleFull() {
@@ -386,6 +411,7 @@ export default {
         let d
         try { d = JSON.parse(e.data) } catch (err) { return }
         this.synth = true
+        this._lastState = Date.now()
         this.running = !!d.sound
         this.state.coh = d.coh
         this.state.freq = d.freq
@@ -406,8 +432,20 @@ export default {
           drives: d.drives, gates: d.gates, period: d.period, seen: d.seen
         }
       }
-      es.onerror = () => { /* no synth, or it went away; the worklet path stands */ }
+      // EventSource reconnects on its own, but until it does the page must not
+      // sit frozen believing the synth is still driving. If nothing has
+      // arrived for two seconds, hand control back to the page's own clock;
+      // the next message takes it away again. Without this a synth restart --
+      // which every deploy does -- leaves the visuals running free of the
+      // sound until someone reloads.
+      es.onerror = () => {}
       this._es = es
+      this._stale = setInterval(() => {
+        if (this.synth && Date.now() - this._lastState > 2000) {
+          this.synth = false
+          this.cursor = this.state.cursorFallback || this.cursor
+        }
+      }, 1000)
     },
 
     // An object with no rig behind it must not depend on an API answering.
@@ -697,10 +735,11 @@ export default {
   user-select: none;
 }
 /* No mouse is attached to the object, so an arrow parked over the field is
-   just a blemish that never moves again. */
+   just a blemish that never moves again. Blanket, because individual rules
+   kept missing one -- .panel sets its own cursor, and anything added later
+   would need remembering. */
 .field.object,
-.field.object button,
-.field.object a { cursor: none; }
+.field.object * { cursor: none !important; }
 /* CSS is the only thing that sizes the canvas. JS reads this back and matches
    the backing store to it. */
 canvas {
@@ -714,8 +753,16 @@ canvas {
   max-height: none;
   max-width: none;
 }
+/* Out of sight until the screen is touched, on the object only. Opacity and
+   pointer-events rather than display, so the fade is smooth and a veiled
+   button cannot be pressed by accident. */
+.veiled {
+  opacity: 0 !important;
+  pointer-events: none;
+}
 /* One rule for both, so the two targets cannot drift apart in size. */
 .sound, .about {
+  transition: opacity 0.4s ease;
   position: absolute;
   top: 18px;
   background: none;
@@ -779,6 +826,34 @@ canvas {
    wrong for a mouse and right for a finger wherever the page is running.
    ~56px is the smallest target that is reliably hit first time; the type goes
    up with it because 0.58rem is unreadable at gallery viewing distance. */
+/* The object is touch-only, always. Keying this to .object rather than to
+   @media (pointer: coarse) means it does not depend on the panel reporting
+   itself as a touch device, which is not something to leave to chance on a
+   sealed object with no other way in. */
+.field.object .sound,
+.field.object .about {
+  top: 28px;
+  min-height: 104px;
+  min-width: 260px;
+  padding: 34px 44px;
+  font-size: 1rem;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.78);
+  border-color: rgba(255, 255, 255, 0.38);
+}
+.field.object .sound { right: 28px; }
+.field.object .about { left: 28px; }
+.field.object .panel {
+  top: 150px;
+  left: 28px;
+  width: min(640px, calc(100vw - 56px));
+  max-height: calc(100vh - 200px);
+  padding: 26px 28px;
+  font-size: 0.86rem;
+  line-height: 1.9;
+}
+.field.object .panel .now { grid-template-columns: 7em 1fr; }
+
 @media (pointer: coarse) {
   .sound, .about {
     top: 24px;
