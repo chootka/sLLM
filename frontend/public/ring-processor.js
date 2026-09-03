@@ -84,6 +84,15 @@ const REST_LEVEL = 0.60
 // compensate, not a dynamic. Makeup rises as the filter closes, so soft stays
 // soft in character without becoming inaudible.
 const BED_MAKEUP = 1.9
+// A low-passed square is a muffled square: narrowband and dull. Thunder is the
+// opposite -- broadband and smooth -- so no cutoff setting gets there from a
+// filtered square. The bed gets its body from brown noise instead, which has
+// energy everywhere but no edges and no pitch, and the oscillators sit under it
+// rather than being the whole of it. The noise breathes with the bank, so the
+// rumble still follows what the organism is doing.
+const NOISE_LEVEL = 0.85                // brown noise in the bed
+const TONE_IN_BED = 0.45                // how much filtered square stays under
+const BED_DRIVE = 1.7                   // saturation: thickness, not brightness
 const FC_BED = 150                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -178,6 +187,9 @@ class RingProcessor extends AudioWorkletProcessor {
     // resonance, nothing that rings on a square edge.
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
+    this.nz = 0               // brown noise state
+    this.nzf = 0
+    this.env = 0              // slow envelope of the bank, breathes the noise
     this.dc = 0
     this.lp = 0               // 10k/10n output stage
     this.lp2 = 0
@@ -462,12 +474,29 @@ class RingProcessor extends AudioWorkletProcessor {
       const v = s * (1 - this.tone) + this.lp2 * this.tone
       this.sc1 += (v - this.sc1) * kf
       this.sc2 += (this.sc1 - this.sc2) * kf
-      out[n] = soft((this.sc2 * (1 - dry) + v * dry) * gn)
+      // Brown noise: white through a leaky integrator, so energy falls with
+      // frequency and it sits as bass rather than hiss. Gently rolled off on
+      // top of that so nothing up there is sharp.
+      this.nz = this.nz * 0.995 + (Math.random() * 2 - 1) * 0.05
+      this.nzf += (this.nz - this.nzf) * 0.35
+      // Breathe with the bank, so the rumble follows the beating rather than
+      // sitting flat under it.
+      const mag = v < 0 ? -v : v
+      this.env += (mag - this.env) * 0.0004
+      const breathe = 0.55 + 0.9 * this.env
+
+      const bed = this.nzf * NOISE_LEVEL * breathe +
+                  this.sc2 * TONE_IN_BED
+      const fwd = this.sc2 * (1 - dry) + v * dry
+      // Crossfade bed to foreground as contact comes in, then saturate: even
+      // harmonics read as thickness where the raw ones read as tinny.
+      const mixed = bed * (1 - nn) + fwd * nn
+      out[n] = soft(Math.tanh(mixed * BED_DRIVE) * gn)
       if (out2) {
         const w = (this.vcoOut - 0.5) * this.vcoLevel
         this.sd1 += (w - this.sd1) * kf
         this.sd2 += (this.sd1 - this.sd2) * kf
-        out2[n] = soft((this.sd2 * (1 - dry) + w * dry) * gn)
+        out2[n] = soft((this.sd2 * (1 - dry) + w * dry) * gn * nn)
       }
     }
 
