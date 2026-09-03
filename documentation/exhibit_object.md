@@ -267,42 +267,43 @@ which is what lets it take seat0.
 Settled 2026-09-01: **Raspberry Pi 4, touch panel, DAC for audio out.** Still
 to be confirmed against the parts once they are in hand.
 
-- **OPEN: the DAC drains audio at twice realtime.** Measured 2026-09-03 two
-  independent ways. Timing a known-length file:
+- **The DAC overlay must be `hifiberry-dacplus-std`.** Not `-pro`, and not
+  plain `hifiberry-dacplus`. The board is an Innomaker PCM5122 HAT, 384 kHz/
+  32-bit, with its own dual oscillators. The `snd_rpi_hifiberry_dacplus` driver
+  auto-detects that Pro hardware and takes the board as clock master, then
+  divides HiFiBerry's 22.5792/24.576 MHz crystals to get the sample rate.
+  Innomaker fitted a different pair, so the driver programmed a divider for
+  48000 and the card emitted 96000: **exactly double, and invisible to every
+  layer above it.** `hw_params` reported `rate: 48000` throughout. `-std`
+  forces the Pi to supply the clock and the rate comes out right.
 
-        head -c 1920000 /dev/zero > /tmp/10s.raw   # ten seconds at 48k stereo
-        time aplay -D plughw:0,0 -f S16_LE -r 48000 -c 2 -t raw /tmp/10s.raw
+  **The tell is the card name.** `aplay -l` must read `HiFiBerry DAC+`. If it
+  reads `HiFiBerry DAC+ Pro`, the driver is dividing the wrong crystals and
+  everything below follows. Note that plain `hifiberry-dacplus` also
+  auto-detects Pro -- only `-std` reliably suppresses it.
 
-  returns in 5.09 s; and the synth's own byte counter settles at ~397 kB/s
-  against 192 kB/s realtime. Consequence: generated audio outruns the wall
-  clock a second per second until the state timeline hits its cap and the
-  visuals desync from the sound.
+  **The test, which takes fifteen seconds** (found 2026-09-03):
 
-  Cause not yet known, but narrowed to the card itself. Ruled out: the ALSA
-  software path -- `hw:0,0` times identically to `plughw:0,0` (5.097 vs
-  5.094 s), so no conversion layer is involved. Ruled out: HAT EEPROM
-  auto-configuration -- `/proc/device-tree/hat/` does not exist. Ruled out:
-  short input files and buffering -- `buffer_size` is 24000 frames, half a
-  second, far too small to explain a five-second discrepancy.
+        head -c 1920000 /dev/zero > ~/10s.raw   # ten seconds at 48k stereo
+        time aplay -D plughw:0,0 -f S16_LE -r 48000 -c 2 -t raw ~/10s.raw
 
-  Leading theory: the driver binds as `snd_rpi_hifiberry_dacplus` and names
-  itself "DAC+ Pro" even when booted on the plain `hifiberry-dacplus` overlay,
-  so it auto-detects the Pro variant and takes the board as clock master. In
-  that mode it divides HiFiBerry's 22.5792/24.576 MHz crystals. If Innomaker
-  fitted the doubled pair (45.1584/49.152 MHz, common on 384 kHz boards), the
-  driver programs a divider for 48000 and the hardware emits 96000 -- exactly
-  2x, invisible to `hw_params`, and unaffected by the overlay. Test is
-  `dtoverlay=hifiberry-dacplus-std`, which forces the Pi to supply the clock.
-  Still to check: whether the card
-  negotiates 96000 (read `/proc/asound/card0/pcm0p/sub0/hw_params` *while* the
-  device is open -- it reads `closed` otherwise), and whether `aplay` is
-  returning before it has drained. Re-run the timing test after any change to
-  the audio hardware; it is the fastest check there is.
-- **The DAC overlay is `hifiberry-dacplus-pro`.** The board is an Innomaker
-  PCM5122 HAT, 384 kHz/32-bit, and its listing specifies dual oscillators --
-  so it is clock master and the `-pro` overlay is the correct one. This is a
-  matter of driving the board properly; it has no bearing on the 2x drain
-  above, which is identical under either overlay.
+  Must return ~10 s. It returned 5.09 s under `-pro`, reproducible to 4 ms.
+  Re-run it after any change to the audio hardware, kernel, or OS image.
+
+  What the doubling caused, none of which pointed at a clock: audio an octave
+  high (the "chipmunk voice", which was never actually fixed, only lived with);
+  `aplay` draining the synth's stream at 2x realtime so generated audio outran
+  the wall clock a second per second; the state timeline hitting its 4000-entry
+  cap after ~2.5 minutes and discarding the snapshots that matched audible
+  audio; and the visuals desyncing from the sound at that exact moment, every
+  run. Hours went into the desync as a software problem before the byte counter
+  in `synth.js` and the `aplay` timing test located it in the hardware.
+
+  Dead ends, recorded so they are not re-run: the ALSA software path (`hw:0,0`
+  times identically to `plughw:0,0`), HAT EEPROM auto-configuration
+  (`/proc/device-tree/hat/` does not exist on this board), short input files,
+  and buffering (`buffer_size` is 24000 frames, half a second, far too small to
+  explain a five-second discrepancy).
 - **Audio out.** The DAC decides this, not the Pi. A Pi 4 does have the 3.5 mm
   jack, but the DAC is the better path and it has to be made the *default*
   ALSA device -- Chromium plays to whatever ALSA hands it, so a DAC that is
