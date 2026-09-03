@@ -280,11 +280,16 @@ to be confirmed against the parts once they are in hand.
 
   Cause not yet known. Ruled out: the DAC overlay. Swapping
   `hifiberry-dacplus-pro` for `hifiberry-dacplus` gave an identical 5.09 s, so
-  the onboard-crystal theory was wrong. Still to check: whether the card
+  the overlay does not cause it either way. Still to check: whether the card
   negotiates 96000 (read `/proc/asound/card0/pcm0p/sub0/hw_params` *while* the
   device is open -- it reads `closed` otherwise), and whether `aplay` is
   returning before it has drained. Re-run the timing test after any change to
   the audio hardware; it is the fastest check there is.
+- **The DAC overlay is `hifiberry-dacplus-pro`.** The board is an Innomaker
+  PCM5122 HAT, 384 kHz/32-bit, and its listing specifies dual oscillators --
+  so it is clock master and the `-pro` overlay is the correct one. This is a
+  matter of driving the board properly; it has no bearing on the 2x drain
+  above, which is identical under either overlay.
 - **Audio out.** The DAC decides this, not the Pi. A Pi 4 does have the 3.5 mm
   jack, but the DAC is the better path and it has to be made the *default*
   ALSA device -- Chromium plays to whatever ALSA hands it, so a DAC that is
