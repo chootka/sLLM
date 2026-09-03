@@ -95,7 +95,7 @@ const state = {
   gates: [0, 0, 0], period: [0, 0, 0],
   seen: [false, false, false],
   flash: [0, 0, 0],
-  cursor: 0, n: N, t0: rec.t0, speed: SPEED, sound: false,
+  cursor: 0, n: N, t0: rec.t0, speed: SPEED, sound: true,
   note: rec.note || ''
 }
 
@@ -177,7 +177,7 @@ const started = Date.now()
 // 10 s is about 2 MB of PCM in flight.
 const AHEAD = 10.0
 
-let soundOn = false
+let soundOn = true
 let paused = false
 if (aplay) {
   aplay.stdin.on('drain', () => { paused = false; pump() })
@@ -339,6 +339,7 @@ http.createServer((req, res) => {
   if (url.pathname === '/sound') {
     soundOn = url.searchParams.get('on') === '1'
     state.sound = soundOn
+    console.error('synth: sound ' + (soundOn ? 'on' : 'off'))
     // Instant, and independent of everything already committed to aplay.
     if (!WAV && !DRY) {
       execFile('amixer', ['-c', CARD, 'sset', MIXER, soundOn ? 'unmute' : 'mute'],
@@ -349,9 +350,11 @@ http.createServer((req, res) => {
   }
   res.writeHead(404); res.end()
 }).listen(PORT, '127.0.0.1', () => {
-  // Start muted: the object is silent until someone touches it.
+  // Start audible. Starting muted meant a sealed object that arrives silent
+  // and depends on one request working to ever make a sound -- and if that
+  // request fails there is no way in. Plugged in, it plays.
   if (!WAV && !DRY) {
-    execFile('amixer', ['-c', CARD, 'sset', MIXER, 'mute'], () => {})
+    execFile('amixer', ['-c', CARD, 'sset', MIXER, 'unmute'], () => {})
   }
   console.error(`synth: ${(N / 3600).toFixed(1)} h at speed ${SPEED}, ` +
                 `one pass every ${(N / 3600 / SPEED).toFixed(1)} h`)

@@ -356,16 +356,19 @@ export default {
     },
 
     async toggleSound() {
-      // With the synth driving, the button is a request to it rather than a
-      // browser audio call.
-      if (this.synth) {
+      // Always ask the synth first, whether or not its state stream has
+      // connected yet. Gating this on `synth` meant that if the stream was
+      // slow or had dropped, the button silently did nothing at all -- and
+      // with the DAC muted, the browser fallback was inaudible too.
+      try {
         const want = this.running ? '0' : '1'
-        try {
-          await fetch(SYNTH_URL + '/sound?on=' + want)
+        const r = await fetch(SYNTH_URL + '/sound?on=' + want, { cache: 'no-store' })
+        if (r.ok) {
           this.running = want === '1'
-        } catch (e) { this.err = 'synth unreachable' }
-        return
-      }
+          this.synth = true
+          return
+        }
+      } catch (e) { /* no synth here; fall through to the in-page worklet */ }
       if (this.running) {
         if (this.node) { this.node.disconnect(); this.node = null }
         if (this.ctx) { this.ctx.close(); this.ctx = null }
