@@ -30,8 +30,15 @@
 #       Trixie's name for it. Bookworm and earlier called it
 #       chromium-browser -- correct this line if the object is ever rebuilt on
 #       an older image.
+#   the offline flags
+#       This object never needs a network. Chromium was seen registering with
+#       Google push services and failing -- QUOTA_EXCEEDED, DEPRECATED_ENDPOINT
+#       -- at the moment clicking resumed during a test, and background
+#       networking stalls in bursts rather than steadily, which is the shape of
+#       this fault. Correct for a sealed object either way.
 #   ?speed=12
-#       One pass of the 3 h window every 15 minutes. Drop it for real time.
+#       One pass of the 62.5 h recording every 5.2 hours. Drop it for real
+#       time, which is two and a half days a pass.
 [Unit]
 Description=drift, the piece
 Requires=drift-server.service
@@ -76,8 +83,15 @@ ExecStart=/usr/bin/cage -- /usr/bin/chromium \
     --disable-session-crashed-bubble \
     --restore-last-session=false \
     --password-store=basic \
-    --disable-features=Translate,TranslateUI \
-    --js-flags=--always-turbofan \
+    --disable-background-networking \
+    --disable-component-update \
+    --disable-domain-reliability \
+    --disable-sync \
+    --disable-breakpad \
+    --disable-client-side-phishing-detection \
+    --no-first-run \
+    --no-default-browser-check \
+    --disable-features=Translate,TranslateUI,OptimizationHints,MediaRouter,CalculateNativeWinOcclusion \
     http://127.0.0.1:8080/drift?speed=12
 Restart=always
 RestartSec=3
