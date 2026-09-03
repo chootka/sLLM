@@ -350,9 +350,13 @@ let skipped = 0
 setInterval(() => {
   if (!clients.size || !timeline.length) { skipped++; return }
   const played = playedSeconds()
-  let pick = -1
+  // Start at the oldest snapshot rather than at "nothing to send". For the
+  // first seconds after start, played is 0 while aplay's buffer fills, and the
+  // oldest unplayed snapshot is exactly the right visual state for audio that
+  // is about to be heard. Skipping instead meant silence on the stream long
+  // enough for the browser's watchdog to give up and fall back.
+  let pick = 0
   while (pick + 1 < timeline.length && timeline[pick + 1].at <= played) pick++
-  if (pick < 0) { skipped++; return }
   const snap = timeline[pick]
   if (pick > 0) timeline.splice(0, pick)
   // Everything else in a snapshot describes a moment in the audio and is
