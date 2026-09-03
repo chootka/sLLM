@@ -564,11 +564,7 @@ export default {
       g.fillRect(0, 0, w, h)
 
       const RAMP = ' \u00b7:\u2591\u2592\u2593\u2588'
-      // Cell size sets how much there is to draw: the count goes as 1/size^2,
-      // so 13 -> 18 is roughly 1.9x fewer characters per frame. On a Pi 4 the
-      // renderer holds a whole core at 13 and the audio thread stalls long
-      // enough to underrun a 680 ms buffer.
-      const size = 18
+      const size = 13
       g.font = `${size}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`
       g.textBaseline = 'top'
       const cw = g.measureText('\u2588').width || size * 0.6

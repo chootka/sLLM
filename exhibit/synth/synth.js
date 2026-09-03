@@ -182,6 +182,7 @@ function block () {
     pcm.writeInt16LE((r * 32767) | 0, s * 4 + 2)
   }
   generated += BLOCK / RATE
+  snapshot()
   return pcm
 }
 
@@ -217,13 +218,49 @@ if (WAV) {
   process.exit(0)
 }
 
-setInterval(pump, 20)
-pump()
+// pump() is started at the bottom of the file, once the state timeline it
+// writes into has actually been declared.
 
 // --- state to the browser -------------------------------------------------
+//
+// The synth runs ahead of the speakers: it keeps aplay's 680 ms buffer full,
+// so a sample computed now is heard about a second from now. Broadcasting
+// state the moment it is computed puts the visuals that far ahead of the
+// sound, which shows most on the pin-connect flashes.
+//
+// So each snapshot is stamped with its position in the audio and held until
+// that audio has actually played. aplay consumes in real time, so seconds
+// played is just wall-clock seconds since the first write -- self-correcting,
+// rather than a fixed guess at the latency.
 const clients = new Set()
+const timeline = []
+let lastSnap = -1
+
+function snapshot () {
+  if (generated - lastSnap < 0.033) return
+  lastSnap = generated
+  timeline.push({
+    at: generated,
+    coh: state.coh.slice(), freq: state.freq.slice(), lum: state.lum.slice(),
+    addr: state.addr, vcoHz: state.vcoHz, locked: state.locked,
+    drives: state.drives.slice(), gates: state.gates.slice(),
+    period: state.period.slice(), seen: state.seen.slice(),
+    flash: state.flash.slice(), cursor: state.cursor,
+    n: state.n, t0: state.t0, speed: state.speed, sound: state.sound,
+    note: state.note
+  })
+  if (timeline.length > 4000) timeline.splice(0, timeline.length - 4000)
+}
+
 setInterval(() => {
-  const line = 'data: ' + JSON.stringify(state) + '\n\n'
+  if (!clients.size || !timeline.length) return
+  const played = (Date.now() - started) / 1000
+  let pick = -1
+  while (pick + 1 < timeline.length && timeline[pick + 1].at <= played) pick++
+  if (pick < 0) return
+  const snap = timeline[pick]
+  if (pick > 0) timeline.splice(0, pick)
+  const line = 'data: ' + JSON.stringify(snap) + '\n\n'
   for (const res of clients) { try { res.write(line) } catch (e) { clients.delete(res) } }
 }, 33)
 
@@ -252,3 +289,6 @@ http.createServer((req, res) => {
                 `one pass every ${(N / 3600 / SPEED).toFixed(1)} h`)
   console.error(`synth: pcm -> aplay ${DEVICE}, state -> http://127.0.0.1:${PORT}/state`)
 })
+
+setInterval(pump, 20)
+pump()
