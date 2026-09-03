@@ -207,7 +207,7 @@ API, which is what `sllm.visceral.systems/drift` does.
    whatever is stored is what the buyer gets on power-up. `Digital` at 70% was
    right on the HiFiBerry DAC+ Pro with powered speakers:
 
-        amixer -c 2 sset Digital 70%
+        amixer -c 0 sset Digital 70%
         sudo alsactl store
 6. Check it survives a power cut, which is the thing a buyer will actually do:
    `sudo reboot`, and the piece should come back on its own with sound
@@ -278,9 +278,22 @@ to be confirmed against the parts once they are in hand.
   clock a second per second until the state timeline hits its cap and the
   visuals desync from the sound.
 
-  Cause not yet known. Ruled out: the DAC overlay. Swapping
-  `hifiberry-dacplus-pro` for `hifiberry-dacplus` gave an identical 5.09 s, so
-  the overlay does not cause it either way. Still to check: whether the card
+  Cause not yet known, but narrowed to the card itself. Ruled out: the ALSA
+  software path -- `hw:0,0` times identically to `plughw:0,0` (5.097 vs
+  5.094 s), so no conversion layer is involved. Ruled out: HAT EEPROM
+  auto-configuration -- `/proc/device-tree/hat/` does not exist. Ruled out:
+  short input files and buffering -- `buffer_size` is 24000 frames, half a
+  second, far too small to explain a five-second discrepancy.
+
+  Leading theory: the driver binds as `snd_rpi_hifiberry_dacplus` and names
+  itself "DAC+ Pro" even when booted on the plain `hifiberry-dacplus` overlay,
+  so it auto-detects the Pro variant and takes the board as clock master. In
+  that mode it divides HiFiBerry's 22.5792/24.576 MHz crystals. If Innomaker
+  fitted the doubled pair (45.1584/49.152 MHz, common on 384 kHz boards), the
+  driver programs a divider for 48000 and the hardware emits 96000 -- exactly
+  2x, invisible to `hw_params`, and unaffected by the overlay. Test is
+  `dtoverlay=hifiberry-dacplus-std`, which forces the Pi to supply the clock.
+  Still to check: whether the card
   negotiates 96000 (read `/proc/asound/card0/pcm0p/sub0/hw_params` *while* the
   device is open -- it reads `closed` otherwise), and whether `aplay` is
   returning before it has drained. Re-run the timing test after any change to
