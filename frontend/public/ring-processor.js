@@ -87,7 +87,10 @@ const REST_LEVEL = 0.60
 // energy, so the bed reads far quieter than its level says. That is a loss to
 // compensate, not a dynamic. Makeup rises as the filter closes, so soft stays
 // soft in character without becoming inaudible.
-const BED_MAKEUP = 3.6
+// 1.0: no makeup. Raising this while chasing what turned out to be the register
+// problem made the bed louder than the foreground, so a pin connecting dropped
+// the level by 3 dB instead of lifting it -- the gesture backwards.
+const BED_MAKEUP = 1.0
 // A low-passed square is a muffled square: narrowband and dull. Thunder is the
 // opposite -- broadband and smooth -- so no cutoff setting gets there from a
 // filtered square. The bed gets its body from brown noise instead, which has
@@ -211,7 +214,7 @@ class RingProcessor extends AudioWorkletProcessor {
       { from: 1, to: 2, lum: 0, drive: 0 },
       { from: 2, to: 0, lum: 0, drive: 0 }
     ]
-    this.gain = 0.44          // overridden by the host; see synth.js
+    this.gain = 0.85          // overridden by the host; see synth.js
     this.swell = REST_LEVEL   // master level, follows contact
     // Two poles per channel for the screen. Cascaded one-poles: gentle, no
     // resonance, nothing that rings on a square edge.
