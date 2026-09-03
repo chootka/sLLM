@@ -116,7 +116,7 @@ if (!WAV && !DRY) {
   // reports underruns of 5-70 ms a couple of times a second.
   aplay = spawn('aplay', [
     '-D', DEVICE, '-f', 'S16_LE', '-r', String(RATE), '-c', '2', '-t', 'raw',
-    '--buffer-size=32768', '--period-size=4096', '-'
+    '--buffer-size=16384', '--period-size=2048', '-'
   ], { stdio: ['pipe', 'ignore', 'inherit'] })
   aplay.on('exit', (code, sig) => {
     console.error('aplay exited', code, sig, '-- exiting so systemd restarts us')
@@ -142,7 +142,13 @@ let cursor = Math.floor(N * Math.max(0, Math.min(0.999, SEEK)))
 let nextDrive = 0
 let generated = 0            // seconds of audio written
 const started = Date.now()
-const AHEAD = 1.5            // keep this many seconds in flight
+// How far ahead of the speakers to generate. This is not just a buffer size:
+// everything committed to it is already decided, so it is also how long SOUND
+// OFF takes to be heard, and how far the visuals can drift from the sound if
+// the delay accounting is off. Half a second is enough to ride out a hiccup
+// against aplay's 340 ms buffer and short enough that the button feels
+// immediate. Left unbounded it ran 94 seconds ahead.
+const AHEAD = 0.5
 
 let soundOn = false
 let paused = false
@@ -186,14 +192,15 @@ function block () {
   return pcm
 }
 
-// No wall clock here. The pipe and aplay's buffer are the pacing: write until
-// the pipe says stop, resume on drain. Rate-limiting against Date.now() as
-// well meant stopping while the pipe would still have taken more, which is
-// how aplay ended up starving.
+// Two limits, both needed. The pipe says when to stop writing, which is the
+// fine pacing. The clock says how far ahead to work at all, which is what
+// stops the queue running away -- aplay reads eagerly into its own buffer, so
+// backpressure alone does not bound this.
 function pump () {
   while (!paused) {
+    if (generated > (Date.now() - started) / 1000 + AHEAD) return
     for (let i = 0; i < CHUNK; i++) block().copy(chunk, i * BLOCK * 4)
-    if (!aplay) { if (generated > (Date.now() - started) / 1000 + AHEAD) return; continue }
+    if (!aplay) continue
     if (!aplay.stdin.write(chunk)) { paused = true; return }
   }
 }
@@ -252,17 +259,31 @@ function snapshot () {
   if (timeline.length > 4000) timeline.splice(0, timeline.length - 4000)
 }
 
+let sent = 0
+let skipped = 0
 setInterval(() => {
-  if (!clients.size || !timeline.length) return
+  if (!clients.size || !timeline.length) { skipped++; return }
   const played = (Date.now() - started) / 1000
   let pick = -1
   while (pick + 1 < timeline.length && timeline[pick + 1].at <= played) pick++
-  if (pick < 0) return
+  if (pick < 0) { skipped++; return }
   const snap = timeline[pick]
   if (pick > 0) timeline.splice(0, pick)
   const line = 'data: ' + JSON.stringify(snap) + '\n\n'
   for (const res of clients) { try { res.write(line) } catch (e) { clients.delete(res) } }
+  sent++
 }, 33)
+
+// Every 30 s, one line saying whether the stream is actually flowing. Lead is
+// how far ahead of the speakers the synth is generating; it should sit around
+// a second and stay put. A climbing lead means the timeline is filling faster
+// than it drains and the visuals will fall behind the sound.
+setInterval(() => {
+  const played = (Date.now() - started) / 1000
+  console.error(`synth: clients ${clients.size}, sent ${sent}/30s, idle ${skipped}, ` +
+                `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s`)
+  sent = 0; skipped = 0
+}, 30000)
 
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost')
@@ -274,7 +295,11 @@ http.createServer((req, res) => {
       Connection: 'keep-alive'
     })
     clients.add(res)
-    req.on('close', () => clients.delete(res))
+    console.error(`synth: client connected (${clients.size})`)
+    req.on('close', () => {
+      clients.delete(res)
+      console.error(`synth: client gone (${clients.size})`)
+    })
     return
   }
   if (url.pathname === '/sound') {
