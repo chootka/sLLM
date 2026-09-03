@@ -97,7 +97,15 @@ const BED_DRY = 0.0
 // timing caps -- 47n against something four times larger.
 const BED_DROP = 4                      // x capacitance at rest: two octaves
 const FC_OPEN = 9000                    // Hz, cutoff fully foregrounded
-const SWELL_KNEE = 0.35
+// The drive does not rest at zero: with nothing connected the vactrols sit at
+// the free-run floor, and the contact signal is what rises above it. Keying the
+// swell off the raw drive meant "rest" computed a third of the way open -- the
+// filter at ~590 Hz instead of 150 and the bank only 1.3 octaves down, which is
+// why the bed stayed thin and gritty however the numbers were tuned. Same
+// normalisation the page uses to report how hard a pin is pushing.
+const FREE_RUN = 0.12
+const DEPTH = 0.62
+const SWELL_KNEE = 0.35                 // fraction of full push to be forward
 // Fast up, slow down. Six seconds in both directions smeared the moment of
 // contact across six seconds of audio while the visual bloom was instant,
 // which reads as the sound lagging the picture even when they are locked. The
@@ -272,9 +280,12 @@ class RingProcessor extends AudioWorkletProcessor {
 
     // Where the strongest coupling drive sits right now. Once per block: the
     // drives move on the organism's timescale, not the sample rate.
-    let act = this.vac[0].drive
-    if (this.vac[1].drive > act) act = this.vac[1].drive
-    if (this.vac[2].drive > act) act = this.vac[2].drive
+    let raw = this.vac[0].drive
+    if (this.vac[1].drive > raw) raw = this.vac[1].drive
+    if (this.vac[2].drive > raw) raw = this.vac[2].drive
+    let act = (raw - FREE_RUN) / DEPTH
+    if (act < 0) act = 0
+    else if (act > 1) act = 1
     const swellTo = REST_LEVEL + (1 - REST_LEVEL) *
                     (act < SWELL_KNEE ? act / SWELL_KNEE : 1)
 
