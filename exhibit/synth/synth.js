@@ -334,24 +334,42 @@ const TAU = 0.4                        // smoothing, and the lag it costs back
 const STATUS = `/proc/asound/card${CARD}/pcm0p/sub0/status`
 let alsaDelay = ALSA_BUF               // seconds, until the first good read
 let alsaSeen = false
+let hwSec = 0                          // frames the card has actually played
+let hwAt = 0                           // when that was read
 
 function readAlsaDelay () {
   try {
-    const m = /^\s*delay\s*:\s*(-?\d+)/m.exec(fs.readFileSync(STATUS, 'utf8'))
-    if (m) {
-      const d = parseInt(m[1], 10) / RATE
+    const txt = fs.readFileSync(STATUS, 'utf8')
+    const d = /^\s*delay\s*:\s*(-?\d+)/m.exec(txt)
+    if (d) {
+      const v = parseInt(d[1], 10) / RATE
       // A stopped or draining device reports 0 or nonsense; keep the last good
       // value rather than yanking the visuals forward.
-      if (d > 0 && d < 30) { alsaDelay = d; alsaSeen = true }
+      if (v > 0 && v < 30) alsaDelay = v
     }
-  } catch (e) { /* no status file: keep the configured constant */ }
+    // hw_ptr is the number of frames the DAC has actually clocked out. That is
+    // the playback position outright -- no subtracting Node's queue, the OS
+    // pipe or the card's buffer, and nothing left to estimate wrongly. It only
+    // moves on period boundaries, so it is interpolated between reads below.
+    const h = /^\s*hw_ptr\s*:\s*(\d+)/m.exec(txt)
+    if (h) {
+      const v = parseInt(h[1], 10) / RATE
+      if (v >= hwSec) { hwSec = v; hwAt = Date.now(); alsaSeen = true }
+    }
+  } catch (e) { /* no status file: fall back to the byte estimate */ }
 }
-setInterval(readAlsaDelay, 250)
+setInterval(readAlsaDelay, 100)
+readAlsaDelay()
 
 function playedSeconds () {
   if (!aplay) return (Date.now() - started) / 1000
   const queued = aplay.stdin.writableLength / (RATE * 4)
-  const raw = Math.max(0, written / (RATE * 4) - queued - alsaDelay)
+  // Ground truth when the card is reporting: frames actually played, plus the
+  // time since that reading, since hw_ptr only advances once per period.
+  // Otherwise fall back to counting backwards from what has been written.
+  const raw = alsaSeen
+    ? hwSec + (Date.now() - hwAt) / 1000
+    : Math.max(0, written / (RATE * 4) - queued - alsaDelay)
   // The raw figure jitters by as much as the whole queue depth, because the
   // pump fills to the cap and then coasts down. Fed straight into the release
   // index that makes the field jump between states instead of moving through
