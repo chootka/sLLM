@@ -65,6 +65,18 @@ const K_LOOP = 1 - Math.exp(-DT / LOOP_TAU)
 const K_LOCK = 1 - Math.exp(-DT / LOCKOSC_TAU)
 const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 
+// The piece sits back while nothing is connected and comes forward when the
+// organism reaches an electrode. With no contact there is no bio signal, only
+// the oscillators idling -- that is a bed, not a foreground, and hours of it
+// at full level is wearing. REST is what fraction of full level the bed sits
+// at; the swell is keyed to the vactrol drive, so it follows whatever the data
+// actually does rather than any assumption about which pin connects when.
+// KNEE is the drive at which the piece is fully forward. Both are set by ear.
+const REST_LEVEL = 0.25
+const SWELL_KNEE = 0.35
+const SWELL_TAU = 6.0                   // seconds to rise or fall, audio time
+const K_SWELL = 1 - Math.exp(-DT / SWELL_TAU)
+
 // LDR conductance against light, interpolated in log resistance. This was a
 // Math.pow per vactrol per sample. The curve is exponential in lum, so a
 // linear index over 0..1 gives a constant ratio per step -- 0.74% at 1024
@@ -108,6 +120,7 @@ class RingProcessor extends AudioWorkletProcessor {
       { from: 2, to: 0, lum: 0, drive: 0 }
     ]
     this.gain = 0.25
+    this.swell = REST_LEVEL   // master level, follows contact
     this.dc = 0
     this.lp = 0               // 10k/10n output stage
     this.lp2 = 0
@@ -222,6 +235,14 @@ class RingProcessor extends AudioWorkletProcessor {
     const out2 = outputs[0][1]
     if (!out) return true
     if (!this.running) { out.fill(0); if (out2) out2.fill(0); return true }
+
+    // Where the strongest coupling drive sits right now. Once per block: the
+    // drives move on the organism's timescale, not the sample rate.
+    let act = this.vac[0].drive
+    if (this.vac[1].drive > act) act = this.vac[1].drive
+    if (this.vac[2].drive > act) act = this.vac[2].drive
+    const swellTo = REST_LEVEL + (1 - REST_LEVEL) *
+                    (act < SWELL_KNEE ? act / SWELL_KNEE : 1)
 
     const dt = DT
     // Vactrol lag: light comes up in milliseconds and falls over tens of them.
@@ -358,8 +379,13 @@ class RingProcessor extends AudioWorkletProcessor {
       const aOut = K_OUT
       this.lp += (s - this.lp) * aOut
       this.lp2 += (this.lp - this.lp2) * aOut
-      out[n] = (s * (1 - this.tone) + this.lp2 * this.tone) * this.gain
-      if (out2) out2[n] = (this.vcoOut - 0.5) * this.gain * this.vcoLevel
+      // Smoothed per sample so the swell is a slow rise and fall, never a
+      // step -- a jump in master level is exactly the click we spent so long
+      // chasing out of this thing.
+      this.swell += (swellTo - this.swell) * K_SWELL
+      const gn = this.gain * this.swell
+      out[n] = (s * (1 - this.tone) + this.lp2 * this.tone) * gn
+      if (out2) out2[n] = (this.vcoOut - 0.5) * gn * this.vcoLevel
     }
 
     // ~30 Hz is plenty for the visual and keeps the message queue quiet.
