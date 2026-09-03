@@ -303,6 +303,11 @@ setInterval(() => {
   if (pick < 0) { skipped++; return }
   const snap = timeline[pick]
   if (pick > 0) timeline.splice(0, pick)
+  // Everything else in a snapshot describes a moment in the audio and is
+  // deliberately held back until that audio plays. `sound` is not that: it is
+  // the current state of a control, and sending the value captured a second
+  // ago flipped the button back the instant after it was pressed.
+  snap.sound = soundOn
   const line = 'data: ' + JSON.stringify(snap) + '\n\n'
   for (const res of clients) { try { res.write(line) } catch (e) { clients.delete(res) } }
   sent++
