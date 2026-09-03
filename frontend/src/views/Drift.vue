@@ -700,7 +700,11 @@ export default {
           if (flash) {
             const dx = q * cw - src[flash.i][0], dy = y - src[flash.i][1]
             const d = Math.sqrt(dx * dx + dy * dy) / fr
-            if (d >= 1 || glyph === ' ') { f0 += ' '; f1 += ' '; f2 += ' ' }
+            // Only the crests, not every character inside the radius. Filling
+            // the disc lit the whole circle and buried the structure; lighting
+            // just the tops of the ripples picks out the two or three rings
+            // that fall within reach of the pin instead.
+            if (d >= 1 || n < RAMP.length - 2) { f0 += ' '; f1 += ' '; f2 += ' ' }
             else if (d < 0.34) { f0 += glyph; f1 += ' '; f2 += ' ' }
             else if (d < 0.67) { f0 += ' '; f1 += glyph; f2 += ' ' }
             else { f0 += ' '; f1 += ' '; f2 += glyph }
