@@ -22,6 +22,8 @@ const http = require('http')
 const path = require('path')
 const { spawn } = require('child_process')
 
+const { execFile } = require('child_process')
+
 const arg = (name, dflt) => {
   const i = process.argv.indexOf('--' + name)
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt
@@ -44,6 +46,8 @@ const SEEK = Number(arg('seek', 0))          // 0..1 through the recording
 const SPEED = Number(arg('speed', 12))
 const PORT = Number(arg('port', 8081))
 const DEVICE = arg('device', 'plughw:0,0')
+const CARD = arg('card', '0')
+const MIXER = arg('mixer', 'Digital')
 const RATE = 48000
 const BLOCK = 128
 
@@ -95,6 +99,14 @@ const state = {
   note: rec.note || ''
 }
 
+// Declared up here, not beside the server that consumes them: block() calls
+// snapshot() and block() runs from the WAV path and the first pump(), both of
+// which are above the server. Left below, they are in the temporal dead zone
+// and the process dies on its first sample.
+const clients = new Set()
+const timeline = []
+let lastSnap = -1
+
 const p = new Processor()
 p.port.onmessage({ data: {
   gain: 0.22, running: true, capScale: 2.13, mix: [0.45, 1, 1], vco: 0.35
@@ -116,7 +128,7 @@ if (!WAV && !DRY) {
   // reports underruns of 5-70 ms a couple of times a second.
   aplay = spawn('aplay', [
     '-D', DEVICE, '-f', 'S16_LE', '-r', String(RATE), '-c', '2', '-t', 'raw',
-    '--buffer-size=16384', '--period-size=2048', '-'
+    '--buffer-size=32768', '--period-size=4096', '-'
   ], { stdio: ['pipe', 'ignore', 'inherit'] })
   aplay.on('exit', (code, sig) => {
     console.error('aplay exited', code, sig, '-- exiting so systemd restarts us')
@@ -142,13 +154,16 @@ let cursor = Math.floor(N * Math.max(0, Math.min(0.999, SEEK)))
 let nextDrive = 0
 let generated = 0            // seconds of audio written
 const started = Date.now()
-// How far ahead of the speakers to generate. This is not just a buffer size:
-// everything committed to it is already decided, so it is also how long SOUND
-// OFF takes to be heard, and how far the visuals can drift from the sound if
-// the delay accounting is off. Half a second is enough to ride out a hiccup
-// against aplay's 340 ms buffer and short enough that the button feels
-// immediate. Left unbounded it ran 94 seconds ahead.
-const AHEAD = 0.5
+// How far ahead of the speakers to generate. Generous, because a short lead
+// starves aplay and the underruns come straight back -- 0.5 s was not enough
+// on this machine.
+//
+// A long lead used to cost two things and now costs neither. The visuals stay
+// in step because snapshots are held until their audio plays, so any *stable*
+// lead is fine; it was the runaway to 94 s that broke them. And SOUND OFF is
+// no longer a gain change buried in the queue -- it mutes at the mixer, which
+// is instant however much audio is committed.
+const AHEAD = 2.0
 
 let soundOn = false
 let paused = false
@@ -179,9 +194,11 @@ function block () {
     p.port.onmessage({ data: { drives, slime } })
   }
   p.process([], outs, {})
-  const gain = soundOn ? 1 : 0
+  // No gain applied here on purpose. Muting is done at the mixer so it takes
+  // effect immediately rather than after the queue drains, and the piece keeps
+  // running whether or not anyone is listening.
   for (let s = 0; s < BLOCK; s++) {
-    let l = L[s] * gain, r = R[s] * gain
+    let l = L[s], r = R[s]
     if (l > 1) l = 1; else if (l < -1) l = -1
     if (r > 1) r = 1; else if (r < -1) r = -1
     pcm.writeInt16LE((l * 32767) | 0, s * 4)
@@ -239,10 +256,6 @@ if (WAV) {
 // that audio has actually played. aplay consumes in real time, so seconds
 // played is just wall-clock seconds since the first write -- self-correcting,
 // rather than a fixed guess at the latency.
-const clients = new Set()
-const timeline = []
-let lastSnap = -1
-
 function snapshot () {
   if (generated - lastSnap < 0.033) return
   lastSnap = generated
@@ -305,11 +318,20 @@ http.createServer((req, res) => {
   if (url.pathname === '/sound') {
     soundOn = url.searchParams.get('on') === '1'
     state.sound = soundOn
+    // Instant, and independent of everything already committed to aplay.
+    if (!WAV && !DRY) {
+      execFile('amixer', ['-c', CARD, 'sset', MIXER, soundOn ? 'unmute' : 'mute'],
+        err => { if (err) console.error('amixer:', err.message) })
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     return res.end(JSON.stringify({ sound: soundOn }))
   }
   res.writeHead(404); res.end()
 }).listen(PORT, '127.0.0.1', () => {
+  // Start muted: the object is silent until someone touches it.
+  if (!WAV && !DRY) {
+    execFile('amixer', ['-c', CARD, 'sset', MIXER, 'mute'], () => {})
+  }
   console.error(`synth: ${(N / 3600).toFixed(1)} h at speed ${SPEED}, ` +
                 `one pass every ${(N / 3600 / SPEED).toFixed(1)} h`)
   console.error(`synth: pcm -> aplay ${DEVICE}, state -> http://127.0.0.1:${PORT}/state`)
