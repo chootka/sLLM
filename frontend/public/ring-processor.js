@@ -135,6 +135,20 @@ const ECHO_FB = 0.52                    // feedback
 const ECHO_MIX = 0.65                   // how much echo against the dry bird
 const ECHO_DARK = 0.22                  // one-pole in the loop: each pass duller
 const ECHO_SPREAD = 0.35                // second tap offset, for width
+
+// --- the ghost -----------------------------------------------------------
+//
+// The voice that rises and falls in the distance belongs to none of the three
+// oscillators: it is the difference between them, an artifact of their beating
+// that appears only when they are detuned. That cannot be soloed, because
+// nothing is generating it. So it gets generated: a sine tracking |f0 - f1|,
+// which is real data -- it is precisely what the coupling is doing to the bank
+// at that moment -- rendered as a voice instead of left as a side effect.
+// A sine, not a square: this is the one thing here that should have no edge.
+// Folded up while it is below hearing, since the difference is often only a
+// few Hz and the interesting movement is in how it travels, not its register.
+const GHOST_MULT = 4                    // octave folding of the difference
+const GHOST_FMIN = 90                   // fold up until it clears this
 const FC_BED = 1200                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -271,6 +285,13 @@ class RingProcessor extends AudioWorkletProcessor {
     // pull the other, which is exactly the knob wanted here.
     this.triLevel = 1
     this.sqrLevel = 1
+    this.ghostLevel = 0       // off unless asked for; --ghost
+    // The organism's rise and fall drives coupling, which moves pitch. This
+    // sends the same signal to level as well, so a contraction is heard as a
+    // swell in the voice that electrode is pushing and not only as a bend.
+    this.ampDepth = 0         // --amp
+    this.ghostPh = 0
+    this.ghostF = 0
     this.running = true
 
     // Reported to the main thread for the visual. The oscillators run at
@@ -344,6 +365,8 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.vco === 'number') this.vcoLevel = Math.max(0, Math.min(1, d.vco))
       if (typeof d.tri === 'number') this.triLevel = Math.max(0, Math.min(2, d.tri))
       if (typeof d.sqr === 'number') this.sqrLevel = Math.max(0, Math.min(2, d.sqr))
+      if (typeof d.ghost === 'number') this.ghostLevel = Math.max(0, Math.min(2, d.ghost))
+      if (typeof d.amp === 'number') this.ampDepth = Math.max(0, Math.min(1, d.amp))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -390,6 +413,16 @@ class RingProcessor extends AudioWorkletProcessor {
     // per block so the bank glides up rather than jumping.
     const bedMul = Math.pow(BED_DROP, 1 - nn)
     const triAmt = 1 - (1 - TRI_FWD) * nn
+
+    // Where the difference between the two fastest oscillators sits right now,
+    // folded up into hearing. Glided, not jumped: the frequencies are measured
+    // per edge and step about, and stepping a sine reads as a fault.
+    let fd = Math.abs(this.freq[0] - this.freq[1])
+    let guard = 0
+    while (fd > 0.5 && fd < GHOST_FMIN && guard++ < 8) fd *= 2
+    fd *= GHOST_MULT
+    if (!(fd > 0) || fd > 6000) fd = 0
+    this.ghostF += (fd - this.ghostF) * 0.0008
     const makeup = 1 + (BED_MAKEUP - 1) * (1 - nn)
 
     const dt = DT
@@ -433,8 +466,17 @@ class RingProcessor extends AudioWorkletProcessor {
         // Capacitor voltage as a 0..1 ramp; comparator kept separate so each
         // can be levelled on its own.
         const tri = (o.v - VT_MID) / VT_SPAN + 0.5
-        mixT += tri * this.mix[i]
-        mixS += o.out * this.mix[i]
+        // Level follows that electrode's own signal, not the bank's average:
+        // whichever the organism is pushing hardest is the one that comes up.
+        let w = this.mix[i]
+        if (this.ampDepth > 0) {
+          let a = (this.vac[i].drive - FREE_RUN) / DEPTH
+          if (a < 0) a = 0
+          else if (a > 1) a = 1
+          w *= 1 - this.ampDepth + this.ampDepth * (0.25 + 0.75 * a)
+        }
+        mixT += tri * w
+        mixS += o.out * w
       }
 
       // Pairwise coherence around the ring, low-passed hard enough that only
@@ -577,18 +619,26 @@ class RingProcessor extends AudioWorkletProcessor {
         // each other -- that offset is what puts the bird in a space rather
         // than beside the speaker. The loop is low-passed, so each pass is
         // duller than the last and the tail recedes instead of ringing.
+        let gh = 0
+        if (this.ghostLevel > 0 && this.ghostF > 0) {
+          this.ghostPh += this.ghostF * dt
+          if (this.ghostPh > 1) this.ghostPh -= 1
+          gh = Math.sin(this.ghostPh * 6.283185307179586) *
+               this.ghostLevel * gn * 0.5 * (0.35 + 0.65 * nn)
+        }
+
         const d1 = Math.floor(ECHO_MS * 0.001 * sampleRate)
         const d2 = Math.floor(d1 * (1 + ECHO_SPREAD))
         const t1 = this.echo[(this.echoAt + this.echoN - d1) % this.echoN]
         const t2 = this.echo[(this.echoAt + this.echoN - d2) % this.echoN]
         this.echoLp += (t1 - this.echoLp) * ECHO_DARK
-        this.echo[this.echoAt] = bird + this.echoLp * ECHO_FB
+        this.echo[this.echoAt] = bird + gh + this.echoLp * ECHO_FB
         this.echoAt = (this.echoAt + 1) % this.echoN
 
         const wetL = t2 * ECHO_MIX
         const wetR = t1 * ECHO_MIX
-        out[n] = soft(pad + bird * 0.45 + wetL)
-        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + wetR)
+        out[n] = soft(pad + bird * 0.45 + gh + wetL)
+        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + gh * 0.8 + wetR)
       }
     }
 

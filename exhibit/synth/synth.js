@@ -45,6 +45,17 @@ const DRY = process.argv.includes('--dry')
 // A flag with a missing or unparseable value used to reach the worklet as NaN,
 // which propagates through every sample and silences the piece with no error
 // anywhere. Falls back to the default and says so.
+function mixArg () {
+  const raw = arg('mix', '')
+  if (!raw) return [0.45, 1, 1]
+  const p = String(raw).split(',').map(Number)
+  if (p.length !== 3 || !p.every(Number.isFinite)) {
+    console.error('synth: --mix wants three numbers, e.g. 1,0.35,0.35')
+    return [0.45, 1, 1]
+  }
+  return p.map(v => Math.max(0, Math.min(2, v)))
+}
+
 function num (name, def) {
   const v = Number(arg(name, def))
   if (Number.isFinite(v)) return v
@@ -122,10 +133,17 @@ p.port.onmessage({ data: {
   // These override the worklet's own defaults, so they are the values that
   // actually ship -- editing the constructor alone does nothing.
   gain: num('gain', 1.0), running: true, capScale: 1.0,
-  mix: [0.45, 1, 1],
+  // Per-oscillator level. osc0 runs about an octave above the other two (its
+  // timing resistor is half theirs) and the coupling pulls it further than
+  // either, so it is the voice that rises and falls over the drone. At 0.45 it
+  // sits behind them; raise it to bring that voice forward.
+  //   --mix 1,0.35,0.35
+  mix: mixArg(),
   vco: num('vco', 0.55),
   tri: num('tri', 1),                  // the body: capacitor ramp
-  sqr: num('sqr', 1)                   // the edge: comparator square
+  sqr: num('sqr', 1),                  // the edge: comparator square
+  ghost: num('ghost', 0),              // the difference tone, as a voice
+  amp: num('amp', 0)                   // organism drives level, not just pitch
 } })
 p.port.postMessage = d => {
   if (d.coh) state.coh = d.coh
