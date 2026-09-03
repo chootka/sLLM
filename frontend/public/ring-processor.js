@@ -178,7 +178,7 @@ const AMP_FLOOR = 0.05
 const AMP_OPEN = 0.02                   // how fast the window takes a new extreme
 const AMP_CLOSE = 0.00002               // how slowly it forgets an old one
 const AMP_MINSPAN = 0.06                // never expand noise into a performance
-const FC_BED = 1200                      // Hz, cutoff with nothing connected
+const FC_BED = 2500                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
 // The dry blend was there to stop the bed sounding muffled when the bank sat
@@ -463,8 +463,14 @@ class RingProcessor extends AudioWorkletProcessor {
       let e = (a - this.aLo[i]) / span
       if (e < 0) e = 0
       else if (e > 1) e = 1
-      this.ampW[i] = this.ampDepth > 0
-        ? 1 - this.ampDepth + this.ampDepth * (AMP_FLOOR + (1 - AMP_FLOOR) * e)
+      // Depth follows contact. With nothing connected the electrode sits at
+      // the bottom of its own range, so full depth pulled every voice down to
+      // the floor -- the bed was 26 dB quieter than intended and read as a
+      // fault rather than as quiet. There is nothing to breathe with until the
+      // organism is pushing, so the breathing arrives with it.
+      const dep = this.ampDepth * (0.25 + 0.75 * nn)
+      this.ampW[i] = dep > 0
+        ? 1 - dep + dep * (AMP_FLOOR + (1 - AMP_FLOOR) * e)
         : 1
     }
 
@@ -673,12 +679,16 @@ class RingProcessor extends AudioWorkletProcessor {
           for (let q = 0; q < RING_PAIRS.length; q++) {
             const a = this.triV[RING_PAIRS[q][0]] - 0.5
             const b = this.triV[RING_PAIRS[q][1]] - 0.5
-            rg += a * b * 4
+            rg += a * b
           }
           // Gently rolled off: the sum tones land higher than anything else
           // here and read as glare without this.
           this.ringLp += (rg - this.ringLp) * 0.12
-          rg = this.ringLp * this.ringLevel * gn * (0.3 + 0.7 * nn)
+          // Present in the bed, not only at contact. A bed of one low tone with
+          // nothing moving above it reads as a broken speaker rather than a
+          // choice; these tones wander constantly, which is what makes it
+          // sound intended.
+          rg = this.ringLp * this.ringLevel * gn * (0.75 + 0.25 * nn)
         }
 
         let gh = 0
