@@ -157,7 +157,20 @@ const L = new Float32Array(BLOCK)
 const R = new Float32Array(BLOCK)
 const outs = [[L, R]]
 const pcm = Buffer.alloc(BLOCK * 4)
-const chunk = Buffer.alloc(BLOCK * 4 * CHUNK)
+// A ring of buffers, not one reused buffer. write() does not copy: a queued
+// write still points at the buffer it was handed. With one buffer and hundreds
+// of writes in flight, every pending write sees whatever was last written into
+// it -- which sounds like the audio stretching and sticking in long buzzes,
+// because that is exactly what it is.
+//
+// 1024 chunks is 21 s, comfortably more than the queue can hold, so a buffer
+// is never rewritten while a write on it is still pending. Preallocated, so
+// there is no per-write allocation in the one process that must not stall.
+const CHUNK_BYTES = BLOCK * 4 * CHUNK
+const RING = 1024
+const ring = []
+for (let i = 0; i < RING; i++) ring.push(Buffer.alloc(CHUNK_BYTES))
+let ringAt = 0
 // process() was being called as p.process([], outs, {}) -- two fresh objects
 // every 128 samples, hundreds a second, all garbage in the one process that
 // must not stall. The collector runs, this stalls, aplay starves.
@@ -254,12 +267,14 @@ const QUEUE_BYTES = 10 * RATE * 4        // ten seconds of audio in flight
 function pump () {
   while (!paused) {
     if (aplay && aplay.stdin.writableLength >= QUEUE_BYTES) return
-    for (let i = 0; i < CHUNK; i++) block().copy(chunk, i * BLOCK * 4)
+    const out = ring[ringAt]
+    ringAt = (ringAt + 1) % RING
+    for (let i = 0; i < CHUNK; i++) block().copy(out, i * BLOCK * 4)
     if (!aplay) {
       if (generated > (Date.now() - started) / 1000 + AHEAD) return
       continue
     }
-    aplay.stdin.write(chunk)
+    aplay.stdin.write(out)
   }
 }
 
