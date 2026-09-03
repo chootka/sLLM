@@ -240,7 +240,12 @@ export default {
       this.ro = new ResizeObserver(this.resize)
       this.ro.observe(this.$refs.cv)
     }
-    this.raf = requestAnimationFrame(this.draw)
+    // ?field=off draws nothing at all. Diagnostic only: the piece is a
+    // renderer and an audio thread sharing a CPU, and this is how you find out
+    // which of them is stalling the other.
+    if (((this.$route && this.$route.query) || {}).field !== 'off') {
+      this.raf = requestAnimationFrame(this.draw)
+    }
     this.boot()
     this._tick = setInterval(this.advance, 50)
   },
