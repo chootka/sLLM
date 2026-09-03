@@ -116,6 +116,60 @@ object reads as a still image rather than a piece with sound. If either matters
 at a given venue, the fixes are an autostart on load and an idle timer that
 restores sound and closes the log. Neither is built.
 
+## How the sound is shaped
+
+Settled 2026-09-03. Circuit fidelity is no longer the tiebreaker for this
+object -- these are aesthetic choices, judged by ear. What stays fixed is that
+the sound follows the recording: nothing here is keyed to anything but the data.
+
+- **The bed and the foreground.** With no pin connected there is no bio signal,
+  only the oscillators idling, and hours of that at full brightness is
+  genuinely wearing -- nauseating, in the artist's word. The piece now rests as
+  a pad and comes forward when the organism reaches an electrode. The swell is
+  keyed to the vactrol drive, so it follows whatever the data does rather than
+  any assumption about which pin connects when.
+- **Measure contact above the free-run floor.** The drive rests at 0.12, not 0.
+  Keying the swell to the raw value made "rest" compute a third of the way
+  open, and every attempt to tune the bed fought that instead of the sound.
+- **The pad comes from the capacitor node, not the comparator.** A 40106's
+  output is a hard square: instantaneous edges, which alias at 48 kHz, and
+  aliased partials fold down *below* the cutoff where no filter reaches them.
+  That inharmonic content is why filtering only ever made the bed duller
+  without making it smoother. The capacitor voltage ramps between the two
+  Schmitt thresholds -- a triangle, with almost nothing to alias. Some square
+  blends back as contact arrives, where the bite belongs.
+- **Register: `capScale` is 1.0, not 2.13.** At 2.13 the bank runs at 35-67 Hz.
+  That was audible only because a square's harmonics reach into the hundreds of
+  Hz; once the triangle and the low-pass removed them, 94% of the output energy
+  sat below 60 Hz and the piece went silent on ordinary speakers. Measured, not
+  guessed -- and the trap is that RMS still reads healthy, so it is possible to
+  make the piece twice as loud and completely inaudible at the same time.
+  **Check where the energy is, not just how much.** Render offline and look:
+
+        node synth.js --wav /tmp/t.wav --secs 8 --speed 12
+
+- **Levels live in `synth.js`, not the worklet.** The host posts `gain`, `vco`,
+  `mix` and `capScale` at startup and they overwrite the processor's own
+  defaults. Editing the constructor alone does nothing.
+- **A brown-noise layer was tried and removed.** Brown noise is road noise --
+  it read as scrapy, then noisy, then "inside a car on the freeway". Left wired
+  at zero (`NOISE_LEVEL`) in case a trace sits well under a fuller pad later.
+- **Long vactrol tails.** 5 ms rise and 50 ms fall passed every wobble in the
+  data straight to pitch, which is what made this restless rather than
+  hypnotic. 50 ms/600 ms is both calmer and closer to a real LDR.
+- **The bed is stereo.** Fading the PLL in with contact left the right channel
+  silent between connections -- half the piece missing on a stereo pair, and
+  most of why it once seemed too quiet. The split still means something where
+  it matters: the left keeps the oscillators, the right hands over to the PLL.
+- **Sound off puts the field in standby.** The synth keeps running, but nothing
+  drives the picture, so only the slow rotation remains and blooms are
+  suppressed. The object rests until a visitor starts it.
+
+The numbers to turn, all at the top of `ring-processor.js`: `REST_LEVEL` how
+far back the bed sits, `FC_BED` muffled versus piercing, `BED_DRIVE` thickness,
+`TRI_FWD` how much bite the foreground keeps, `SWELL_UP`/`SWELL_DN` how it
+arrives and leaves, `BED_DROP` bed register.
+
 ## The audio does not run in the browser
 
 Chromium on this Pi cannot hold an audio stream. This was established by
