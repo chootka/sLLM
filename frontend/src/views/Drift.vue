@@ -54,7 +54,10 @@ const SPAN_S = 300
 const FREE_RUN = 0.12
 const DEPTH = 0.62
 const SCALE_MV = 2.0
-const FLASH_MS = 600
+// Matches SWELL_UP in ring-processor.js: the bloom travels out from the pin
+// over the same 1.5 s the sound takes to come forward, so the picture and the
+// swell are one gesture rather than two events.
+const FLASH_MS = 1500
 // Cap the field at ~30 fps. The whole grid is recomputed every frame -- one
 // interference calculation per character, tens of thousands of them at 1080p
 // -- and on a Pi 4 that competes with the audio worklet for CPU and shows up
@@ -666,7 +669,7 @@ export default {
         const age = (performance.now() - st.flash[i]) / FLASH_MS
         if (age < 0 || age >= 1) continue
         if (!flash || st.flash[i] > st.flash[flash.i]) {
-          flash = { i, env: Math.sin(Math.PI * age) }
+          flash = { i, env: Math.sin(Math.PI * age), t: age }
         }
       }
       const fr = base * 0.45
@@ -721,9 +724,17 @@ export default {
       g.fillStyle = `rgba(255,242,220,${(0.62 + 0.3 * lock).toFixed(3)})`
       for (let r = 0; r < rows; r++) g.fillText(hot[r], 0, r * ch)
       if (flash) {
-        const band = [0.95, 0.6, 0.28]
+        // A wavefront rather than three fixed bands: each band peaks as the
+        // front passes through it, so the yellow leaves the pin and travels
+        // out to the far rings over the length of the flash.
+        const mid = [0.17, 0.5, 0.84]
+        const peak = [1.0, 0.72, 0.42]
         for (let b = 0; b < 3; b++) {
-          g.fillStyle = `rgba(255,206,64,${(flash.env * band[b]).toFixed(3)})`
+          let w = 1 - Math.abs(flash.t - mid[b]) / 0.46
+          if (w <= 0) continue
+          const alpha = flash.env * peak[b] * w
+          if (alpha < 0.01) continue
+          g.fillStyle = `rgba(255,206,64,${alpha.toFixed(3)})`
           for (let r = 0; r < rows; r++) g.fillText(fl[b][r], 0, r * ch)
         }
       }
