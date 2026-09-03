@@ -765,18 +765,6 @@ export default {
    would need remembering. */
 .field.object,
 .field.object * { cursor: none !important; }
-/* Upside down, so the Pi's power cable leaves the bottom of the enclosure and
-   hangs rather than being bent back on itself.
-
-   Done here rather than with rotate=180 on the kernel command line, because
-   that turns the picture and not the touchscreen: taps would land diagonally
-   opposite with no good place to put a libinput calibration matrix, since cage
-   reads no config file. The browser hit-tests through CSS transforms, so the
-   buttons follow the picture on their own.
-
-   180 is the safe rotation: width and height are unchanged, so nothing about
-   the canvas sizing or the character grid has to know about it. */
-.field.object { transform: rotate(180deg); }
 /* CSS is the only thing that sizes the canvas. JS reads this back and matches
    the backing store to it. */
 canvas {
