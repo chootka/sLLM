@@ -199,7 +199,7 @@ const started = Date.now()
 // 10 s is about 2 MB of PCM in flight.
 const AHEAD = 5.0
 
-let soundOn = true
+let soundOn = false             // the object starts silent; a tap starts it
 let paused = false
 let written = 0                 // bytes handed to aplay, for the rate check
 if (aplay) {
@@ -400,11 +400,15 @@ http.createServer((req, res) => {
   }
   res.writeHead(404); res.end()
 }).listen(PORT, '127.0.0.1', () => {
-  // Start audible. Starting muted meant a sealed object that arrives silent
-  // and depends on one request working to ever make a sound -- and if that
-  // request fails there is no way in. Plugged in, it plays.
+  // Start muted: the piece opens silent and the visitor starts the sound.
+  // The synth still generates from the first second, so the audio a visitor
+  // hears on tapping is where the recording has actually got to, not the
+  // beginning. Note this puts the object's only sound behind one working
+  // request -- acceptable now that the button always tries the synth first
+  // and falls back to the in-page worklet, but it is the thing to check if a
+  // sealed unit ever arrives silent and stays that way.
   if (!WAV && !DRY) {
-    execFile('amixer', ['-c', CARD, 'sset', MIXER, 'unmute'], () => {})
+    execFile('amixer', ['-c', CARD, 'sset', MIXER, 'mute'], () => {})
   }
   console.error(`synth: ${(N / 3600).toFixed(1)} h at speed ${SPEED}, ` +
                 `one pass every ${(N / 3600 / SPEED).toFixed(1)} h`)
