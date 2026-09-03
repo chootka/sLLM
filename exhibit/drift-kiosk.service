@@ -77,6 +77,7 @@ ExecStart=/usr/bin/cage -- /usr/bin/chromium \
     --restore-last-session=false \
     --password-store=basic \
     --disable-features=Translate,TranslateUI \
+    --js-flags=--always-turbofan \
     http://127.0.0.1:8080/drift?speed=12
 Restart=always
 RestartSec=3
