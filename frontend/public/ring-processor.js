@@ -100,7 +100,7 @@ const BED_MAKEUP = 3.6
 // because a trace of it may sit well under a fuller pad later.
 const NOISE_LEVEL = 0.0                 // brown noise in the bed
 const TONE_IN_BED = 1.0                 // how much of the pad stays in the bed
-const BED_DRIVE = 1.5                   // saturation: thickness, not brightness
+const BED_DRIVE = 2.0                   // saturation: thickness, not brightness
 // Two poles at ~90 Hz. The previous version used coefficients that did not sum
 // to one, giving 10x gain into the saturator -- that was the scrape -- and a
 // second stage at 2.7 kHz, which is hiss rather than rumble.
@@ -117,7 +117,7 @@ const NZ_GAIN = 14                      // makeup: two poles leave very little
 const VT_MID = (VT_HI + VT_LO) / 2
 const VT_SPAN = VT_HI - VT_LO
 const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
-const FC_BED = 420                      // Hz, cutoff with nothing connected
+const FC_BED = 1200                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
 // The dry blend was there to stop the bed sounding muffled when the bank sat
@@ -133,7 +133,13 @@ const BED_DRY = 0.0
 // slow swell rather than a buzz, and genuinely a rumble instead of a filtered
 // square. Contact brings the bank back up to pitch. On the board this is the
 // timing caps -- 47n against something four times larger.
-const BED_DROP = 4                      // x capacitance at rest: two octaves
+// Off. Dropping the bed two octaves put it near 25 Hz, where nothing but a
+// subwoofer reproduces it -- measured, 94% of the output energy sat below
+// 60 Hz and the piece went silent on ordinary speakers. The bank already runs
+// at 75-140 Hz (capScale in synth.js), which is where a pad belongs, so the
+// bed stays there and the contrast is carried by tone and level instead.
+// Kept as a knob: below 1 raises the bed, above 1 lowers it.
+const BED_DROP = 1.0
 const FC_OPEN = 9000                    // Hz, cutoff fully foregrounded
 // The drive does not rest at zero: with nothing connected the vactrols sit at
 // the free-run floor, and the contact signal is what rises above it. Keying the
