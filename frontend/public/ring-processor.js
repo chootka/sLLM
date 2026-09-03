@@ -87,7 +87,7 @@ const REST_LEVEL = 0.60
 // energy, so the bed reads far quieter than its level says. That is a loss to
 // compensate, not a dynamic. Makeup rises as the filter closes, so soft stays
 // soft in character without becoming inaudible.
-const BED_MAKEUP = 1.9
+const BED_MAKEUP = 3.6
 // A low-passed square is a muffled square: narrowband and dull. Thunder is the
 // opposite -- broadband and smooth -- so no cutoff setting gets there from a
 // filtered square. The bed gets its body from brown noise instead, which has
@@ -100,7 +100,7 @@ const BED_MAKEUP = 1.9
 // because a trace of it may sit well under a fuller pad later.
 const NOISE_LEVEL = 0.0                 // brown noise in the bed
 const TONE_IN_BED = 1.0                 // how much of the pad stays in the bed
-const BED_DRIVE = 1.15                  // saturation: thickness, not brightness
+const BED_DRIVE = 1.5                   // saturation: thickness, not brightness
 // Two poles at ~90 Hz. The previous version used coefficients that did not sum
 // to one, giving 10x gain into the saturator -- that was the scrape -- and a
 // second stage at 2.7 kHz, which is hiss rather than rumble.
@@ -205,7 +205,7 @@ class RingProcessor extends AudioWorkletProcessor {
       { from: 1, to: 2, lum: 0, drive: 0 },
       { from: 2, to: 0, lum: 0, drive: 0 }
     ]
-    this.gain = 0.42
+    this.gain = 0.70
     this.swell = REST_LEVEL   // master level, follows contact
     // Two poles per channel for the screen. Cascaded one-poles: gentle, no
     // resonance, nothing that rings on a square edge.
