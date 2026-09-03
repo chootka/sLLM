@@ -94,8 +94,8 @@ const BED_MAKEUP = 1.9
 // energy everywhere but no edges and no pitch, and the oscillators sit under it
 // rather than being the whole of it. The noise breathes with the bank, so the
 // rumble still follows what the organism is doing.
-const NOISE_LEVEL = 0.85                // brown noise in the bed
-const TONE_IN_BED = 0.45                // how much filtered square stays under
+const NOISE_LEVEL = 0.30                // brown noise in the bed
+const TONE_IN_BED = 0.85                // how much of the pad stays in the bed
 const BED_DRIVE = 1.15                  // saturation: thickness, not brightness
 // Two poles at ~90 Hz. The previous version used coefficients that did not sum
 // to one, giving 10x gain into the saturator -- that was the scrape -- and a
