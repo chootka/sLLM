@@ -74,8 +74,14 @@ const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 // KNEE is the drive at which the piece is fully forward. Both are set by ear.
 const REST_LEVEL = 0.25
 const SWELL_KNEE = 0.35
-const SWELL_TAU = 6.0                   // seconds to rise or fall, audio time
-const K_SWELL = 1 - Math.exp(-DT / SWELL_TAU)
+// Fast up, slow down. Six seconds in both directions smeared the moment of
+// contact across six seconds of audio while the visual bloom was instant,
+// which reads as the sound lagging the picture even when they are locked. The
+// piece should arrive with the bloom and leave slowly.
+const SWELL_UP = 0.35                   // seconds to come forward
+const SWELL_DN = 10.0                   // seconds to fall back to the bed
+const K_SWELL_UP = 1 - Math.exp(-DT / SWELL_UP)
+const K_SWELL_DN = 1 - Math.exp(-DT / SWELL_DN)
 
 // LDR conductance against light, interpolated in log resistance. This was a
 // Math.pow per vactrol per sample. The curve is exponential in lum, so a
@@ -382,7 +388,8 @@ class RingProcessor extends AudioWorkletProcessor {
       // Smoothed per sample so the swell is a slow rise and fall, never a
       // step -- a jump in master level is exactly the click we spent so long
       // chasing out of this thing.
-      this.swell += (swellTo - this.swell) * K_SWELL
+      this.swell += (swellTo - this.swell) *
+                    (swellTo > this.swell ? K_SWELL_UP : K_SWELL_DN)
       const gn = this.gain * this.swell
       out[n] = (s * (1 - this.tone) + this.lp2 * this.tone) * gn
       if (out2) out2[n] = (this.vcoOut - 0.5) * gn * this.vcoLevel
