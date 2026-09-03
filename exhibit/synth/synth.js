@@ -201,6 +201,7 @@ const AHEAD = 5.0
 
 let soundOn = true
 let paused = false
+let written = 0                 // bytes handed to aplay, for the rate check
 if (aplay) {
   aplay.stdin.on('drain', () => { paused = false; pump() })
   aplay.stdin.on('error', () => {})
@@ -275,6 +276,7 @@ function pump () {
       continue
     }
     aplay.stdin.write(out)
+    written += CHUNK_BYTES
   }
 }
 
@@ -355,9 +357,15 @@ setInterval(() => {
 setInterval(() => {
   const played = (Date.now() - started) / 1000
   const inflight = aplay ? (aplay.stdin.writableLength / (RATE * 4)).toFixed(2) : 'n/a'
+  // Bytes actually handed to aplay per second of wall clock. 192000 is
+  // realtime for 48 kHz stereo 16-bit. If this reads ~384000 then aplay really
+  // is consuming at double rate and the audio is playing twice as fast; if it
+  // reads 192000 while `lead` still climbs, then `generated` is being counted
+  // twice somewhere and the fault is my accounting, not the device.
+  const rate = played > 0 ? Math.round(written / played) : 0
   console.error(`synth: clients ${clients.size}, sent ${sent}/30s, idle ${skipped}, ` +
                 `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s, ` +
-                `inflight ${inflight}s`)
+                `inflight ${inflight}s, bytes/s ${rate} (realtime ${RATE * 4})`)
   sent = 0; skipped = 0
 }, 30000)
 
