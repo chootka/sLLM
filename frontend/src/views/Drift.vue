@@ -843,10 +843,10 @@ canvas {
 .field.object .sound { right: 28px; }
 .field.object .about { left: 28px; }
 .field.object .panel {
-  top: 150px;
+  top: 100px;
   left: 28px;
-  width: min(1650px, calc(100vw - 56px));
-  max-height: calc(100vh - 200px);
+  width: min(1320px, calc(100vw - 56px));
+  max-height: calc(100vh - 120px);
   padding: 30px 34px;
   font-size: 1.41rem;
   line-height: 1.85;
