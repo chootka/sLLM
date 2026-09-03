@@ -21,16 +21,15 @@
       two minutes as its body pulses. There is one ring per
       oscillator: bright where the ripples line up, dark where they cancel.</p>
 
-      <p><b>A slime mould grows</b> in a covered dish. Four
-      Ag/AgCl electrodes are set into the gel it grows over. When it spreads far enough to
-      touch one, a very faint electrical signal appears there, and it rises
-      and falls roughly every two minutes.</p>
+      <p><b>A slime mould grows</b> in a covered dish. Four Ag/AgCl
+      electrodes are set into the gel it creeps across. When it makes contact
+      with an electrode, a very faint electrical signal appears there.</p>
 
       <p><b>That signal controls</b> how strongly the three oscillators pull
       on each other. A strong signal pulls them onto the same note. A weak one
       lets them drift apart, and you hear them beat against each other. The
-      signal rises and falls every two minutes, so the sound moves back and
-      forth between the two.</p>
+      sound drifts in sync with the expansion and contraction of the slime
+      mould's body.</p>
 
       <dl class="now">
         <dt>playing</dt><dd>{{ sourceLine }}</dd>
