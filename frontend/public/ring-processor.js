@@ -98,7 +98,18 @@ const BED_DRIVE = 1.15                  // saturation: thickness, not brightness
 // second stage at 2.7 kHz, which is hiss rather than rumble.
 const NZ_K = 0.012                      // ~90 Hz per pole
 const NZ_GAIN = 14                      // makeup: two poles leave very little
-const FC_BED = 150                      // Hz, cutoff with nothing connected
+// The comparator output is a hard square: instantaneous edges, which alias at
+// 48 kHz, and aliased partials fold down BELOW the cutoff where no filter can
+// reach them. That inharmonic metallic content is the tin-across-concrete, and
+// it is why filtering only ever made this duller without making it smoother.
+// The capacitor node is the same oscillator without the edges -- it ramps
+// between the two Schmitt thresholds, which is a triangle and has almost no
+// high harmonics to alias. That is the pad. Some square comes back as contact
+// arrives, because the foreground wants the bite.
+const VT_MID = (VT_HI + VT_LO) / 2
+const VT_SPAN = VT_HI - VT_LO
+const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
+const FC_BED = 420                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
 // The dry blend was there to stop the bed sounding muffled when the bank sat
@@ -332,6 +343,7 @@ class RingProcessor extends AudioWorkletProcessor {
     // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
     // per block so the bank glides up rather than jumping.
     const bedMul = Math.pow(BED_DROP, 1 - nn)
+    const triAmt = 1 - (1 - TRI_FWD) * nn
     const makeup = 1 + (BED_MAKEUP - 1) * (1 - nn)
 
     const dt = DT
@@ -372,7 +384,9 @@ class RingProcessor extends AudioWorkletProcessor {
           }
           this.lastEdge[i] = this.clock
         }
-        mix += o.out * this.mix[i]
+        // Capacitor voltage as a 0..1 ramp, blended against the comparator.
+        const tri = (o.v - VT_MID) / VT_SPAN + 0.5
+        mix += (tri * triAmt + o.out * (1 - triAmt)) * this.mix[i]
       }
 
       // Pairwise coherence around the ring, low-passed hard enough that only
