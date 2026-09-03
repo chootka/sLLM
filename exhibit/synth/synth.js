@@ -149,6 +149,11 @@ const R = new Float32Array(BLOCK)
 const outs = [[L, R]]
 const pcm = Buffer.alloc(BLOCK * 4)
 const chunk = Buffer.alloc(BLOCK * 4 * CHUNK)
+// process() was being called as p.process([], outs, {}) -- two fresh objects
+// every 128 samples, hundreds a second, all garbage in the one process that
+// must not stall. The collector runs, this stalls, aplay starves.
+const NO_INPUT = []
+const NO_PARAMS = {}
 
 let cursor = Math.floor(N * Math.max(0, Math.min(0.999, SEEK)))
 let nextDrive = 0
@@ -200,7 +205,7 @@ function block () {
     state.cursor = cursor
     p.port.onmessage({ data: { drives, slime } })
   }
-  p.process([], outs, {})
+  p.process(NO_INPUT, outs, NO_PARAMS)
   // No gain applied here on purpose. Muting is done at the mixer so it takes
   // effect immediately rather than after the queue drains, and the piece keeps
   // running whether or not anyone is listening.
@@ -220,11 +225,20 @@ function block () {
 // fine pacing. The clock says how far ahead to work at all, which is what
 // stops the queue running away -- aplay reads eagerly into its own buffer, so
 // backpressure alone does not bound this.
+// The pipe is the pacing, and nothing else. Every build carrying a wall-clock
+// bound has underrun -- at 0.5 s, at 2 s and at 10 s alike -- while the build
+// without one ran eleven minutes clean. I do not have a mechanism for that and
+// will not invent one: this is simply the configuration that measured well.
+//
+// The bound survives only for --dry, where there is no pipe to push back and
+// generation would otherwise run away.
 function pump () {
   while (!paused) {
-    if (generated > (Date.now() - started) / 1000 + AHEAD) return
     for (let i = 0; i < CHUNK; i++) block().copy(chunk, i * BLOCK * 4)
-    if (!aplay) continue
+    if (!aplay) {
+      if (generated > (Date.now() - started) / 1000 + AHEAD) return
+      continue
+    }
     if (!aplay.stdin.write(chunk)) { paused = true; return }
   }
 }
