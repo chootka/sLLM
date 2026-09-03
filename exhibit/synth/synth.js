@@ -123,12 +123,14 @@ p.port.postMessage = d => {
 // --- output ---------------------------------------------------------------
 let aplay = null
 if (!WAV && !DRY) {
-  // A large ALSA buffer is the whole point of being out here: 32768 frames is
-  // 680 ms for aplay to coast on. Without it aplay runs on a small default and
-  // reports underruns of 5-70 ms a couple of times a second.
+  // A large ALSA buffer is the whole point of being out here. 131072 frames
+  // is 2.7 s for aplay to coast on, which is what makes this robust: with the
+  // generation bound in place, feeding depends on this process's timer firing,
+  // and anything shorter starves the moment that timer is late. 680 ms was not
+  // enough. The cost is only latency, and nothing here is interactive.
   aplay = spawn('aplay', [
     '-D', DEVICE, '-f', 'S16_LE', '-r', String(RATE), '-c', '2', '-t', 'raw',
-    '--buffer-size=32768', '--period-size=4096', '-'
+    '--buffer-size=131072', '--period-size=8192', '-'
   ], { stdio: ['pipe', 'ignore', 'inherit'] })
   aplay.on('exit', (code, sig) => {
     console.error('aplay exited', code, sig, '-- exiting so systemd restarts us')
