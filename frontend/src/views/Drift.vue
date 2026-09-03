@@ -16,26 +16,22 @@
       {{ about ? 'CLOSE' : 'ABOUT' }}
     </button>
     <div v-if="about" class="panel" @click.stop>
-      <p>You are listening to three oscillators tracking the voltage at
+      <p><b>You are listening to</b> three oscillators tracking the voltage at
       electrodes a slime mould has grown over, rising and falling about every
       two minutes as its body pulses. They are wired in a circle, so each one
       leans on the next and can pull it off its own note. There is one ring per
       oscillator: bright where the ripples line up, dark where they cancel.</p>
 
-      <p><b>The organism.</b> A slime mould grows in a covered dish. Four metal
+      <p><b>A slime mould grows</b> in a covered dish. Four metal
       pins are set into the gel it grows over. When it spreads far enough to
       touch a pin, a very faint electrical signal appears there, and it rises
       and falls roughly every two minutes.</p>
 
-      <p><b>What the organism does.</b> Its slow rhythm decides how hard they
+      <p><b>Its slow rhythm decides</b> how hard they
       lean. Push hard and the three notes collapse together into one. Ease off
       and they slide apart and rub against each other, which you hear as a
       wobble. That collapsing and sliding apart, over and over, is the
       organism's two-minute rhythm.</p>
-
-      <p><b>Left and right.</b> The three notes come out of the left side. A
-      fourth note on the right is a part of the circuit that tries to chase
-      them and hold on.</p>
 
       <dl class="now">
         <dt>playing</dt><dd>{{ sourceLine }}</dd>
@@ -813,7 +809,7 @@ canvas {
   cursor: default;
 }
 .panel p { margin: 0 0 12px; }
-.panel b { color: rgba(255, 255, 255, 0.9); font-weight: normal; }
+.panel b { color: #fff; font-weight: 600; }
 .panel .now {
   margin: 0;
   padding-top: 10px;
@@ -852,7 +848,7 @@ canvas {
   width: min(1100px, calc(100vw - 56px));
   max-height: calc(100vh - 200px);
   padding: 30px 34px;
-  font-size: 1.15rem;
+  font-size: 1.28rem;
   line-height: 1.85;
   background: rgba(0, 0, 0, 0.62);
 }
