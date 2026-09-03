@@ -168,6 +168,16 @@ const RING_PAIRS = [[0, 1], [0, 2]]
 // only ever spans part of its possible range, so a shallow floor here is what
 // turns a 2 dB wobble into an audible breath.
 const AMP_FLOOR = 0.05
+// Each electrode's signal wanders over its own small part of the possible
+// range, and that part moves over hours. Measuring against a fixed scale threw
+// most of the movement away; measured against where this electrode has
+// actually been lately, the same data breathes. The window opens fast and
+// closes slowly, so a new peak counts immediately but the range does not stay
+// stretched by one old excursion. Nothing is invented here -- only the scale
+// changes, and the shape the organism made is what is heard.
+const AMP_OPEN = 0.02                   // how fast the window takes a new extreme
+const AMP_CLOSE = 0.00002               // how slowly it forgets an old one
+const AMP_MINSPAN = 0.06                // never expand noise into a performance
 const FC_BED = 1200                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -312,6 +322,9 @@ class RingProcessor extends AudioWorkletProcessor {
     // sends the same signal to level as well, so a contraction is heard as a
     // swell in the voice that electrode is pushing and not only as a bend.
     this.ampDepth = 0         // --amp
+    this.aLo = [0.5, 0.5, 0.5]
+    this.aHi = [0.5, 0.5, 0.5]
+    this.ampW = [1, 1, 1]
     this.ghostPh = 0
     this.ghostF = 0
     this.running = true
@@ -437,6 +450,24 @@ class RingProcessor extends AudioWorkletProcessor {
     const bedMul = Math.pow(BED_DROP, 1 - nn)
     const triAmt = 1 - (1 - TRI_FWD) * nn
 
+    // Per-voice level from its own electrode, once per block: the drives move
+    // on the organism's timescale, not the sample rate.
+    for (let i = 0; i < 3; i++) {
+      let a = (this.vac[i].drive - FREE_RUN) / DEPTH
+      if (a < 0) a = 0
+      else if (a > 1) a = 1
+      this.aLo[i] += (a - this.aLo[i]) * (a < this.aLo[i] ? AMP_OPEN : AMP_CLOSE)
+      this.aHi[i] += (a - this.aHi[i]) * (a > this.aHi[i] ? AMP_OPEN : AMP_CLOSE)
+      let span = this.aHi[i] - this.aLo[i]
+      if (span < AMP_MINSPAN) span = AMP_MINSPAN
+      let e = (a - this.aLo[i]) / span
+      if (e < 0) e = 0
+      else if (e > 1) e = 1
+      this.ampW[i] = this.ampDepth > 0
+        ? 1 - this.ampDepth + this.ampDepth * (AMP_FLOOR + (1 - AMP_FLOOR) * e)
+        : 1
+    }
+
     // Where the difference between the two fastest oscillators sits right now,
     // folded up into hearing. Glided, not jumped: the frequencies are measured
     // per edge and step about, and stepping a sine reads as a fault.
@@ -491,13 +522,7 @@ class RingProcessor extends AudioWorkletProcessor {
         const tri = (o.v - VT_MID) / VT_SPAN + 0.5
         // Level follows that electrode's own signal, not the bank's average:
         // whichever the organism is pushing hardest is the one that comes up.
-        let w = this.mix[i]
-        if (this.ampDepth > 0) {
-          let a = (this.vac[i].drive - FREE_RUN) / DEPTH
-          if (a < 0) a = 0
-          else if (a > 1) a = 1
-          w *= 1 - this.ampDepth + this.ampDepth * (AMP_FLOOR + (1 - AMP_FLOOR) * a)
-        }
+        const w = this.mix[i] * this.ampW[i]
         this.triV[i] = tri
         mixT += tri * w
         mixS += o.out * w
