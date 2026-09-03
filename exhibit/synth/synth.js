@@ -175,7 +175,7 @@ const started = Date.now()
 //
 // The bound exists only to stop it running away to 94 s and eating memory.
 // 10 s is about 2 MB of PCM in flight.
-const AHEAD = 10.0
+const AHEAD = 5.0
 
 let soundOn = true
 let paused = false
@@ -225,20 +225,23 @@ function block () {
 // fine pacing. The clock says how far ahead to work at all, which is what
 // stops the queue running away -- aplay reads eagerly into its own buffer, so
 // backpressure alone does not bound this.
-// The pipe is the pacing, and nothing else. Every build carrying a wall-clock
-// bound has underrun -- at 0.5 s, at 2 s and at 10 s alike -- while the build
-// without one ran eleven minutes clean. I do not have a mechanism for that and
-// will not invent one: this is simply the configuration that measured well.
+// Both limits, and both are needed.
 //
-// The bound survives only for --dry, where there is no pipe to push back and
-// generation would otherwise run away.
+// aplay.stdin.write() keeps returning true, so backpressure alone does not
+// pace this: measured without the clock, generation ran at twice realtime and
+// the lead climbed a second per second -- 30 s, 60 s, 90 s, 120 s -- until the
+// state queue hit its cap, the snapshots matching what was audible were
+// discarded, and the visuals jumped ahead of the sound.
+//
+// The bound looked like it caused underruns when I first added it. It did not:
+// that was two objects allocated per 128 samples, found afterwards. Removing
+// the bound and fixing the allocation happened in the wrong order, so each
+// looked like the other's cure.
 function pump () {
   while (!paused) {
+    if (generated > (Date.now() - started) / 1000 + AHEAD) return
     for (let i = 0; i < CHUNK; i++) block().copy(chunk, i * BLOCK * 4)
-    if (!aplay) {
-      if (generated > (Date.now() - started) / 1000 + AHEAD) return
-      continue
-    }
+    if (!aplay) continue
     if (!aplay.stdin.write(chunk)) { paused = true; return }
   }
 }
