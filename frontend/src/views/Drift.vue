@@ -18,13 +18,12 @@
     <div v-if="about" class="panel" @click.stop>
       <p><b>You are listening to</b> three oscillators tracking the voltage at
       electrodes a slime mould has grown over, rising and falling about every
-      two minutes as its body pulses. They are wired in a circle, so each one
-      leans on the next and can pull it off its own note. There is one ring per
+      two minutes as its body pulses. There is one ring per
       oscillator: bright where the ripples line up, dark where they cancel.</p>
 
-      <p><b>A slime mould grows</b> in a covered dish. Four metal
-      pins are set into the gel it grows over. When it spreads far enough to
-      touch a pin, a very faint electrical signal appears there, and it rises
+      <p><b>A slime mould grows</b> in a covered dish. Four
+      Ag/AgCl electrodes are set into the gel it grows over. When it spreads far enough to
+      touch one, a very faint electrical signal appears there, and it rises
       and falls roughly every two minutes.</p>
 
       <p><b>Its slow rhythm decides</b> how hard they
@@ -848,7 +847,7 @@ canvas {
   width: min(1100px, calc(100vw - 56px));
   max-height: calc(100vh - 200px);
   padding: 30px 34px;
-  font-size: 1.28rem;
+  font-size: 1.41rem;
   line-height: 1.85;
   background: rgba(0, 0, 0, 0.62);
 }
