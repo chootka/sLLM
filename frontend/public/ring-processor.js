@@ -84,6 +84,14 @@ const FC_BED = 500                      // Hz, cutoff with nothing connected
 // heard from further away. A little unfiltered signal keeps the edges legible
 // so it stays behind something instead of inside something.
 const BED_DRY = 0.15
+// Filtering could never fix the bed, because what makes it painful is not the
+// harmonics but the three fundamentals themselves. At 200/204/209 Hz they beat
+// at 4-9 Hz, which is squarely in the range the ear reads as roughness, and it
+// never stops. Two octaves down puts them at 50/51/52 Hz beating at 1-2 Hz: a
+// slow swell rather than a buzz, and genuinely a rumble instead of a filtered
+// square. Contact brings the bank back up to pitch. On the board this is the
+// timing caps -- 47n against something four times larger.
+const BED_DROP = 4                      // x capacitance at rest: two octaves
 const FC_OPEN = 9000                    // Hz, cutoff fully foregrounded
 const SWELL_KNEE = 0.35
 // Fast up, slow down. Six seconds in both directions smeared the moment of
@@ -274,6 +282,9 @@ class RingProcessor extends AudioWorkletProcessor {
     const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
     const nn = norm < 0 ? 0 : norm > 1 ? 1 : norm
     const dry = BED_DRY + (1 - BED_DRY) * nn
+    // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
+    // per block so the bank glides up rather than jumping.
+    const bedMul = Math.pow(BED_DROP, 1 - nn)
 
     const dt = DT
     // Vactrol lag: light comes up in milliseconds and falls over tens of them.
@@ -292,10 +303,11 @@ class RingProcessor extends AudioWorkletProcessor {
       let mix = 0
       for (let i = 0; i < 3; i++) {
         const o = this.osc[i]
-        let dv = (o.out - o.v) / (o.r * o.c)
+        const cEff = o.c * bedMul
+        let dv = (o.out - o.v) / (o.r * cEff)
         for (let k = 0; k < 3; k++) {
           if (this.vac[k].to === i) {
-            dv += (this.osc[this.vac[k].from].out - o.v) * g[k] / o.c
+            dv += (this.osc[this.vac[k].from].out - o.v) * g[k] / cEff
           }
         }
         o.v += dv * dt
