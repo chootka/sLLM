@@ -79,7 +79,11 @@ const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 // Level still moves, but far less than it did: the bed is not meant to be
 // quiet, it is meant to be behind something.
 const REST_LEVEL = 0.55
-const FC_BED = 150                      // Hz, cutoff with nothing connected
+const FC_BED = 500                      // Hz, cutoff with nothing connected
+// A pure two-pole bed reads as a blanket over the speaker rather than a piece
+// heard from further away. A little unfiltered signal keeps the edges legible
+// so it stays behind something instead of inside something.
+const BED_DRY = 0.15
 const FC_OPEN = 9000                    // Hz, cutoff fully foregrounded
 const SWELL_KNEE = 0.35
 // Fast up, slow down. Six seconds in both directions smeared the moment of
@@ -268,6 +272,8 @@ class RingProcessor extends AudioWorkletProcessor {
     const norm = (this.swell - REST_LEVEL) / (1 - REST_LEVEL)
     const fc = FC_BED * Math.pow(FC_OPEN / FC_BED, norm < 0 ? 0 : norm > 1 ? 1 : norm)
     const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
+    const nn = norm < 0 ? 0 : norm > 1 ? 1 : norm
+    const dry = BED_DRY + (1 - BED_DRY) * nn
 
     const dt = DT
     // Vactrol lag: light comes up in milliseconds and falls over tens of them.
@@ -413,12 +419,12 @@ class RingProcessor extends AudioWorkletProcessor {
       const v = s * (1 - this.tone) + this.lp2 * this.tone
       this.sc1 += (v - this.sc1) * kf
       this.sc2 += (this.sc1 - this.sc2) * kf
-      out[n] = this.sc2 * gn
+      out[n] = (this.sc2 * (1 - dry) + v * dry) * gn
       if (out2) {
         const w = (this.vcoOut - 0.5) * this.vcoLevel
         this.sd1 += (w - this.sd1) * kf
         this.sd2 += (this.sd1 - this.sd2) * kf
-        out2[n] = this.sd2 * gn
+        out2[n] = (this.sd2 * (1 - dry) + w * dry) * gn
       }
     }
 
