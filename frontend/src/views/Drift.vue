@@ -13,7 +13,7 @@
     </button>
     <button class="about" :class="{ veiled: !showControls }"
             @click.stop="reveal(); about = !about">
-      {{ about ? 'CLOSE' : 'SOUND LOG' }}
+      {{ about ? 'CLOSE' : 'ABOUT' }}
     </button>
     <div v-if="about" class="panel" @click.stop>
       <p>You are listening to three oscillators tracking the voltage at
