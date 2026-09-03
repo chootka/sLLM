@@ -325,7 +325,16 @@ export default {
         return
       }
       try {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)()
+        // latencyHint "playback", not the default "interactive". The default
+        // asks for the smallest buffers the system will give, because it
+        // assumes something is responding to input in real time. Nothing here
+        // is: the piece is a fixed recording driving a synth, and a second of
+        // latency would be invisible. "playback" trades that latency for large
+        // buffers and tolerance of scheduling hiccups, which is the difference
+        // between glitching and not on a Pi.
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)({
+          latencyHint: 'playback'
+        })
         await this.ctx.audioWorklet.addModule('/ring-processor.js')
         this.node = new AudioWorkletNode(this.ctx, 'ring-processor', {
           // Two outputs, as the board has: ch1 the oscillator bank, ch2 the
