@@ -205,7 +205,7 @@ class RingProcessor extends AudioWorkletProcessor {
       { from: 1, to: 2, lum: 0, drive: 0 },
       { from: 2, to: 0, lum: 0, drive: 0 }
     ]
-    this.gain = 0.70
+    this.gain = 0.44          // overridden by the host; see synth.js
     this.swell = REST_LEVEL   // master level, follows contact
     // Two poles per channel for the screen. Cascaded one-poles: gentle, no
     // resonance, nothing that rings on a square edge.
@@ -234,7 +234,7 @@ class RingProcessor extends AudioWorkletProcessor {
     // The VCO is a square at constant amplitude that only ever tracks pitch --
     // it takes no part in the fusing, so it reads as a fixed slab under the
     // bank's movement. Its own level, independent of the mixer.
-    this.vcoLevel = 0.18
+    this.vcoLevel = 0.18      // overridden by the host; see synth.js
     this.running = true
 
     // Reported to the main thread for the visual. The oscillators run at
@@ -518,12 +518,19 @@ class RingProcessor extends AudioWorkletProcessor {
       // Crossfade bed to foreground as contact comes in, then saturate: even
       // harmonics read as thickness where the raw ones read as tinny.
       const mixed = bed * (1 - nn) + fwd * nn
-      out[n] = soft(Math.tanh(mixed * BED_DRIVE) * gn)
+      const pad = Math.tanh(mixed * BED_DRIVE) * gn
+      out[n] = soft(pad)
       if (out2) {
+        // The bed goes to both channels. Fading the PLL in with contact left
+        // the right side silent for the hours between connections, which is
+        // half the piece missing on a stereo pair. The split still means
+        // something where it matters: as contact arrives the left keeps the
+        // oscillators and the right hands over to the PLL chasing them.
         const w = (this.vcoOut - 0.5) * this.vcoLevel
         this.sd1 += (w - this.sd1) * kf
         this.sd2 += (this.sd1 - this.sd2) * kf
-        out2[n] = soft((this.sd2 * (1 - dry) + w * dry) * gn * nn)
+        const pll = (this.sd2 * (1 - dry) + w * dry) * gn
+        out2[n] = soft(pad * (1 - 0.6 * nn) + pll * nn)
       }
     }
 

@@ -109,7 +109,9 @@ let lastSnap = -1
 
 const p = new Processor()
 p.port.onmessage({ data: {
-  gain: 0.22, running: true, capScale: 2.13, mix: [0.45, 1, 1], vco: 0.35
+  // These override the worklet's own defaults, so they are the values that
+  // actually ship -- editing the constructor alone does nothing.
+  gain: 0.44, running: true, capScale: 2.13, mix: [0.45, 1, 1], vco: 0.18
 } })
 p.port.postMessage = d => {
   if (d.coh) state.coh = d.coh
