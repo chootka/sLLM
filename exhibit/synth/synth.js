@@ -323,11 +323,24 @@ if (WAV) {
 // the OS pipe -- which shifts A/V by a fixed amount rather than a growing one.
 const ALSA_BUF = 32768 / RATE           // --buffer-size, in seconds
 
+let playedSm = 0
+let lastPlayed = 0
+
 function playedSeconds () {
   if (!aplay) return (Date.now() - started) / 1000
   const queued = aplay.stdin.writableLength / (RATE * 4)
-  const p = written / (RATE * 4) - queued - ALSA_BUF
-  return p > 0 ? p : 0
+  const raw = Math.max(0, written / (RATE * 4) - queued - ALSA_BUF)
+  // The raw figure jitters by as much as the whole queue depth, because the
+  // pump fills to the cap and then coasts down. Feeding that straight into the
+  // release index makes the field jump between states instead of moving
+  // through them. A ~0.7 s one-pole tracks the true rate while ignoring the
+  // sawtooth, and the clamp stops the visuals ever stepping backwards, which
+  // reads far worse than being slightly late.
+  if (playedSm === 0) playedSm = raw
+  else playedSm += (raw - playedSm) * 0.05
+  if (playedSm < lastPlayed) playedSm = lastPlayed
+  lastPlayed = playedSm
+  return playedSm
 }
 function snapshot () {
   if (generated - lastSnap < 0.033) return
