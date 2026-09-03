@@ -408,6 +408,21 @@ export default {
         this.synth = true
         this._lastState = Date.now()
         this.running = !!d.sound
+        // Sound off puts the field in standby: the piece keeps running in the
+        // synth, but nothing drives the picture, so what is left is the slow
+        // rotation in draw(). Showing the organism's state to an empty room
+        // with no sound to go with it says nothing; this way the object rests
+        // until someone starts it. Flashes are suppressed too -- a pin-connect
+        // bloom with silence behind it reads as a fault.
+        if (!d.sound) {
+          this.cursor = d.cursor
+          if (!this.bundled) this.bundled = { t0: d.t0, n: d.n, note: d.note }
+          this.live = {
+            drives: d.drives, gates: d.gates, period: d.period, seen: d.seen
+          }
+          for (let c = 0; c < 3; c++) this._lastFlash[c] = d.flash[c]
+          return
+        }
         this.state.coh = d.coh
         this.state.freq = d.freq
         this.state.addr = d.addr
