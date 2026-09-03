@@ -26,11 +26,11 @@
       touch one, a very faint electrical signal appears there, and it rises
       and falls roughly every two minutes.</p>
 
-      <p><b>Its slow rhythm decides</b> how hard they
-      lean. Push hard and the three notes collapse together into one. Ease off
-      and they slide apart and rub against each other, which you hear as a
-      wobble. That collapsing and sliding apart, over and over, is the
-      organism's two-minute rhythm.</p>
+      <p><b>That signal controls</b> how strongly the three oscillators pull
+      on each other. A strong signal pulls them onto the same note. A weak one
+      lets them drift apart, and you hear them beat against each other. The
+      signal rises and falls every two minutes, so the sound moves back and
+      forth between the two.</p>
 
       <dl class="now">
         <dt>playing</dt><dd>{{ sourceLine }}</dd>
