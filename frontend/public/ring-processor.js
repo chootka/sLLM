@@ -78,7 +78,12 @@ const K_OUT = 1 - Math.exp(-DT / OUT_TAU)
 // body of it stays. Contact opens the filter and the piece steps forward.
 // Level still moves, but far less than it did: the bed is not meant to be
 // quiet, it is meant to be behind something.
-const REST_LEVEL = 0.42
+const REST_LEVEL = 0.60
+// Filtering a square down to its first harmonics throws away most of its
+// energy, so the bed reads far quieter than its level says. That is a loss to
+// compensate, not a dynamic. Makeup rises as the filter closes, so soft stays
+// soft in character without becoming inaudible.
+const BED_MAKEUP = 1.9
 const FC_BED = 150                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
@@ -112,6 +117,16 @@ const SWELL_KNEE = 0.35                 // fraction of full push to be forward
 // piece should arrive with the bloom and leave slowly.
 const SWELL_UP = 0.35                   // seconds to come forward
 const SWELL_DN = 10.0                   // seconds to fall back to the bed
+// Linear below the knee, so the dynamics that survive to here are untouched;
+// only the peaks bend. A tanh across the whole range was tried on this signal
+// before and flattened everything, because a square is already at full scale
+// most of the time.
+const KNEE = 0.80
+function soft (x) {
+  if (x > KNEE) return KNEE + (1 - KNEE) * Math.tanh((x - KNEE) / (1 - KNEE))
+  if (x < -KNEE) return -KNEE - (1 - KNEE) * Math.tanh((-x - KNEE) / (1 - KNEE))
+  return x
+}
 const K_SWELL_UP = 1 - Math.exp(-DT / SWELL_UP)
 const K_SWELL_DN = 1 - Math.exp(-DT / SWELL_DN)
 
@@ -157,7 +172,7 @@ class RingProcessor extends AudioWorkletProcessor {
       { from: 1, to: 2, lum: 0, drive: 0 },
       { from: 2, to: 0, lum: 0, drive: 0 }
     ]
-    this.gain = 0.25
+    this.gain = 0.42
     this.swell = REST_LEVEL   // master level, follows contact
     // Two poles per channel for the screen. Cascaded one-poles: gentle, no
     // resonance, nothing that rings on a square edge.
@@ -300,6 +315,7 @@ class RingProcessor extends AudioWorkletProcessor {
     // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
     // per block so the bank glides up rather than jumping.
     const bedMul = Math.pow(BED_DROP, 1 - nn)
+    const makeup = 1 + (BED_MAKEUP - 1) * (1 - nn)
 
     const dt = DT
     // Vactrol lag: light comes up in milliseconds and falls over tens of them.
@@ -442,16 +458,16 @@ class RingProcessor extends AudioWorkletProcessor {
       // chasing out of this thing.
       this.swell += (swellTo - this.swell) *
                     (swellTo > this.swell ? K_SWELL_UP : K_SWELL_DN)
-      const gn = this.gain * this.swell
+      const gn = this.gain * this.swell * makeup
       const v = s * (1 - this.tone) + this.lp2 * this.tone
       this.sc1 += (v - this.sc1) * kf
       this.sc2 += (this.sc1 - this.sc2) * kf
-      out[n] = (this.sc2 * (1 - dry) + v * dry) * gn
+      out[n] = soft((this.sc2 * (1 - dry) + v * dry) * gn)
       if (out2) {
         const w = (this.vcoOut - 0.5) * this.vcoLevel
         this.sd1 += (w - this.sd1) * kf
         this.sd2 += (this.sd1 - this.sd2) * kf
-        out2[n] = (this.sd2 * (1 - dry) + w * dry) * gn
+        out2[n] = soft((this.sd2 * (1 - dry) + w * dry) * gn)
       }
     }
 
