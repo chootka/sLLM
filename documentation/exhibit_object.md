@@ -26,7 +26,8 @@ Nothing in the box is alive and nothing in the box needs a network.
 | form | sealed unit: Raspberry Pi 4, touch panel, DAC to stereo out, enclosure |
 | behaviour | powers on, boots into the piece. Two touch targets, nothing else |
 | touch | `SOUND ON/OFF` top right, `SOUND LOG` top left. 56 px minimum targets |
-| content | `exhibit/object/` -- page, audio worklet, recording, static server |
+| content | `exhibit/object/` -- page, worklet, recording, synth, static server |
+| audio | a node process, not the browser. See below |
 | size on disk | 4.0 MB |
 | network | none required at any point |
 | writes | none at runtime |
@@ -115,6 +116,51 @@ object reads as a still image rather than a piece with sound. If either matters
 at a given venue, the fixes are an autostart on load and an idle timer that
 restores sound and closes the log. Neither is built.
 
+## The audio does not run in the browser
+
+Chromium on this Pi cannot hold an audio stream. This was established by
+bisection, not inference:
+
+- A native `OscillatorNode` -- no JavaScript anywhere in the audio path --
+  drives the ALSA device into repeated `XRUN` and `SETUP` exactly as the piece
+  does. So does a worklet emitting pure zeros.
+- `aplay` writing a five-minute tone to the same DAC is clean throughout.
+- It ignores `/etc/asound.conf` and `PULSE_SERVER` and takes the hardware
+  directly, so it cannot be moved onto a gentler path.
+
+`SETUP` is the device being closed and reopened, and that reopen is what was
+audible as clicking.
+
+So `exhibit/synth/synth.js` runs the audio instead. It loads the **same**
+`ring-processor.js` against the **same** `replay.json` and pipes PCM into
+`aplay`. The worklet is never copied -- one file, so the browser and the object
+cannot drift into two different instruments.
+
+It publishes its state over Server-Sent Events on port 8081, and the page reads
+that instead of running an `AudioContext`: oscillator frequencies, coherence,
+mux address, drives, gates, and the pin-connect flashes. Audio and image now
+come off one clock rather than two, which is better sync than the browser
+version had. `SOUND ON` becomes a request to the synth.
+
+Absent the synth, the page falls back to its own worklet unchanged, so
+`sllm.visceral.systems/drift` is untouched by any of this.
+
+**Feeding aplay correctly is the whole trick**, and getting it wrong sounds
+exactly like the browser problem it replaced:
+
+- Write in chunks. 128-frame blocks are 512 bytes and thousands of syscalls a
+  second; 32 blocks is 85 ms per write.
+- Let the pipe pace it. An extra wall-clock throttle stops the feed while the
+  pipe would still take more, and aplay starves.
+- Give aplay a buffer. `--buffer-size=32768` is 680 ms to coast on; the default
+  is far too small.
+
+Underruns are the symptom, and they are visible:
+
+    journalctl -u drift-synth --since "10 min ago" | grep -c underrun
+
+Zero is correct. Anything else and the piece is blipping.
+
 ## Build
 
     # three windows, then joined end to end
@@ -137,11 +183,16 @@ API, which is what `sllm.visceral.systems/drift` does.
 ## On the object
 
 1. Copy `exhibit/object/` to `/home/chootka/drift` on the Pi.
-2. Both units to `/etc/systemd/system/`, then enable:
+2. All three units to `/etc/systemd/system/`, then enable:
 
-        sudo cp exhibit/drift-server.service exhibit/drift-kiosk.service /etc/systemd/system/
+        sudo cp exhibit/drift-server.service exhibit/drift-synth.service \
+                exhibit/drift-kiosk.service /etc/systemd/system/
         sudo systemctl daemon-reload
-        sudo systemctl enable --now seatd drift-server drift-kiosk
+        sudo systemctl enable --now seatd drift-server drift-synth drift-kiosk
+
+   `drift-synth` runs under `SCHED_FIFO` -- the real-time priority chromium
+   never had. Priority 10, not 99: enough to beat the renderer, low enough that
+   a runaway loop cannot lock the machine out of ssh.
 
 3. Stop getty owning the console, or cage can never take it:
 

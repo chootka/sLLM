@@ -29,10 +29,10 @@ mkdir -p "$DEST"
 rsync -a --delete "$HERE/object/" "$DEST/"
 
 echo "==> restarting"
-sudo systemctl restart drift-server drift-kiosk
+sudo systemctl restart drift-server drift-synth drift-kiosk
 sleep 2
 
-for u in drift-server drift-kiosk; do
+for u in drift-server drift-synth drift-kiosk; do
     printf '  %-14s %s\n' "$u" "$(systemctl is-active "$u")"
 done
 
@@ -40,6 +40,10 @@ done
 # here even when everything is right. Worth printing anyway: if a second card
 # ever reappears, that is the HDMI audio coming back and stealing the output.
 echo "==> audio"
+# The synth owns the sound now. Any underrun line here means aplay is starving
+# and the piece will be blipping in and out.
+n=$(journalctl -u drift-synth --since "1 min ago" --no-pager 2>/dev/null | grep -c underrun || true)
+printf '  underruns in the last minute: %s\n' "${n:-0}"
 aplay -l 2>/dev/null | sed -n 's/^card \([0-9]*\): \([^ ]*\).*/  card \1  \2/p'
 amixer -c 0 sget Digital 2>/dev/null | sed -n 's/.*\(\[[0-9]*%\]\).*\(\[-\?[0-9.]*dB\]\).*/  volume \1 \2/p' | head -1
 
