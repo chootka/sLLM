@@ -1,0 +1,37 @@
+# The piece's audio, outside the browser. Install to /etc/systemd/system/.
+#
+# Why this is not in the browser. Measured on this object: a native
+# OscillatorNode -- no JavaScript anywhere in the audio path -- drives the ALSA
+# stream into repeated XRUN and SETUP exactly as the piece does, while aplay
+# writing to the same DAC is clean for five minutes. Chromium takes the
+# hardware directly and ignores both the ALSA default and PULSE_SERVER, so it
+# cannot be moved onto a gentler path. The browser is simply not able to hold a
+# continuous audio stream on this machine.
+#
+# This runs the same ring-processor.js against the same replay.json and pipes
+# PCM into aplay. It also publishes the synth's state, which the page uses to
+# drive the visuals -- so both come off one clock.
+#
+#   CPUSchedulingPolicy=fifo
+#       The real-time priority chromium never had. Nothing else on this box
+#       competes for audio, and the process is small.
+#   Priority 10, not 99
+#       High enough to beat the renderer, low enough that a runaway loop here
+#       cannot lock the machine out of ssh.
+[Unit]
+Description=drift, the synth
+After=sound.target
+
+[Service]
+Type=simple
+User=chootka
+WorkingDirectory=/home/chootka/drift
+ExecStart=/usr/bin/node /home/chootka/drift/synth.js --speed 12
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=10
+Nice=-10
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

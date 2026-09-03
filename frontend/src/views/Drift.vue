@@ -68,6 +68,14 @@ const FLASH_MS = 600
 // differently from 30.
 const FRAME_MS = 33
 
+// Where the out-of-browser synth publishes its state, when there is one.
+// Chromium on the Pi cannot hold an audio stream -- a native OscillatorNode
+// with no JavaScript in the audio path underruns exactly as the piece does --
+// so on the object the audio runs in a node process writing to aplay, and this
+// page becomes a display for it. Absent that process, everything below falls
+// back to the in-page worklet and nothing changes.
+const SYNTH_URL = 'http://127.0.0.1:8081' 
+
 // Math.sin runs three or four times per character, tens of thousands of
 // characters a frame. A table costs a multiply, a truncate and an index. The
 // ramp quantises the field into seven levels, so a 4096-entry table is far
@@ -119,6 +127,9 @@ export default {
       about: false,
       // The bundled recording, when the page is running as the object.
       bundled: null,
+      // Set once the out-of-browser synth answers. While it is driving, the
+      // page creates no AudioContext at all.
+      synth: false,
       // Mirrors state.drives for the panel. state itself is deliberately not
       // reactive -- it is touched every animation frame.
       live: { drives: [FREE_RUN, FREE_RUN, FREE_RUN], gates: [0, 0, 0], period: [0, 0, 0], seen: [false, false, false] }
@@ -217,6 +228,7 @@ export default {
     // a pin already connected when the page opens is a starting condition, not
     // an event, and must not flash.
     this.prevGates = [null, null, null]
+    this._lastFlash = [0, 0, 0]
     // Whether each pin has been connected at any point in the current pass.
     // "not yet connected" is true before a pin is first reached and wrong
     // after it has been reached and lost, which on a recording that contains
@@ -259,6 +271,7 @@ export default {
     if (this.ro) this.ro.disconnect()
     clearInterval(this._poll)
     clearInterval(this._tick)
+    if (this._es) this._es.close()
     if (this.node) this.node.disconnect()
     if (this.ctx) this.ctx.close()
   },
@@ -318,6 +331,16 @@ export default {
     },
 
     async toggleSound() {
+      // With the synth driving, the button is a request to it rather than a
+      // browser audio call.
+      if (this.synth) {
+        const want = this.running ? '0' : '1'
+        try {
+          await fetch(SYNTH_URL + '/sound?on=' + want)
+          this.running = want === '1'
+        } catch (e) { this.err = 'synth unreachable' }
+        return
+      }
       if (this.running) {
         if (this.node) { this.node.disconnect(); this.node = null }
         if (this.ctx) { this.ctx.close(); this.ctx = null }
@@ -354,8 +377,42 @@ export default {
       }
     },
 
+    // The synth publishes state over Server-Sent Events. If it is there, it
+    // owns the audio and this page only draws.
+    connectSynth() {
+      let es
+      try { es = new EventSource(SYNTH_URL + '/state') } catch (e) { return }
+      es.onmessage = (e) => {
+        let d
+        try { d = JSON.parse(e.data) } catch (err) { return }
+        this.synth = true
+        this.running = !!d.sound
+        this.state.coh = d.coh
+        this.state.freq = d.freq
+        this.state.addr = d.addr
+        this.state.vcoHz = d.vcoHz
+        this.state.locked = d.locked
+        this.state.drives = d.drives
+        // Flash timestamps come from the synth's clock, not this one.
+        for (let c = 0; c < 3; c++) {
+          if (d.flash[c] && d.flash[c] !== this._lastFlash[c]) {
+            this._lastFlash[c] = d.flash[c]
+            this.state.flash[c] = performance.now()
+          }
+        }
+        this.cursor = d.cursor
+        if (!this.bundled) this.bundled = { t0: d.t0, n: d.n, note: d.note }
+        this.live = {
+          drives: d.drives, gates: d.gates, period: d.period, seen: d.seen
+        }
+      }
+      es.onerror = () => { /* no synth, or it went away; the worklet path stands */ }
+      this._es = es
+    },
+
     // An object with no rig behind it must not depend on an API answering.
     async boot() {
+      this.connectSynth()
       if (await this.loadBundled()) return
       this.fetch()
       // A replay is a fixed window; refetching would only re-request the same
@@ -420,6 +477,9 @@ export default {
     },
 
     advance() {
+      // The synth owns the cursor when it is running; this only drives the
+      // in-page worklet.
+      if (this.synth) return
       const buf = this.buffer[0]
       if (!buf || !buf.n) return
       this.cursor += 0.05 * this.pace

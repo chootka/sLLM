@@ -31,6 +31,10 @@ cp -r "$ROOT/frontend/dist/." "$OUT/"
 # Always lands as replay.json in the output: the page asks for that name.
 cp "$REPLAY" "$OUT/replay.json"
 cp "$HERE/serve.py" "$OUT/"
+# The out-of-browser synth runs from the same directory, beside the recording
+# and the worklet the page already ships. One copy of ring-processor.js, so the
+# two cannot drift into different instruments.
+cp "$HERE/synth/synth.js" "$OUT/"
 
 echo
 echo "$OUT"
