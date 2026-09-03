@@ -311,9 +311,24 @@ if (WAV) {
 // sound, which shows most on the pin-connect flashes.
 //
 // So each snapshot is stamped with its position in the audio and held until
-// that audio has actually played. aplay consumes in real time, so seconds
-// played is just wall-clock seconds since the first write -- self-correcting,
-// rather than a fixed guess at the latency.
+// that audio has actually played.
+//
+// Playback position comes from bytes that have actually drained, never from
+// the clock. The DAC does not run at exactly 48000 -- it was 100% fast before
+// the overlay was fixed, and still measures a few percent off -- so any
+// wall-clock estimate drifts against the audio without bound, and the only
+// symptom is the visuals sliding away from the sound hours later. Counting
+// what aplay has swallowed self-corrects against whatever rate the hardware
+// actually runs at. What remains is a constant offset -- aplay's own ring plus
+// the OS pipe -- which shifts A/V by a fixed amount rather than a growing one.
+const ALSA_BUF = 131072 / RATE          // --buffer-size, in seconds
+
+function playedSeconds () {
+  if (!aplay) return (Date.now() - started) / 1000
+  const queued = aplay.stdin.writableLength / (RATE * 4)
+  const p = written / (RATE * 4) - queued - ALSA_BUF
+  return p > 0 ? p : 0
+}
 function snapshot () {
   if (generated - lastSnap < 0.033) return
   lastSnap = generated
@@ -334,7 +349,7 @@ let sent = 0
 let skipped = 0
 setInterval(() => {
   if (!clients.size || !timeline.length) { skipped++; return }
-  const played = (Date.now() - started) / 1000
+  const played = playedSeconds()
   let pick = -1
   while (pick + 1 < timeline.length && timeline[pick + 1].at <= played) pick++
   if (pick < 0) { skipped++; return }
@@ -355,14 +370,15 @@ setInterval(() => {
 // a second and stay put. A climbing lead means the timeline is filling faster
 // than it drains and the visuals will fall behind the sound.
 setInterval(() => {
-  const played = (Date.now() - started) / 1000
+  const played = playedSeconds()
+  const wall = (Date.now() - started) / 1000
   const inflight = aplay ? (aplay.stdin.writableLength / (RATE * 4)).toFixed(2) : 'n/a'
   // Bytes actually handed to aplay per second of wall clock. 192000 is
   // realtime for 48 kHz stereo 16-bit. If this reads ~384000 then aplay really
   // is consuming at double rate and the audio is playing twice as fast; if it
   // reads 192000 while `lead` still climbs, then `generated` is being counted
   // twice somewhere and the fault is my accounting, not the device.
-  const rate = played > 0 ? Math.round(written / played) : 0
+  const rate = wall > 0 ? Math.round(written / wall) : 0
   console.error(`synth: clients ${clients.size}, sent ${sent}/30s, idle ${skipped}, ` +
                 `queue ${timeline.length}, lead ${(generated - played).toFixed(2)}s, ` +
                 `inflight ${inflight}s, bytes/s ${rate} (realtime ${RATE * 4})`)
