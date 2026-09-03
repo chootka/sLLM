@@ -204,10 +204,10 @@ API, which is what `sllm.visceral.systems/drift` does.
    timezone (`sudo timedatectl set-timezone Europe/Berlin`) -- the panel prints
    the recording's date in the object's own timezone.
 5. Set the volume and store it. There are no controls on a sealed object, so
-   whatever is stored is what the buyer gets on power-up. `Digital` at 70% was
+   whatever is stored is what the buyer gets on power-up. `Digital` at 85% was
    right on the HiFiBerry DAC+ Pro with powered speakers:
 
-        amixer -c 0 sset Digital 70%
+        amixer -c 0 sset Digital 85%
         sudo alsactl store
 6. Check it survives a power cut, which is the thing a buyer will actually do:
    `sudo reboot`, and the piece should come back on its own with sound
