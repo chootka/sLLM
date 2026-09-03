@@ -23,17 +23,15 @@
       oscillator: bright where the ripples line up, dark where they cancel.</p>
 
       <p><b>The organism.</b> A slime mould grows in a covered dish. Four metal
-      pins are set into the jelly it grows over. When it spreads far enough to
+      pins are set into the gel it grows over. When it spreads far enough to
       touch a pin, a very faint electrical signal appears there, and it rises
-      and falls roughly every two minutes. It has been doing this for days.</p>
+      and falls roughly every two minutes.</p>
 
       <p><b>What the organism does.</b> Its slow rhythm decides how hard they
       lean. Push hard and the three notes collapse together into one. Ease off
       and they slide apart and rub against each other, which you hear as a
       wobble. That collapsing and sliding apart, over and over, is the
-      organism's two-minute rhythm. Nothing here is sped-up recordings of the
-      organism or a sound effect chosen to suit it -- it is the circuit being
-      pushed around by the measurements.</p>
+      organism's two-minute rhythm.</p>
 
       <p><b>Left and right.</b> The three notes come out of the left side. A
       fourth note on the right is a part of the circuit that tries to chase
@@ -851,11 +849,12 @@ canvas {
 .field.object .panel {
   top: 150px;
   left: 28px;
-  width: min(640px, calc(100vw - 56px));
+  width: min(1100px, calc(100vw - 56px));
   max-height: calc(100vh - 200px);
-  padding: 26px 28px;
-  font-size: 0.86rem;
-  line-height: 1.9;
+  padding: 30px 34px;
+  font-size: 1.15rem;
+  line-height: 1.85;
+  background: rgba(0, 0, 0, 0.62);
 }
 .field.object .panel .now { grid-template-columns: 7em 1fr; }
 
