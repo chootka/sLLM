@@ -143,9 +143,16 @@ if (!WAV && !DRY) {
 // here has to meet a deadline the way a browser callback does: if this process
 // is late, the pipe simply drains a little, and aplay is holding a large
 // buffer. That is the whole reason for moving out of the browser.
-// Write in chunks, not in 128-frame blocks. 512 bytes per write is thousands
-// of syscalls a second for no reason; 32 blocks is 85 ms of audio per write.
-const CHUNK = 32
+// Write in chunks, not in 128-frame blocks: 512 bytes per write is thousands
+// of syscalls a second for no reason.
+//
+// 8 blocks is 21 ms, just over one pump tick, so in steady state this writes
+// one chunk per tick and the feed is even. At 32 blocks it was 85 ms a write
+// and the loop ran several in a row to catch up, so writes came in clumps --
+// and the underruns arrived on a regular five-second cycle rather than at
+// random, which is the signature of something bursty rather than something
+// overloaded.
+const CHUNK = 8
 const L = new Float32Array(BLOCK)
 const R = new Float32Array(BLOCK)
 const outs = [[L, R]]
