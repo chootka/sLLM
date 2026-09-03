@@ -265,6 +265,12 @@ class RingProcessor extends AudioWorkletProcessor {
     // it takes no part in the fusing, so it reads as a fixed slab under the
     // bank's movement. Its own level, independent of the mixer.
     this.vcoLevel = 0.18      // overridden by the host; see synth.js
+    // The bank's two halves, separately. The capacitor ramp is the body -- the
+    // sustained weight underneath. The comparator is the edge -- the hard slap
+    // on top. They were blended inside the mixer with no way to hold one and
+    // pull the other, which is exactly the knob wanted here.
+    this.triLevel = 1
+    this.sqrLevel = 1
     this.running = true
 
     // Reported to the main thread for the visual. The oscillators run at
@@ -336,6 +342,8 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.gain === 'number') this.gain = Math.max(0, Math.min(1, d.gain))
       if (typeof d.tone === 'number') this.tone = Math.max(0, Math.min(1, d.tone))
       if (typeof d.vco === 'number') this.vcoLevel = Math.max(0, Math.min(1, d.vco))
+      if (typeof d.tri === 'number') this.triLevel = Math.max(0, Math.min(2, d.tri))
+      if (typeof d.sqr === 'number') this.sqrLevel = Math.max(0, Math.min(2, d.sqr))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -398,7 +406,7 @@ class RingProcessor extends AudioWorkletProcessor {
         g[k] = conductance(v.lum)
       }
 
-      let mix = 0
+      let mixT = 0, mixS = 0
       for (let i = 0; i < 3; i++) {
         const o = this.osc[i]
         const cEff = o.c * bedMul
@@ -422,9 +430,11 @@ class RingProcessor extends AudioWorkletProcessor {
           }
           this.lastEdge[i] = this.clock
         }
-        // Capacitor voltage as a 0..1 ramp, blended against the comparator.
+        // Capacitor voltage as a 0..1 ramp; comparator kept separate so each
+        // can be levelled on its own.
         const tri = (o.v - VT_MID) / VT_SPAN + 0.5
-        mix += (tri * triAmt + o.out * (1 - triAmt)) * this.mix[i]
+        mixT += tri * this.mix[i]
+        mixS += o.out * this.mix[i]
       }
 
       // Pairwise coherence around the ring, low-passed hard enough that only
@@ -514,6 +524,8 @@ class RingProcessor extends AudioWorkletProcessor {
       // the dynamics the contraction is supposed to drive. The sum cannot
       // exceed +-0.5 anyway, so nothing needed limiting.
       const wsum = this.mix[0] + this.mix[1] + this.mix[2] || 1
+      const mix = mixT * triAmt * this.triLevel +
+                  mixS * (1 - triAmt) * this.sqrLevel
       let s = mix / wsum - 0.5
       this.dc += (s - this.dc) * 0.0005
       s = (s - this.dc) * 2
