@@ -69,6 +69,14 @@ TTYReset=yes
 TTYVHangup=yes
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=LIBSEAT_BACKEND=seatd
+# Chromium picks its audio backend at startup: PulseAudio if it can reach a
+# server, otherwise it opens the ALSA hardware directly and holds it
+# exclusively. It has been taking the direct path here, which is the fragile
+# one -- a native OscillatorNode with no JS in the audio path underruns on it,
+# while aplay to the same DAC is clean for five minutes. Pointing it at
+# pipewire's pulse socket puts an elastic buffer between the browser and the
+# hardware.
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
 ExecStart=/usr/bin/cage -- /usr/bin/chromium \
     --kiosk \
     --incognito \
