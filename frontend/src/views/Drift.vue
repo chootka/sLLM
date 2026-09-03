@@ -193,9 +193,9 @@ export default {
         const hours = (this.bundled.n / 3600).toFixed(1)
         const when = d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
         return this.pace > 1
-          ? `a recording from ${when} -- ${hours} hours timelapsed into `
+          ? `a recording from ${when}\n${hours} hours timelapsed into `
             + `${(this.bundled.n / 60 / this.pace).toFixed(0)} minutes, on a loop`
-          : `a recording from ${when} -- ${hours} hours, in real time, on a loop`
+          : `a recording from ${when}\n${hours} hours, in real time, on a loop`
       }
       const r = this.replay
       if (!r) return 'the dish, live, the last five minutes'
@@ -203,7 +203,7 @@ export default {
       const span = r.mins >= 120 ? `${(r.mins / 60).toFixed(1)} hours` : `${r.mins} minutes`
       const into = r.mins / r.speed
       const played = into >= 1 ? `${into.toFixed(0)} minutes` : `${(into * 60).toFixed(0)} seconds`
-      return `a recording from ${d.toLocaleString()} -- ${span} timelapsed `
+      return `a recording from ${d.toLocaleString()}\n${span} timelapsed `
         + `into ${played}, on a loop`
     },
 
@@ -819,7 +819,7 @@ canvas {
 .panel dt {
   color: #fff; font-weight: 600; letter-spacing: 0.12em;
 }
-.panel dd { margin: 0; }
+.panel dd { margin: 0; white-space: pre-line; }
 /* A finger, not a cursor -- the touch panel on the object, and phones. Keyed
    to the input device rather than to object mode, because the sizes below are
    wrong for a mouse and right for a finger wherever the page is running.
@@ -843,10 +843,10 @@ canvas {
 .field.object .sound { right: 28px; }
 .field.object .about { left: 28px; }
 .field.object .panel {
-  top: 100px;
+  top: 150px;
   left: 28px;
-  width: min(1320px, calc(100vw - 56px));
-  max-height: calc(100vh - 120px);
+  width: min(1150px, calc(100vw - 56px));
+  max-height: calc(100vh - 180px);
   padding: 30px 34px;
   font-size: 1.41rem;
   line-height: 1.85;
