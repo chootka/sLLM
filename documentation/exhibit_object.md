@@ -161,6 +161,11 @@ the sound follows the recording: nothing here is keyed to anything but the data.
   silent between connections -- half the piece missing on a stereo pair, and
   most of why it once seemed too quiet. The split still means something where
   it matters: the left keeps the oscillators, the right hands over to the PLL.
+- **The bloom and the swell are one gesture.** `FLASH_MS` in `Drift.vue` and
+  `SWELL_UP` in `ring-processor.js` are both 1.5 s on purpose: the yellow
+  travels out from the pin over exactly the time the sound takes to come
+  forward. Change one and change the other, or they read as two events that
+  happen to coincide.
 - **Sound off puts the field in standby.** The synth keeps running, but nothing
   drives the picture, so only the slow rotation remains and blooms are
   suppressed. The object rests until a visitor starts it.
