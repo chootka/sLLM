@@ -832,10 +832,10 @@ canvas {
 .field.object .sound,
 .field.object .about {
   top: 28px;
-  min-height: 104px;
-  min-width: 260px;
-  padding: 34px 44px;
-  font-size: 1rem;
+  min-height: 76px;
+  min-width: 200px;
+  padding: 20px 30px;
+  font-size: 1.35rem;
   letter-spacing: 0.22em;
   color: rgba(255, 255, 255, 0.78);
   border-color: rgba(255, 255, 255, 0.38);
