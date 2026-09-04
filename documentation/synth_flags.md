@@ -35,6 +35,7 @@ The three oscillators, and the landscape they make.
 | `--tri` | `1` | **The body.** Level of the capacitor ramp -- the sustained weight underneath. This is the whole bed at rest. |
 | `--sqr` | `1` | **The edge.** Level of the comparator square -- the hard slap on top, heard mostly once contact is in. |
 | `--mix` | `0.45,1,1` | Per-oscillator level. osc0 runs about an octave above the other two and the coupling pulls it further, so it is the voice that moves over the drone; at 0.45 it sits behind them. |
+| `--tone` | `900` | Output low-pass, in Hz, always in circuit. Lower takes more edge off everything; 600 is noticeably softer, 2000 is close to no filtering. |
 | `--gain` | `1.0` | Master. Raising it past this clips into the soft knee rather than distorting, but there is not much room left. |
 
 `--tri` alone changes the bed. `--sqr` alone changes what a connection sounds

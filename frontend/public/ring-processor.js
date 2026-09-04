@@ -127,6 +127,12 @@ const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
 // that series is the thin buzz over the top. Two poles here take the edge off
 // without touching the body, which the bed filter cannot do from where it sits.
 const FC_TOP = 900
+// The PLL gets its own low-pass. It is a comparator square like the bank, but
+// at contact `dry` reaches 1 and it was going out raw -- 151 Hz dragging 453,
+// 755 and 1057 behind it, which is the grating series. Filtering it here
+// rather than leaning on the output tone control keeps its pitch and movement
+// while losing the edge, and leaves the bank untouched.
+const BIRD_FC = 400
 
 // --- the bird ------------------------------------------------------------
 //
@@ -454,6 +460,7 @@ class RingProcessor extends AudioWorkletProcessor {
     const fc = FC_BED * Math.pow(FC_OPEN / FC_BED, norm < 0 ? 0 : norm > 1 ? 1 : norm)
     const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
     const kt = 1 - Math.exp(-2 * Math.PI * this.topHz * DT)
+    const kb = 1 - Math.exp(-2 * Math.PI * BIRD_FC * DT)
     const nn = norm < 0 ? 0 : norm > 1 ? 1 : norm
     const dry = BED_DRY + (1 - BED_DRY) * nn
     // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
@@ -677,9 +684,9 @@ class RingProcessor extends AudioWorkletProcessor {
         // something where it matters: as contact arrives the left keeps the
         // oscillators and the right hands over to the PLL chasing them.
         const w = (this.vcoOut - 0.5) * this.vcoLevel
-        this.sd1 += (w - this.sd1) * kf
-        this.sd2 += (this.sd1 - this.sd2) * kf
-        const bird = (this.sd2 * (1 - dry) + w * dry) * gn * BIRD * nn
+        this.sd1 += (w - this.sd1) * kb
+        this.sd2 += (this.sd1 - this.sd2) * kb
+        const bird = this.sd2 * gn * BIRD * nn
 
         // Two taps off one line, offset so the repeats do not sit on top of
         // each other -- that offset is what puts the bird in a space rather
