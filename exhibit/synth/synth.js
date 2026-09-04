@@ -132,7 +132,11 @@ const p = new Processor()
 p.port.onmessage({ data: {
   // These override the worklet's own defaults, so they are the values that
   // actually ship -- editing the constructor alone does nothing.
-  gain: num('gain', 1.0), running: true, capScale: 1.0,
+  gain: num('gain', 1.0), running: true,
+  // Where the whole bank sits. Below 1 raises it, above 1 lowers it: 0.7 puts
+  // the fundamental near 110 Hz, 1.0 near 80, 1.4 near 57. Below about 70 Hz
+  // these speakers stop reproducing it, which is a mistake already made once.
+  capScale: num('cap', 1.0),
   // Per-oscillator level. osc0 runs about an octave above the other two (its
   // timing resistor is half theirs) and the coupling pulls it further than
   // either, so it is the voice that rises and falls over the drone. At 0.45 it
