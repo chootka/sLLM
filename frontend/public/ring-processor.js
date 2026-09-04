@@ -127,6 +127,11 @@ const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
 // that series is the thin buzz over the top. Two poles here take the edge off
 // without touching the body, which the bed filter cannot do from where it sits.
 const FC_TOP = 4000
+// Subsonic high-pass. Ring modulation of two oscillators a few Hz apart makes
+// a difference tone of a few Hz: inaudible as pitch, but it eats headroom and
+// muddies everything above it. One pole, low enough not to touch the 70-110 Hz
+// the piece actually lives in.
+const FC_SUB = 32
 // The PLL gets its own low-pass. It is a comparator square like the bank, but
 // at contact `dry` reaches 1 and it was going out raw -- 151 Hz dragging 453,
 // 755 and 1057 behind it, which is the grating series. Filtering it here
@@ -300,6 +305,7 @@ class RingProcessor extends AudioWorkletProcessor {
     this.pllScale = PLL_SCALE // --pll
     this.birdFc = BIRD_FC     // --birdtone
     this.tp1 = 0; this.tp2 = 0; this.tq1 = 0; this.tq2 = 0
+    this.hpL = 0; this.hpR = 0
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
     // Echo line for the bird. 1.5 s is plenty at these delay times and the
@@ -472,6 +478,7 @@ class RingProcessor extends AudioWorkletProcessor {
     const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
     const kt = 1 - Math.exp(-2 * Math.PI * this.topHz * DT)
     const kb = 1 - Math.exp(-2 * Math.PI * this.birdFc * DT)
+    const kh = 1 - Math.exp(-2 * Math.PI * FC_SUB * DT)
     const nn = norm < 0 ? 0 : norm > 1 ? 1 : norm
     const dry = BED_DRY + (1 - BED_DRY) * nn
     // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
@@ -744,8 +751,10 @@ class RingProcessor extends AudioWorkletProcessor {
         this.tp2 += (this.tp1 - this.tp2) * kt
         this.tq1 += (oR - this.tq1) * kt
         this.tq2 += (this.tq1 - this.tq2) * kt
-        out[n] = soft(this.tp2)
-        out2[n] = soft(this.tq2)
+        this.hpL += (this.tp2 - this.hpL) * kh
+        this.hpR += (this.tq2 - this.hpR) * kh
+        out[n] = soft(this.tp2 - this.hpL)
+        out2[n] = soft(this.tq2 - this.hpR)
       }
     }
 
