@@ -134,6 +134,13 @@ const FC_TOP = 900
 // while losing the edge, and leaves the bank untouched.
 const BIRD_FC = 400
 
+// Where the PLL sits. Its natural range put it near 150 Hz and the ring
+// products near 220, and a wavering tone in that register is a fly in the
+// room -- a housefly's wingbeat is about 190 Hz. The bank's fundamental at
+// 80 Hz is not the problem and must not move, since below about 70 Hz these
+// speakers stop reproducing it at all. So the upper voice comes down instead.
+const PLL_SCALE = 0.55
+
 // --- the bird ------------------------------------------------------------
 //
 // The PLL is the only voice here that is not part of the landscape. It runs
@@ -290,6 +297,7 @@ class RingProcessor extends AudioWorkletProcessor {
     // Two poles per channel for the screen. Cascaded one-poles: gentle, no
     // resonance, nothing that rings on a square edge.
     this.topHz = FC_TOP       // --tone
+    this.pllScale = PLL_SCALE // --pll
     this.tp1 = 0; this.tp2 = 0; this.tq1 = 0; this.tq2 = 0
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
@@ -419,6 +427,7 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.amp === 'number') this.ampDepth = Math.max(0, Math.min(1, d.amp))
       if (typeof d.ring === 'number') this.ringLevel = Math.max(0, Math.min(2, d.ring))
       if (typeof d.tone === 'number') this.topHz = Math.max(200, Math.min(18000, d.tone))
+      if (typeof d.pll === 'number') this.pllScale = Math.max(0.1, Math.min(2, d.pll))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -596,7 +605,7 @@ class RingProcessor extends AudioWorkletProcessor {
       this.pumpF += (err - this.pumpF) * K_LOOP
       this.loop = Math.max(0.001, Math.min(1, this.cap + 0.06 * this.pumpF))
       this.pc = pcOut
-      const vcoF = Math.max(0, Math.min(1, this.loop)) * PLL_FMAX
+      const vcoF = Math.max(0, Math.min(1, this.loop)) * PLL_FMAX * this.pllScale
       this.vcoPhase += vcoF * dt
       if (this.vcoPhase >= 1) this.vcoPhase -= 1
       this.vcoOut = this.vcoPhase < 0.5 ? 1 : 0
