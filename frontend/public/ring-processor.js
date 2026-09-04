@@ -121,6 +121,13 @@ const VT_MID = (VT_HI + VT_LO) / 2
 const VT_SPAN = VT_HI - VT_LO
 const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
 
+// A tone control on the output, always in circuit. At full contact `dry`
+// reaches 1 and the bed filter is bypassed by design, so nothing was tempering
+// the comparator's odd harmonics -- 151 Hz brings 453, 755, 1057 with it, and
+// that series is the thin buzz over the top. Two poles here take the edge off
+// without touching the body, which the bed filter cannot do from where it sits.
+const FC_TOP = 900
+
 // --- the bird ------------------------------------------------------------
 //
 // The PLL is the only voice here that is not part of the landscape. It runs
@@ -276,6 +283,8 @@ class RingProcessor extends AudioWorkletProcessor {
     this.swell = REST_LEVEL   // master level, follows contact
     // Two poles per channel for the screen. Cascaded one-poles: gentle, no
     // resonance, nothing that rings on a square edge.
+    this.topHz = FC_TOP       // --tone
+    this.tp1 = 0; this.tp2 = 0; this.tq1 = 0; this.tq2 = 0
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
     // Echo line for the bird. 1.5 s is plenty at these delay times and the
@@ -403,6 +412,7 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.ghost === 'number') this.ghostLevel = Math.max(0, Math.min(2, d.ghost))
       if (typeof d.amp === 'number') this.ampDepth = Math.max(0, Math.min(1, d.amp))
       if (typeof d.ring === 'number') this.ringLevel = Math.max(0, Math.min(2, d.ring))
+      if (typeof d.tone === 'number') this.topHz = Math.max(200, Math.min(18000, d.tone))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -443,6 +453,7 @@ class RingProcessor extends AudioWorkletProcessor {
     const norm = (this.swell - REST_LEVEL) / (1 - REST_LEVEL)
     const fc = FC_BED * Math.pow(FC_OPEN / FC_BED, norm < 0 ? 0 : norm > 1 ? 1 : norm)
     const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
+    const kt = 1 - Math.exp(-2 * Math.PI * this.topHz * DT)
     const nn = norm < 0 ? 0 : norm > 1 ? 1 : norm
     const dry = BED_DRY + (1 - BED_DRY) * nn
     // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
@@ -709,8 +720,14 @@ class RingProcessor extends AudioWorkletProcessor {
 
         const wetL = t2 * ECHO_MIX
         const wetR = t1 * ECHO_MIX
-        out[n] = soft(pad + bird * 0.45 + gh + rg + wetL)
-        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + gh * 0.8 + rg * 0.85 + wetR)
+        const oL = pad + bird * 0.45 + gh + rg + wetL
+        const oR = pad * (1 - 0.6 * nn) + bird + gh * 0.8 + rg * 0.85 + wetR
+        this.tp1 += (oL - this.tp1) * kt
+        this.tp2 += (this.tp1 - this.tp2) * kt
+        this.tq1 += (oR - this.tq1) * kt
+        this.tq2 += (this.tq1 - this.tq2) * kt
+        out[n] = soft(this.tp2)
+        out2[n] = soft(this.tq2)
       }
     }
 
