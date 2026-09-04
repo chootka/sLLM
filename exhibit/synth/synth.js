@@ -149,7 +149,8 @@ p.port.onmessage({ data: {
   ghost: num('ghost', 0),              // the difference tone, as a voice
   amp: num('amp', 1.0),                // organism drives level, not just pitch
   ring: num('ring', 0.20),             // real sum/difference tones off the bank
-  tone: num('tone', 900),              // output low-pass: takes the edge off
+  tone: num('tone', 4000),             // output low-pass: takes the edge off
+  birdtone: num('birdtone', 400),      // low-pass on the PLL voice alone
   pll: num('pll', 0.55)                // where the PLL voice sits, x its range
 } })
 p.port.postMessage = d => {

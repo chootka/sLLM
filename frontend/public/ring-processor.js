@@ -126,7 +126,7 @@ const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
 // the comparator's odd harmonics -- 151 Hz brings 453, 755, 1057 with it, and
 // that series is the thin buzz over the top. Two poles here take the edge off
 // without touching the body, which the bed filter cannot do from where it sits.
-const FC_TOP = 900
+const FC_TOP = 4000
 // The PLL gets its own low-pass. It is a comparator square like the bank, but
 // at contact `dry` reaches 1 and it was going out raw -- 151 Hz dragging 453,
 // 755 and 1057 behind it, which is the grating series. Filtering it here
@@ -298,6 +298,7 @@ class RingProcessor extends AudioWorkletProcessor {
     // resonance, nothing that rings on a square edge.
     this.topHz = FC_TOP       // --tone
     this.pllScale = PLL_SCALE // --pll
+    this.birdFc = BIRD_FC     // --birdtone
     this.tp1 = 0; this.tp2 = 0; this.tq1 = 0; this.tq2 = 0
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
@@ -428,6 +429,7 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.ring === 'number') this.ringLevel = Math.max(0, Math.min(2, d.ring))
       if (typeof d.tone === 'number') this.topHz = Math.max(200, Math.min(18000, d.tone))
       if (typeof d.pll === 'number') this.pllScale = Math.max(0.1, Math.min(2, d.pll))
+      if (typeof d.birdtone === 'number') this.birdFc = Math.max(150, Math.min(12000, d.birdtone))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -469,7 +471,7 @@ class RingProcessor extends AudioWorkletProcessor {
     const fc = FC_BED * Math.pow(FC_OPEN / FC_BED, norm < 0 ? 0 : norm > 1 ? 1 : norm)
     const kf = 1 - Math.exp(-2 * Math.PI * fc * DT)
     const kt = 1 - Math.exp(-2 * Math.PI * this.topHz * DT)
-    const kb = 1 - Math.exp(-2 * Math.PI * BIRD_FC * DT)
+    const kb = 1 - Math.exp(-2 * Math.PI * this.birdFc * DT)
     const nn = norm < 0 ? 0 : norm > 1 ? 1 : norm
     const dry = BED_DRY + (1 - BED_DRY) * nn
     // Effective timing capacitance: BED_DROP at rest, 1 fully forward. Applied
