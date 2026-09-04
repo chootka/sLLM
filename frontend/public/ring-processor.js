@@ -120,7 +120,65 @@ const NZ_GAIN = 14                      // makeup: two poles leave very little
 const VT_MID = (VT_HI + VT_LO) / 2
 const VT_SPAN = VT_HI - VT_LO
 const TRI_FWD = 0.35                    // triangle fraction fully foregrounded
-const FC_BED = 1200                      // Hz, cutoff with nothing connected
+
+// --- the bird ------------------------------------------------------------
+//
+// The PLL is the only voice here that is not part of the landscape. It runs
+// far above the bank, it chases the oscillators without ever settling, and it
+// goes raspy when it hunts. This branch treats it as the subject and the bank
+// as the ground it flies over: the landscape comes down, the bird comes up and
+// gets a dark echo so its distance is a room rather than just being quiet.
+const LANDSCAPE = 0.40                  // bank level once contact is in
+const BIRD = 0.85                       // PLL level once contact is in
+const ECHO_MS = 380                     // delay time
+const ECHO_FB = 0.52                    // feedback
+const ECHO_MIX = 0.65                   // how much echo against the dry bird
+const ECHO_DARK = 0.22                  // one-pole in the loop: each pass duller
+const ECHO_SPREAD = 0.35                // second tap offset, for width
+
+// --- the ghost -----------------------------------------------------------
+//
+// The voice that rises and falls in the distance belongs to none of the three
+// oscillators: it is the difference between them, an artifact of their beating
+// that appears only when they are detuned. That cannot be soloed, because
+// nothing is generating it. So it gets generated: a sine tracking |f0 - f1|,
+// which is real data -- it is precisely what the coupling is doing to the bank
+// at that moment -- rendered as a voice instead of left as a side effect.
+// A sine, not a square: this is the one thing here that should have no edge.
+// Folded up while it is below hearing, since the difference is often only a
+// few Hz and the interesting movement is in how it travels, not its register.
+const GHOST_MULT = 4                    // octave folding of the difference
+const GHOST_FMIN = 90                   // fold up until it clears this
+
+// --- the ring ------------------------------------------------------------
+//
+// The far-off sounds are secondary artifacts: sum and difference tones thrown
+// off by the three oscillators interacting. Multiplying two signals produces
+// exactly those, so this is not an approximation of the effect -- it is the
+// effect, taken off the actual oscillators rather than reconstructed from
+// their measured frequencies the way the ghost is. All the swooping comes
+// free, because it is already in the signals.
+//
+// Taken from the capacitor ramps, not the comparators: multiplying two squares
+// gives a wall of harmonics, while two smooth ramps give mostly the sum and
+// difference themselves.
+const RING_PAIRS = [[0, 1], [0, 2]]
+
+// How far down a voice goes when its electrode is quiet. The organism's signal
+// only ever spans part of its possible range, so a shallow floor here is what
+// turns a 2 dB wobble into an audible breath.
+const AMP_FLOOR = 0.05
+// Each electrode's signal wanders over its own small part of the possible
+// range, and that part moves over hours. Measuring against a fixed scale threw
+// most of the movement away; measured against where this electrode has
+// actually been lately, the same data breathes. The window opens fast and
+// closes slowly, so a new peak counts immediately but the range does not stay
+// stretched by one old excursion. Nothing is invented here -- only the scale
+// changes, and the shape the organism made is what is heard.
+const AMP_OPEN = 0.02                   // how fast the window takes a new extreme
+const AMP_CLOSE = 0.00002               // how slowly it forgets an old one
+const AMP_MINSPAN = 0.06                // never expand noise into a performance
+const FC_BED = 2500                      // Hz, cutoff with nothing connected
 // No raw signal in the bed. A square's edges are instantaneous and full
 // bandwidth, so even 15% of it dry reads as crunch -- an 8-bit engine idling.
 // The dry blend was there to stop the bed sounding muffled when the bank sat
@@ -220,6 +278,12 @@ class RingProcessor extends AudioWorkletProcessor {
     // resonance, nothing that rings on a square edge.
     this.sc1 = 0; this.sc2 = 0
     this.sd1 = 0; this.sd2 = 0
+    // Echo line for the bird. 1.5 s is plenty at these delay times and the
+    // allocation happens once, not per block.
+    this.echoN = Math.ceil(sampleRate * 1.5)
+    this.echo = new Float32Array(this.echoN)
+    this.echoAt = 0
+    this.echoLp = 0
     this.nz = 0               // brown noise state
     this.nzf = 0
     this.env = 0              // slow envelope of the bank, breathes the noise
@@ -244,6 +308,25 @@ class RingProcessor extends AudioWorkletProcessor {
     // it takes no part in the fusing, so it reads as a fixed slab under the
     // bank's movement. Its own level, independent of the mixer.
     this.vcoLevel = 0.18      // overridden by the host; see synth.js
+    // The bank's two halves, separately. The capacitor ramp is the body -- the
+    // sustained weight underneath. The comparator is the edge -- the hard slap
+    // on top. They were blended inside the mixer with no way to hold one and
+    // pull the other, which is exactly the knob wanted here.
+    this.triLevel = 1
+    this.sqrLevel = 1
+    this.ghostLevel = 0       // off unless asked for; --ghost
+    this.ringLevel = 0        // off unless asked for; --ring
+    this.triV = [0, 0, 0]
+    this.ringLp = 0
+    // The organism's rise and fall drives coupling, which moves pitch. This
+    // sends the same signal to level as well, so a contraction is heard as a
+    // swell in the voice that electrode is pushing and not only as a bend.
+    this.ampDepth = 0         // --amp
+    this.aLo = [0.5, 0.5, 0.5]
+    this.aHi = [0.5, 0.5, 0.5]
+    this.ampW = [1, 1, 1]
+    this.ghostPh = 0
+    this.ghostF = 0
     this.running = true
 
     // Reported to the main thread for the visual. The oscillators run at
@@ -315,6 +398,11 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.gain === 'number') this.gain = Math.max(0, Math.min(1, d.gain))
       if (typeof d.tone === 'number') this.tone = Math.max(0, Math.min(1, d.tone))
       if (typeof d.vco === 'number') this.vcoLevel = Math.max(0, Math.min(1, d.vco))
+      if (typeof d.tri === 'number') this.triLevel = Math.max(0, Math.min(2, d.tri))
+      if (typeof d.sqr === 'number') this.sqrLevel = Math.max(0, Math.min(2, d.sqr))
+      if (typeof d.ghost === 'number') this.ghostLevel = Math.max(0, Math.min(2, d.ghost))
+      if (typeof d.amp === 'number') this.ampDepth = Math.max(0, Math.min(1, d.amp))
+      if (typeof d.ring === 'number') this.ringLevel = Math.max(0, Math.min(2, d.ring))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -361,6 +449,40 @@ class RingProcessor extends AudioWorkletProcessor {
     // per block so the bank glides up rather than jumping.
     const bedMul = Math.pow(BED_DROP, 1 - nn)
     const triAmt = 1 - (1 - TRI_FWD) * nn
+
+    // Per-voice level from its own electrode, once per block: the drives move
+    // on the organism's timescale, not the sample rate.
+    for (let i = 0; i < 3; i++) {
+      let a = (this.vac[i].drive - FREE_RUN) / DEPTH
+      if (a < 0) a = 0
+      else if (a > 1) a = 1
+      this.aLo[i] += (a - this.aLo[i]) * (a < this.aLo[i] ? AMP_OPEN : AMP_CLOSE)
+      this.aHi[i] += (a - this.aHi[i]) * (a > this.aHi[i] ? AMP_OPEN : AMP_CLOSE)
+      let span = this.aHi[i] - this.aLo[i]
+      if (span < AMP_MINSPAN) span = AMP_MINSPAN
+      let e = (a - this.aLo[i]) / span
+      if (e < 0) e = 0
+      else if (e > 1) e = 1
+      // Depth follows contact. With nothing connected the electrode sits at
+      // the bottom of its own range, so full depth pulled every voice down to
+      // the floor -- the bed was 26 dB quieter than intended and read as a
+      // fault rather than as quiet. There is nothing to breathe with until the
+      // organism is pushing, so the breathing arrives with it.
+      const dep = this.ampDepth * (0.25 + 0.75 * nn)
+      this.ampW[i] = dep > 0
+        ? 1 - dep + dep * (AMP_FLOOR + (1 - AMP_FLOOR) * e)
+        : 1
+    }
+
+    // Where the difference between the two fastest oscillators sits right now,
+    // folded up into hearing. Glided, not jumped: the frequencies are measured
+    // per edge and step about, and stepping a sine reads as a fault.
+    let fd = Math.abs(this.freq[0] - this.freq[1])
+    let guard = 0
+    while (fd > 0.5 && fd < GHOST_FMIN && guard++ < 8) fd *= 2
+    fd *= GHOST_MULT
+    if (!(fd > 0) || fd > 6000) fd = 0
+    this.ghostF += (fd - this.ghostF) * 0.0008
     const makeup = 1 + (BED_MAKEUP - 1) * (1 - nn)
 
     const dt = DT
@@ -377,7 +499,7 @@ class RingProcessor extends AudioWorkletProcessor {
         g[k] = conductance(v.lum)
       }
 
-      let mix = 0
+      let mixT = 0, mixS = 0
       for (let i = 0; i < 3; i++) {
         const o = this.osc[i]
         const cEff = o.c * bedMul
@@ -401,9 +523,15 @@ class RingProcessor extends AudioWorkletProcessor {
           }
           this.lastEdge[i] = this.clock
         }
-        // Capacitor voltage as a 0..1 ramp, blended against the comparator.
+        // Capacitor voltage as a 0..1 ramp; comparator kept separate so each
+        // can be levelled on its own.
         const tri = (o.v - VT_MID) / VT_SPAN + 0.5
-        mix += (tri * triAmt + o.out * (1 - triAmt)) * this.mix[i]
+        // Level follows that electrode's own signal, not the bank's average:
+        // whichever the organism is pushing hardest is the one that comes up.
+        const w = this.mix[i] * this.ampW[i]
+        this.triV[i] = tri
+        mixT += tri * w
+        mixS += o.out * w
       }
 
       // Pairwise coherence around the ring, low-passed hard enough that only
@@ -493,6 +621,8 @@ class RingProcessor extends AudioWorkletProcessor {
       // the dynamics the contraction is supposed to drive. The sum cannot
       // exceed +-0.5 anyway, so nothing needed limiting.
       const wsum = this.mix[0] + this.mix[1] + this.mix[2] || 1
+      const mix = mixT * triAmt * this.triLevel +
+                  mixS * (1 - triAmt) * this.sqrLevel
       let s = mix / wsum - 0.5
       this.dc += (s - this.dc) * 0.0005
       s = (s - this.dc) * 2
@@ -527,7 +657,7 @@ class RingProcessor extends AudioWorkletProcessor {
       // Crossfade bed to foreground as contact comes in, then saturate: even
       // harmonics read as thickness where the raw ones read as tinny.
       const mixed = bed * (1 - nn) + fwd * nn
-      const pad = Math.tanh(mixed * BED_DRIVE) * gn
+      const pad = Math.tanh(mixed * BED_DRIVE) * gn * (1 - (1 - LANDSCAPE) * nn)
       out[n] = soft(pad)
       if (out2) {
         // The bed goes to both channels. Fading the PLL in with contact left
@@ -538,8 +668,49 @@ class RingProcessor extends AudioWorkletProcessor {
         const w = (this.vcoOut - 0.5) * this.vcoLevel
         this.sd1 += (w - this.sd1) * kf
         this.sd2 += (this.sd1 - this.sd2) * kf
-        const pll = (this.sd2 * (1 - dry) + w * dry) * gn
-        out2[n] = soft(pad * (1 - 0.6 * nn) + pll * nn)
+        const bird = (this.sd2 * (1 - dry) + w * dry) * gn * BIRD * nn
+
+        // Two taps off one line, offset so the repeats do not sit on top of
+        // each other -- that offset is what puts the bird in a space rather
+        // than beside the speaker. The loop is low-passed, so each pass is
+        // duller than the last and the tail recedes instead of ringing.
+        let rg = 0
+        if (this.ringLevel > 0) {
+          for (let q = 0; q < RING_PAIRS.length; q++) {
+            const a = this.triV[RING_PAIRS[q][0]] - 0.5
+            const b = this.triV[RING_PAIRS[q][1]] - 0.5
+            rg += a * b
+          }
+          // Gently rolled off: the sum tones land higher than anything else
+          // here and read as glare without this.
+          this.ringLp += (rg - this.ringLp) * 0.12
+          // Present in the bed, not only at contact. A bed of one low tone with
+          // nothing moving above it reads as a broken speaker rather than a
+          // choice; these tones wander constantly, which is what makes it
+          // sound intended.
+          rg = this.ringLp * this.ringLevel * gn * (0.75 + 0.25 * nn)
+        }
+
+        let gh = 0
+        if (this.ghostLevel > 0 && this.ghostF > 0) {
+          this.ghostPh += this.ghostF * dt
+          if (this.ghostPh > 1) this.ghostPh -= 1
+          gh = Math.sin(this.ghostPh * 6.283185307179586) *
+               this.ghostLevel * gn * 0.5 * (0.35 + 0.65 * nn)
+        }
+
+        const d1 = Math.floor(ECHO_MS * 0.001 * sampleRate)
+        const d2 = Math.floor(d1 * (1 + ECHO_SPREAD))
+        const t1 = this.echo[(this.echoAt + this.echoN - d1) % this.echoN]
+        const t2 = this.echo[(this.echoAt + this.echoN - d2) % this.echoN]
+        this.echoLp += (t1 - this.echoLp) * ECHO_DARK
+        this.echo[this.echoAt] = bird + gh + rg + this.echoLp * ECHO_FB
+        this.echoAt = (this.echoAt + 1) % this.echoN
+
+        const wetL = t2 * ECHO_MIX
+        const wetR = t1 * ECHO_MIX
+        out[n] = soft(pad + bird * 0.45 + gh + rg + wetL)
+        out2[n] = soft(pad * (1 - 0.6 * nn) + bird + gh * 0.8 + rg * 0.85 + wetR)
       }
     }
 
