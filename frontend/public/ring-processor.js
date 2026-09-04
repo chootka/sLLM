@@ -304,6 +304,7 @@ class RingProcessor extends AudioWorkletProcessor {
     this.topHz = FC_TOP       // --tone
     this.pllScale = PLL_SCALE // --pll
     this.birdFc = BIRD_FC     // --birdtone
+    this.drive = BED_DRIVE    // --drive
     this.tp1 = 0; this.tp2 = 0; this.tq1 = 0; this.tq2 = 0
     this.hpL = 0; this.hpR = 0
     this.sc1 = 0; this.sc2 = 0
@@ -436,6 +437,7 @@ class RingProcessor extends AudioWorkletProcessor {
       if (typeof d.tone === 'number') this.topHz = Math.max(200, Math.min(18000, d.tone))
       if (typeof d.pll === 'number') this.pllScale = Math.max(0.1, Math.min(2, d.pll))
       if (typeof d.birdtone === 'number') this.birdFc = Math.max(150, Math.min(12000, d.birdtone))
+      if (typeof d.drive === 'number') this.drive = Math.max(0.2, Math.min(6, d.drive))
       if (Array.isArray(d.mix)) {
         for (let i = 0; i < 3 && i < d.mix.length; i++) {
           this.mix[i] = Math.max(0, Math.min(1, d.mix[i]))
@@ -693,7 +695,7 @@ class RingProcessor extends AudioWorkletProcessor {
       // Crossfade bed to foreground as contact comes in, then saturate: even
       // harmonics read as thickness where the raw ones read as tinny.
       const mixed = bed * (1 - nn) + fwd * nn
-      const pad = Math.tanh(mixed * BED_DRIVE) * gn * (1 - (1 - LANDSCAPE) * nn)
+      const pad = Math.tanh(mixed * this.drive) * gn * (1 - (1 - LANDSCAPE) * nn)
       out[n] = soft(pad)
       if (out2) {
         // The bed goes to both channels. Fading the PLL in with contact left

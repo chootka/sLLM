@@ -151,6 +151,7 @@ p.port.onmessage({ data: {
   ring: num('ring', 0.20),             // real sum/difference tones off the bank
   tone: num('tone', 900),              // output low-pass: takes the edge off
   birdtone: num('birdtone', 400),      // low-pass on the PLL voice alone
+  drive: num('drive', 2.0),            // saturation; lower is cleaner at peaks
   pll: num('pll', 0.55)                // where the PLL voice sits, x its range
 } })
 p.port.postMessage = d => {
