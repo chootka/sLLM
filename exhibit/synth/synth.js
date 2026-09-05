@@ -42,8 +42,29 @@ const WAV_SECS = Number(arg('secs', 30))
 // --dry runs everything except aplay: the render loop and the state server,
 // with the audio discarded. For working on the page on a machine with no ALSA.
 const DRY = process.argv.includes('--dry')
+// A flag with a missing or unparseable value used to reach the worklet as NaN,
+// which propagates through every sample and silences the piece with no error
+// anywhere. Falls back to the default and says so.
+function mixArg () {
+  const raw = arg('mix', '')
+  if (!raw) return [0.45, 1, 1]
+  const p = String(raw).split(',').map(Number)
+  if (p.length !== 3 || !p.every(Number.isFinite)) {
+    console.error('synth: --mix wants three numbers, e.g. 1,0.35,0.35')
+    return [0.45, 1, 1]
+  }
+  return p.map(v => Math.max(0, Math.min(2, v)))
+}
+
+function num (name, def) {
+  const v = Number(arg(name, def))
+  if (Number.isFinite(v)) return v
+  console.error(`synth: --${name} is not a number, using ${def}`)
+  return def
+}
+
 const SEEK = Number(arg('seek', 0))          // 0..1 through the recording
-const SPEED = Number(arg('speed', 12))
+const SPEED = Number(arg('speed', 25))
 const PORT = Number(arg('port', 8081))
 const DEVICE = arg('device', 'plughw:0,0')
 const CARD = arg('card', '0')
@@ -111,7 +132,27 @@ const p = new Processor()
 p.port.onmessage({ data: {
   // These override the worklet's own defaults, so they are the values that
   // actually ship -- editing the constructor alone does nothing.
-  gain: 0.85, running: true, capScale: 1.0, mix: [0.45, 1, 1], vco: 0.18
+  gain: num('gain', 1.0), running: true,
+  // Where the whole bank sits. Below 1 raises it, above 1 lowers it: 0.7 puts
+  // the fundamental near 110 Hz, 1.0 near 80, 1.4 near 57. Below about 70 Hz
+  // these speakers stop reproducing it, which is a mistake already made once.
+  capScale: num('cap', 0.7),
+  // Per-oscillator level. osc0 runs about an octave above the other two (its
+  // timing resistor is half theirs) and the coupling pulls it further than
+  // either, so it is the voice that rises and falls over the drone. At 0.45 it
+  // sits behind them; raise it to bring that voice forward.
+  //   --mix 1,0.35,0.35
+  mix: mixArg(),
+  vco: num('vco', 0.55),
+  tri: num('tri', 1),                  // the body: capacitor ramp
+  sqr: num('sqr', 1),                  // the edge: comparator square
+  ghost: num('ghost', 0),              // the difference tone, as a voice
+  amp: num('amp', 1.0),                // organism drives level, not just pitch
+  ring: num('ring', 0.3),             // real sum/difference tones off the bank
+  tone: num('tone', 4000),              // output low-pass: takes the edge off
+  birdtone: num('birdtone', 400),      // low-pass on the PLL voice alone
+  drive: num('drive', 2.0),            // saturation; lower is cleaner at peaks
+  pll: num('pll', 0.5)                // where the PLL voice sits, x its range
 } })
 p.port.postMessage = d => {
   if (d.coh) state.coh = d.coh

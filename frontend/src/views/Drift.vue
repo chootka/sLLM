@@ -147,7 +147,7 @@ export default {
       return {
         from,
         mins: Math.max(1, Math.min(240, Number(q.mins) || 24)),
-        speed: Math.max(1, Math.min(240, Number(q.speed) || 24))
+        speed: Math.max(1, Math.min(240, Number(q.speed) || 25))
       }
     },
 
@@ -156,7 +156,7 @@ export default {
     // here too rather than an abstract tuning number.
     capScale() {
       const q = (this.$route && this.$route.query) || {}
-      return Math.max(0.5, Math.min(4, Number(q.cap) || 2.13))
+      return Math.max(0.5, Math.min(4, Number(q.cap) || 0.7))
     },
 
     // ?mix=1,0.4,0.4 -- one weight per voice. Equal by default, which is the
@@ -166,7 +166,7 @@ export default {
     vcoLevel() {
       const q = (this.$route && this.$route.query) || {}
       const v = Number(q.vco)
-      return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.35
+      return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.55
     },
 
     // Query speed applies to the bundled recording too, so one object can be
@@ -390,7 +390,11 @@ export default {
         this.node.connect(this.ctx.destination)
         this.node.port.postMessage({
           gain: 0.22, running: true, drives: this.state.drives,
-          capScale: this.capScale, mix: this.mixWeights, vco: this.vcoLevel
+          capScale: this.capScale, mix: this.mixWeights, vco: this.vcoLevel,
+          // Same voicing as the object. Gain stays at 0.22 here: this plays in
+          // a browser where the visitor sets their own level, and the object's
+          // 1.0 is calibrated against a DAC and a mixer at 85%.
+          pll: 0.5, ring: 0.3, tone: 4000, amp: 1.0
         })
         await this.ctx.resume()
         this.running = true
