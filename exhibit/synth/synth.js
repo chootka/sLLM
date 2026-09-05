@@ -64,7 +64,7 @@ function num (name, def) {
 }
 
 const SEEK = Number(arg('seek', 0))          // 0..1 through the recording
-const SPEED = Number(arg('speed', 12))
+const SPEED = Number(arg('speed', 25))
 const PORT = Number(arg('port', 8081))
 const DEVICE = arg('device', 'plughw:0,0')
 const CARD = arg('card', '0')
@@ -136,7 +136,7 @@ p.port.onmessage({ data: {
   // Where the whole bank sits. Below 1 raises it, above 1 lowers it: 0.7 puts
   // the fundamental near 110 Hz, 1.0 near 80, 1.4 near 57. Below about 70 Hz
   // these speakers stop reproducing it, which is a mistake already made once.
-  capScale: num('cap', 1.0),
+  capScale: num('cap', 0.7),
   // Per-oscillator level. osc0 runs about an octave above the other two (its
   // timing resistor is half theirs) and the coupling pulls it further than
   // either, so it is the voice that rises and falls over the drone. At 0.45 it
@@ -148,11 +148,11 @@ p.port.onmessage({ data: {
   sqr: num('sqr', 1),                  // the edge: comparator square
   ghost: num('ghost', 0),              // the difference tone, as a voice
   amp: num('amp', 1.0),                // organism drives level, not just pitch
-  ring: num('ring', 0.20),             // real sum/difference tones off the bank
-  tone: num('tone', 900),              // output low-pass: takes the edge off
+  ring: num('ring', 0.3),             // real sum/difference tones off the bank
+  tone: num('tone', 4000),              // output low-pass: takes the edge off
   birdtone: num('birdtone', 400),      // low-pass on the PLL voice alone
   drive: num('drive', 2.0),            // saturation; lower is cleaner at peaks
-  pll: num('pll', 0.55)                // where the PLL voice sits, x its range
+  pll: num('pll', 0.5)                // where the PLL voice sits, x its range
 } })
 p.port.postMessage = d => {
   if (d.coh) state.coh = d.coh
