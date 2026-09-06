@@ -83,7 +83,7 @@ Environment=WLR_NO_HARDWARE_CURSORS=1
 # environment, and one pixel is as close to gone as this gets without removing
 # the device, which would take touch input with it: the panel enumerates as a
 # mouse (QDtech MPI7003, Handlers=mouse0 event0), not as a touchscreen.
-Environment=XCURSOR_SIZE=1
+Environment=XCURSOR_SIZE=24
 Environment=XCURSOR_THEME=drift-blank
 # Chromium picks its audio backend at startup: PulseAudio if it can reach a
 # server, otherwise it opens the ALSA hardware directly and holds it
