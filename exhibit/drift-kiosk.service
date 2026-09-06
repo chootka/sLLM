@@ -77,6 +77,14 @@ Environment=LIBSEAT_BACKEND=seatd
 # object with no mouse, a pointer on screen is a visible fault, and because the
 # panel is rotated 180 it appears upside down over content that is not.
 Environment=WLR_NO_HARDWARE_CURSORS=1
+# cage loads its own pointer image from an Xcursor theme and draws it whenever
+# a pointer device exists, regardless of what the client asks for -- which is
+# why hiding it from inside the page had no effect. Its size comes from the
+# environment, and one pixel is as close to gone as this gets without removing
+# the device, which would take touch input with it: the panel enumerates as a
+# mouse (QDtech MPI7003, Handlers=mouse0 event0), not as a touchscreen.
+Environment=XCURSOR_SIZE=1
+Environment=XCURSOR_THEME=drift-blank
 # Chromium picks its audio backend at startup: PulseAudio if it can reach a
 # server, otherwise it opens the ALSA hardware directly and holds it
 # exclusively. It has been taking the direct path here, which is the fragile
