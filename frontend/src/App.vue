@@ -80,7 +80,27 @@
               <span class="status-text">{{ isOnline ? 'Connected' : 'Disconnected' }}</span>
             </div>
           </div>
-          <div class="timelapse-container">
+          <!-- Enlarged view. The player moves rather than being drawn twice:
+               two <video> elements on one file means two decoders and two
+               playheads, and Teleport keeps playback and position intact.
+               The target is body, not a div of this component's own: Vue
+               resolves the target while the app's tree is still detached from
+               the document, so a selector inside it never binds. -->
+          <Teleport to="body" :disabled="!lightboxOpen">
+          <div :class="{ lightbox: lightboxOpen }" @click.self="closeLightbox">
+          <button
+            v-if="lightboxOpen"
+            class="lightbox-close"
+            @click="closeLightbox"
+            title="Close"
+            aria-label="Close"
+          >&times;</button>
+          <div class="lightbox-inner">
+          <div
+            class="timelapse-container"
+            :class="{ 'timelapse-zoomable': canZoom }"
+            @click="openLightbox"
+          >
             <!-- Live Stream View -->
             <img
               v-if="viewMode === 'livestream'"
@@ -91,7 +111,27 @@
               @error="imageError = true"
               @load="imageError = false"
             >
-            <!-- Timelapse View -->
+            <!-- Timelapse View, encoded.
+                 scripts/archive_video.py writes recent.mp4 hourly. Playing one
+                 h264 file replaced fetching ~500 JPEGs: 97 MB of frames became
+                 16 MB, and the black flash is gone because the browser is no
+                 longer decoding a fresh 264 KB JPEG per frame. -->
+            <video
+              v-else-if="viewMode === 'timelapse' && useVideo"
+              ref="timelapseVideo"
+              :src="videoUrl"
+              class="timelapse-image"
+              preload="auto"
+              playsinline
+              muted
+              @loadedmetadata="onVideoLoaded"
+              @timeupdate="syncFramePosition"
+              @play="isPlaying = true"
+              @pause="isPlaying = false"
+              @error="onVideoError"
+            ></video>
+            <!-- Timelapse View, frames. Fallback for before the first encode
+                 runs, or if it fails. -->
             <!-- Keyed on the frame URL, not imageKey. Both branches here are
                  <img>, so Vue patched one long-lived element -- and the
                  livestream branch is an MJPEG multipart response, which keeps
@@ -119,7 +159,7 @@
                  does not cover the frame -- the camera has been running since
                  November and the sensor only since August. -->
             <div
-              v-if="viewMode === 'timelapse' && currentImage"
+              v-if="viewMode === 'timelapse' && (useVideo || currentImage)"
               class="frame-overlay"
             >
               <span class="frame-time">{{ currentImageTime || '' }}</span>
@@ -133,13 +173,13 @@
           </div>
           <!-- Timeline Scrubber + playback (only shown in timelapse mode) -->
           <div
-            v-if="viewMode === 'timelapse' && images.length > 0"
+            v-if="viewMode === 'timelapse' && frameCount > 0"
             class="timeline-controls"
           >
             <button
               @click="togglePlayback"
               class="play-button"
-              :disabled="images.length < 2"
+              :disabled="frameCount < 2"
               :title="playButtonLabel"
               :aria-label="playButtonLabel"
             >
@@ -148,21 +188,31 @@
             <input
               type="range"
               v-model.number="timelinePosition"
-              :max="images.length - 1"
+              :max="frameCount - 1"
               min="0"
               class="timeline-scrubber"
               @input="onTimelineScrub"
             >
           </div>
-          <div v-if="isPreloading || isPlaying" class="preload-status">
+          <div
+            v-if="viewMode === 'timelapse' && (isPreloading || isPlaying || lightboxOpen)"
+            class="preload-status"
+          >
             <span v-if="isPreloading">Loading frames… {{ preloadLoaded }} / {{ preloadTotal }}</span>
-            <span v-else>Frame {{ timelinePosition + 1 }} / {{ images.length }}</span>
+            <span v-else>Frame {{ timelinePosition + 1 }} / {{ frameCount }}</span>
           </div>
+          </div>
+          </div>
+          </Teleport>
           <div class="timeline-footer">
             <div class="timestamp">
               <span v-if="viewMode === 'livestream'">
                 Live USB camera feed<br>
                 <small class="timestamp">Capturing {{ imagesPerDay }} images/day ({{ estimatedStoragePerDay }})</small>
+              </span>
+              <span v-else-if="useVideo">
+                {{ frameCount }} frames encoded &middot; {{ totalImagesOnServer }} on disk<br>
+                <small v-if="currentImageTime" class="timestamp">{{ currentImageTime }}</small>
               </span>
               <span v-else>
                 {{ images.length }} of {{ totalImagesOnServer }} images<br>
@@ -401,6 +451,12 @@ export default {
       totalImagesOnServer: 0, // Full archive size reported by /api/images
       cameraAvailable: null, // null until /api/status reports; false hides livestream
       viewModeChosenByUser: false, // Don't override an explicit toggle
+      lightboxOpen: false, // Timelapse frame enlarged over the page
+      // Encoded timelapse. `video` is recent.json: fps, frame count and the
+      // capture time of every frame, which is what the overlay reads.
+      video: null,
+      videoUrl: null,
+      videoRefreshMs: 600000, // recent.mp4 is rebuilt hourly; look every 10 min
       isPlaying: false, // Timelapse playback, advances the scrubber on a timer
       playbackTimer: null,
       playbackIntervalMs: 200, // 5 frames/sec -- slow enough to read growth
@@ -505,14 +561,30 @@ export default {
       return `${every} \u00b7 ${this.stampDate(this.signalUpdatedAt, true).slice(-8)}`
     },
 
+    // Only the timelapse enlarges. The livestream is an MJPEG connection and
+    // a second <img> on it opens a second stream off the camera.
+    canZoom() {
+      // The livestream enlarges too. The player is teleported into the
+      // lightbox rather than drawn a second time, so this is the same <img>
+      // moving -- it does not open a second stream off the camera.
+      if (this.imageError) return false
+      if (this.viewMode === 'livestream') return true
+      return this.useVideo || !!this.currentImage
+    },
+    useVideo() {
+      return !!(this.video && this.video.frames > 1 && this.videoUrl)
+    },
+    frameCount() {
+      return this.useVideo ? this.video.frames : this.images.length
+    },
     playButtonLabel() {
       if (this.isPreloading) return 'Cancel loading'
       return this.isPlaying ? 'Pause' : 'Play timelapse'
     },
     currentImageTime() {
-      const image = this.images[this.timelinePosition]
-      if (!image) return null
-      return this.stampDate(image.at * 1000, true)
+      const at = this.frameAt(this.timelinePosition)
+      if (at === null) return null
+      return this.stampDate(at * 1000, true)
     },
     estimatedStoragePerDay() {
       // Estimate storage: assume ~500KB per image (1920x1080 JPEG)
@@ -555,14 +627,23 @@ export default {
     await this.$nextTick()
     await this.loadReadingsHistory()
     this.connectSocket()
+    // Video first: it owns the timeline when it exists, and loadImages checks.
+    await this.loadVideo()
     this.loadImages()
+    this.videoRefreshTimer = setInterval(() => {
+      // A rebuilt video mid-playback would yank the playhead to the new end.
+      if (!this.isPlaying && !this.lightboxOpen) this.loadVideo()
+    }, this.videoRefreshMs)
     // Resolve camera availability before starting capture, so we don't poll a
     // camera that isn't there (and can open straight into timelapse instead)
     await this.checkStatus()
     this.startImageCapture()
+    window.addEventListener('keydown', this.onLightboxKey)
   },
   
   beforeUnmount() {
+    window.removeEventListener('keydown', this.onLightboxKey)
+    if (this.videoRefreshTimer) clearInterval(this.videoRefreshTimer)
     clearInterval(this._signalTimer)
     // Clean up
     if (this.socket) {
@@ -583,6 +664,15 @@ export default {
   },
 
   methods: {
+    openLightbox() {
+      if (this.canZoom) this.lightboxOpen = true
+    },
+    closeLightbox() {
+      this.lightboxOpen = false
+    },
+    onLightboxKey(e) {
+      if (e.key === 'Escape' && this.lightboxOpen) this.closeLightbox()
+    },
     connectSocket() {
       // Connect to Socket.IO server
       this.socket = io(this.apiUrl)
@@ -820,15 +910,24 @@ export default {
       })
     },
     
+    frameAt(index) {
+      // Capture time of one frame, whichever source is driving the timeline.
+      if (this.useVideo) {
+        const at = this.video.timestamps[index]
+        return typeof at === 'number' && isFinite(at) ? at : null
+      }
+      const image = this.images[index]
+      return image && isFinite(image.at) ? image.at : null
+    },
+
     updateFrameEnvironment() {
       // Nearest bucket, but only if it is actually near: frames either side of
       // an outage would otherwise borrow a reading from hours away and present
       // it as a measurement.
       this.frameEnvironment = null
-      const image = this.images[this.timelinePosition]
-      if (!image || !this.environmentTrack.length) return
-      const at = image.at
-      if (!isFinite(at)) return
+      if (!this.environmentTrack.length) return
+      const at = this.frameAt(this.timelinePosition)
+      if (at === null) return
 
       let best = null
       let bestGap = Infinity
@@ -855,14 +954,16 @@ export default {
       // the endpoint allows.
       this.environmentTrack = []
       this.frameEnvironment = null
-      if (this.images.length < 1) return
+      if (this.frameCount < 1) return
 
-      const times = this.images.map(image => image.at).filter(t => isFinite(t))
+      const times = (this.useVideo
+        ? this.video.timestamps
+        : this.images.map(image => image.at)).filter(t => isFinite(t))
       if (!times.length) return
 
       const start = Math.min(...times)
       const end = Math.max(...times)
-      const buckets = Math.min(5000, Math.max(1, this.images.length))
+      const buckets = Math.min(5000, Math.max(1, this.frameCount))
       this.environmentBucketS = ((end + 60) - (start - 60)) / buckets
       try {
         const response = await axios.get(`${this.apiUrl}/api/environment/range`, {
@@ -881,11 +982,81 @@ export default {
       }
     },
 
+    async loadVideo() {
+      // recent.json is the sidecar scripts/archive_video.py writes next to
+      // recent.mp4. No sidecar means no encode has run yet, and the timelapse
+      // falls back to scrubbing JPEGs.
+      try {
+        const response = await axios.get(`${this.apiUrl}/api/video/recent.json`, {
+          params: { _: Date.now() }
+        })
+        const meta = response.data
+        if (!meta || !Array.isArray(meta.timestamps) || meta.timestamps.length < 2) return
+        if (this.video && this.video.last === meta.last) return
+
+        this.video = markRaw(meta)
+        // Keyed on the newest frame in the encode, so a rebuilt video is a new
+        // URL rather than something the browser might hold on to.
+        this.videoUrl = `${this.apiUrl}/api/video/recent.mp4?v=${encodeURIComponent(meta.last)}`
+        this.timelinePosition = meta.frames - 1
+        console.log(`🎞️  Encoded timelapse: ${meta.frames} frames at ${meta.fps} fps`)
+        await this.loadEnvironmentTrack()
+        this.$nextTick(() => this.startFrameSync())
+      } catch (error) {
+        console.warn('No encoded timelapse:', error.message)
+      }
+    },
+
+    onVideoLoaded() {
+      // Park on the newest frame, same as the frame timeline does.
+      const el = this.$refs.timelapseVideo
+      if (!el || !this.video) return
+      el.currentTime = Math.max(0, (this.video.frames - 1) / this.video.fps)
+      this.startFrameSync()
+    },
+
+    onVideoError() {
+      // A missing or truncated file drops the panel back to JPEG scrubbing
+      // rather than showing a dead player.
+      console.warn('Encoded timelapse failed to load, falling back to frames')
+      this.video = null
+      this.videoUrl = null
+      this.isPlaying = false
+      this.loadImages()
+    },
+
+    syncFramePosition() {
+      const el = this.$refs.timelapseVideo
+      if (!el || !this.video) return
+      const index = Math.round(el.currentTime * this.video.fps)
+      this.timelinePosition = Math.min(Math.max(index, 0), this.video.frames - 1)
+    },
+
+    startFrameSync() {
+      // timeupdate fires about four times a second; at 10 fps the burned-in
+      // capture time would lag the picture by two frames. requestVideoFrameCallback
+      // fires per presented frame. timeupdate stays wired as the fallback.
+      const el = this.$refs.timelapseVideo
+      if (!el || typeof el.requestVideoFrameCallback !== 'function') return
+      if (this._frameSyncEl === el) return
+      this._frameSyncEl = el
+      const step = () => {
+        const current = this.$refs.timelapseVideo
+        if (!current || current !== this._frameSyncEl) {
+          this._frameSyncEl = null
+          return
+        }
+        this.syncFramePosition()
+        current.requestVideoFrameCallback(step)
+      }
+      el.requestVideoFrameCallback(step)
+    },
+
     async loadImages() {
       // Populate the timeline with images already on disk, so the timelapse
       // isn't limited to whatever this browser session happens to capture
       try {
-        const response = await axios.get(`${this.apiUrl}/api/images`, {
+        const response = await axios.get(`${this.apiUrl}/api/images/`, {
           params: { page: 1, per_page: this.maxImages, order: 'desc' }
         })
 
@@ -909,7 +1080,9 @@ export default {
           this.imageError = false
         }
         console.log(`🎞️  Loaded ${this.images.length} of ${this.totalImagesOnServer} archived images`)
-        this.loadEnvironmentTrack()
+        // The video owns the timeline when it exists, and has already asked
+        // for the track covering its own frames.
+        if (!this.useVideo) this.loadEnvironmentTrack()
       } catch (error) {
         console.warn('Could not load image archive:', error.message)
       }
@@ -1592,6 +1765,11 @@ export default {
     },
     
     onTimelineScrub() {
+      if (this.useVideo) {
+        const el = this.$refs.timelapseVideo
+        if (el) el.currentTime = this.timelinePosition / this.video.fps
+        return
+      }
       if (this.images.length > 0 && this.timelinePosition < this.images.length) {
         // Swap the src without touching imageKey: recreating the <img> element
         // would blank it out and collapse the container until the new frame
@@ -1633,6 +1811,18 @@ export default {
     },
 
     async togglePlayback() {
+      if (this.useVideo) {
+        const el = this.$refs.timelapseVideo
+        if (!el) return
+        if (el.paused) {
+          // Pressing play parked on the last frame replays from the start.
+          if (el.duration && el.currentTime >= el.duration - 0.05) el.currentTime = 0
+          el.play().catch(error => console.warn('Playback refused:', error.message))
+        } else {
+          el.pause()
+        }
+        return
+      }
       // A press during either preload or playback means stop.
       if (this.isPlaying || this.isPreloading) {
         this.stopPlayback()
@@ -1682,6 +1872,10 @@ export default {
     },
 
     stopPlayback() {
+      if (this.useVideo) {
+        const el = this.$refs.timelapseVideo
+        if (el && !el.paused) el.pause()
+      }
       this.preloadCancelled = true
       this.isPreloading = false
       this.isPlaying = false

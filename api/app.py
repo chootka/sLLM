@@ -81,7 +81,7 @@ CORS(app, resources={
 })
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-for directory in (config.IMAGE_DIR, config.LOG_DIR, config.CSV_DIR):
+for directory in (config.IMAGE_DIR, config.VIDEO_DIR, config.LOG_DIR, config.CSV_DIR):
     os.makedirs(directory, exist_ok=True)
 
 # One gate shared by every subsystem that either switches or samples, so the
@@ -745,6 +745,68 @@ def get_image(filename):
     # Werkzeug adds its own Expires alongside Cache-Control; a stale absolute
     # date next to max-age is just a second opinion for a proxy to misread.
     response.headers.pop('Expires', None)
+    return response
+
+
+# --- encoded timelapse ------------------------------------------------------
+# scripts/archive_video.py writes these: recent.mp4 is rebuilt on a timer,
+# seg_*.mp4 are written once and never change.
+
+VIDEO_NAME_RE = re.compile(r'^(recent|seg_\d{8}_\d{6})\.(mp4|json)$')
+
+
+@app.route('/api/video', methods=['GET'])
+@app.route('/api/video/', methods=['GET'])
+def video_manifest():
+    """The archive index: which segments exist and what they cover."""
+    manifest_path = os.path.join(config.VIDEO_DIR, 'manifest.json')
+    try:
+        with open(manifest_path) as handle:
+            manifest = json.load(handle)
+    except (FileNotFoundError, ValueError):
+        manifest = {"segments": []}
+
+    recent = None
+    recent_path = os.path.join(config.VIDEO_DIR, 'recent.json')
+    try:
+        with open(recent_path) as handle:
+            meta = json.load(handle)
+        # Without the timestamps, which are large and fetched with the video
+        recent = {key: meta[key] for key in
+                  ('fps', 'frames', 'first', 'last', 'generated') if key in meta}
+        recent['url'] = '/api/video/recent.mp4'
+    except (FileNotFoundError, ValueError):
+        pass
+
+    for segment in manifest.get('segments', []):
+        segment['url'] = '/api/video/' + segment['file']
+    return jsonify({"recent": recent, "segments": manifest.get('segments', [])})
+
+
+@app.route('/api/video/<filename>', methods=['GET'])
+def get_video(filename):
+    """Serve one encoded timelapse or its frame-time sidecar."""
+    if not VIDEO_NAME_RE.match(filename):
+        return jsonify({"error": "Invalid filename"}), 400
+
+    filepath = os.path.join(config.VIDEO_DIR, filename)
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Not found"}), 404
+
+    mimetype = 'video/mp4' if filename.endswith('.mp4') else 'application/json'
+    # Segments are written once, so they cache like the frames do. recent.*
+    # is rewritten on every timer run and must revalidate, or seeking replays
+    # yesterday's window. conditional=True is what answers Range requests --
+    # without it the browser cannot seek without downloading the whole file.
+    if filename.startswith('seg_'):
+        response = send_file(filepath, mimetype=mimetype, max_age=31536000,
+                             conditional=True)
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        response.headers.pop('Expires', None)
+    else:
+        response = send_file(filepath, mimetype=mimetype, max_age=0,
+                             conditional=True)
+        response.headers['Cache-Control'] = 'no-cache'
     return response
 
 

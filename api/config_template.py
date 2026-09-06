@@ -9,6 +9,8 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 IMAGE_DIR = os.path.join(DATA_DIR, 'images')
+# Encoded timelapse: recent.mp4 for playback, seg_*.mp4 as the archive
+VIDEO_DIR = os.path.join(DATA_DIR, 'video')
 LOG_DIR = os.path.join(DATA_DIR, 'logs')
 CSV_DIR = os.path.join(DATA_DIR, 'readings')
 
@@ -79,7 +81,7 @@ CAMERA_SOURCE = 'auto'
 # full-field; the full 4608x2592 adds nothing and bloats the timelapse.
 CAMERA_RESOLUTION = (2304, 1296)
 CAMERA_WARMUP_TIME = 2         # seconds
-IMAGE_CAPTURE_INTERVAL = 300   # seconds
+IMAGE_CAPTURE_INTERVAL = 120   # seconds
 
 # USB only. Separate because a UVC camera silently substitutes its nearest
 # mode when asked for one it does not have.

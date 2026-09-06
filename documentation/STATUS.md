@@ -452,3 +452,76 @@ run so far.
 
 Not accurate: confirmed biological activity.
 
+
+## Step 9 pre-registration
+
+Written 2026-09-06 03:20 CEST. Nothing from the stimulus run had been recorded
+when this was written. ch1 bridged 2026-09-05 ~19:00 CEST; the 9 h since are
+known and are not part of the run.
+
+### In plain language
+
+The organism is connected to one electrode and that electrode is oscillating.
+Blue light is shone on the dish for an hour, then not for an hour, six times
+each. If the oscillation is the organism, the light should change it. If it is
+chemistry at the metal surface, the light has no reason to. What counts as a
+change is fixed here, before the run.
+
+### Dish
+
+Organism in, one dish, one tube. ch1 bridged 2026-09-05 19:00 CEST, confirmed by
+per-sample noise falling from 0.10-0.18 to 0.018-0.026 mV and holding for 9 h.
+ch0 and ch2 unbridged, per-sample noise 0.13-0.51 and 0.24-1.73 mV. Both serve
+as controls. Reference on A3 as before.
+
+### Stimulus
+
+`scripts/stimulus_run.py`, 1 h dark then 1 h blue, 6 pairs, 12 h, dark first.
+Intensity 0.50 on the 8 drivable zones; zone 2 over the reference is not driven.
+Every transition is timestamped into `data/stimulus_<ts>.jsonl` by the script
+that made it. That file, not recollection, defines the block edges.
+
+### Statistic
+
+Unchanged from step 7. Per channel per block, the largest periodogram peak in
+the 60-200 s band, as log10 excess (dex) over the local median background taken
+over +-0.6 octave in log period. One implementation for all 12 blocks; absolute
+dex is not comparable to values from other implementations recorded above.
+
+Primary window is the full 60 min of each block. The last 45 min of each block
+is reported as a secondary window to allow for response latency. The secondary
+window does not bear on the decision.
+
+### Comparison
+
+Six light blocks against six dark blocks on ch1, exact Wilcoxon rank-sum,
+two-sided. Same test run on ch0 and ch2. Minimum attainable two-sided p at
+6 v 6 is 0.0022.
+
+### Decision rule
+
+| result | conclusion |
+|---|---|
+| ch1 p <= 0.01 and both ch0 and ch2 p > 0.05 | blue light changes the ch1 line. Direction recorded |
+| ch1 p <= 0.01 and ch0 or ch2 p <= 0.05 | common-mode. No claim about the organism; suspect heat or panel coupling |
+| ch1 0.01 < p <= 0.05 | inconclusive. No claim either way |
+| ch1 p > 0.05 | no response detected at intensity 0.50 in 1 h blocks. Not evidence of no response |
+
+### Void conditions
+
+- Per-block mean chamber temperature separates light from dark at exact rank
+  p <= 0.05 **and** the group means differ by >= 0.2 C. The channels follow
+  temperature at +8.1 mV/C, r = 0.73.
+- ch1 per-sample noise exceeds 0.06 mV in any block: the electrode has
+  disconnected. Truncate at that block. Fewer than 4 remaining pairs voids the
+  run.
+
+### Exclusions declared in advance
+
+- 2026-09-05 18:00-19:00 PDT (2026-09-06 03:00-04:00 CEST). The panel was on
+  18:01:29-18:05:59 PDT, 4 min 30 s, uncontrolled.
+- Any block in which the rig was handled or the lid opened.
+- Any `sllm-api` restart gap.
+- Any partial block at either end of the run.
+
+No other statistic will be substituted after the data is seen.

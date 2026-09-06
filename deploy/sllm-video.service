@@ -1,0 +1,36 @@
+[Unit]
+Description=sLLM timelapse encode and archive
+Documentation=file:///var/www/sllm/documentation/bring_up.md
+After=sllm-api.service
+
+[Service]
+Type=oneshot
+User=sllm
+Group=sllm
+WorkingDirectory=/var/www/sllm
+ExecStart=/usr/bin/python3 /var/www/sllm/scripts/archive_video.py
+
+# x264 will take every core it is given. The ADC samples at 1 Hz on the same
+# board, so the encode is capped and de-prioritised rather than left to run
+# flat out for 40 s an hour.
+CPUQuota=200%
+Nice=15
+IOSchedulingClass=idle
+
+# --- hardening ---------------------------------------------------------------
+# Reads the frames, writes the videos, deletes the thinned originals. No
+# hardware, no network.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/sllm/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+DevicePolicy=closed

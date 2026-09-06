@@ -296,6 +296,95 @@ h1 {
     letter-spacing: 0.08em;
 }
 
+.timelapse-zoomable {
+    cursor: zoom-in;
+}
+
+/* Enlarged frame over the page. Fixed and dark in both themes: it sits on the
+   photograph, same reasoning as .frame-overlay. */
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    cursor: zoom-out;
+}
+
+/* Wrapper the player sits in. Outside the lightbox it is an ordinary block
+   in the panel and only the max-width applies. */
+.lightbox-inner {
+    width: 100%;
+    max-width: 1400px;
+    cursor: default;
+}
+
+/* Sized against the viewport once enlarged, not against the panel. Height
+   first, width derived: a short window would push the scrubber off the
+   bottom. */
+.lightbox .timelapse-container {
+    height: min(78vh, calc((100vw - 64px) * 9 / 16));
+    width: auto;
+    aspect-ratio: 16 / 9;
+    margin: 0 auto;
+}
+
+.lightbox .timelapse-zoomable {
+    cursor: default;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 28px;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    opacity: 0.7;
+    z-index: 1;
+}
+
+.lightbox-close:hover {
+    opacity: 1;
+}
+
+/* The panel controls read off --ink, which is dark in light theme and would
+   vanish against the backdrop. */
+.lightbox .play-button {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.lightbox .play-button:hover:not(:disabled) {
+    background: #ffffff;
+    color: #000000;
+}
+
+.lightbox .timeline-scrubber {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.lightbox .timeline-scrubber::-webkit-slider-thumb {
+    background: #ffffff;
+}
+
+.lightbox .timeline-scrubber::-moz-range-thumb {
+    background: #ffffff;
+}
+
+.lightbox .preload-status {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+
+
 /* The frame overlay always sits on the photograph, which is dark whatever the
    page is doing, so it keeps white text and a dark scrim in both themes. */
 .frame-overlay,

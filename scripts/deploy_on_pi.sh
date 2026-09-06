@@ -211,7 +211,7 @@ fi
 say "systemd units"
 # Installed only when they actually differ, so a routine code deploy does not
 # churn unit files or trigger a daemon-reload it does not need.
-for unit_src in deploy/*.service; do
+for unit_src in deploy/*.service deploy/*.timer; do
     unit_name="$(basename "$unit_src")"
     unit_dst="/etc/systemd/system/$unit_name"
     if cmp -s "$unit_src" "$unit_dst"; then
