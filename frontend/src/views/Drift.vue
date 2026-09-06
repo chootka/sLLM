@@ -414,8 +414,21 @@ export default {
     // has to happen above the component's own markup. isObject is false until
     // replay.json has loaded, so this is a watcher rather than a mounted hook.
     markKiosk(on) {
-      const el = document.documentElement
-      if (el) el.classList.toggle('kiosk', !!on)
+      // Inline, not a class. The stylesheet rule was reaching the object and
+      // doing nothing, which means the class was not landing where the rule
+      // expected it; an inline style on the elements themselves cannot miss.
+      // The touch panel enumerates as a mouse (Handlers=mouse0), so the
+      // compositor genuinely has a pointer to draw and there is no way to
+      // remove it without removing touch as well -- it can only be made
+      // invisible.
+      const blank = 'url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP//' +
+                    '/yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") 0 0, none'
+      for (const el of [document.documentElement, document.body]) {
+        if (el) el.style.cursor = on ? blank : ''
+      }
+      if (document.documentElement) {
+        document.documentElement.classList.toggle('kiosk', !!on)
+      }
     },
 
     connectSynth() {
