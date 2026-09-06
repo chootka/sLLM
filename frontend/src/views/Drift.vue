@@ -136,6 +136,10 @@ export default {
       live: { drives: [FREE_RUN, FREE_RUN, FREE_RUN], gates: [0, 0, 0], period: [0, 0, 0], seen: [false, false, false] }
     }
   },
+  watch: {
+    isObject: { immediate: true, handler(v) { this.markKiosk(v) } }
+  },
+
   computed: {
     // ?from=<unix seconds>&mins=<window>&speed=<multiplier>
     // Replays a stored stretch instead of following the live dish. Without
@@ -406,6 +410,14 @@ export default {
 
     // The synth publishes state over Server-Sent Events. If it is there, it
     // owns the audio and this page only draws.
+    // The document element carries the kiosk class, because hiding the pointer
+    // has to happen above the component's own markup. isObject is false until
+    // replay.json has loaded, so this is a watcher rather than a mounted hook.
+    markKiosk(on) {
+      const el = document.documentElement
+      if (el) el.classList.toggle('kiosk', !!on)
+    },
+
     connectSynth() {
       let es
       try { es = new EventSource(SYNTH_URL + '/state') } catch (e) { return }
@@ -746,6 +758,15 @@ export default {
   }
 }
 </script>
+
+<style>
+/* Not scoped: the pointer has to be hidden on the document itself, and a
+   scoped rule cannot reach <html>. The in-page `cursor: none` only covers
+   elements the page owns, so the compositor still had a pointer to draw
+   whenever it sat outside them -- and because the page is rotated 180 and the
+   pointer is drawn on top, unrotated, it appeared upside down on the object. */
+html.kiosk, html.kiosk body, html.kiosk * { cursor: none !important; }
+</style>
 
 <style scoped>
 .field {
