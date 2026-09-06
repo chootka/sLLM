@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-09-01 22:40 CEST. This is the only current-state document. If
+Updated 2026-09-06 04:30 CEST. This is the only current-state document. If
 another file disagrees with this one, this one is right.
 
 ## In plain language
@@ -91,15 +91,14 @@ those three files and is not required to record.
 
 | | |
 |---|---|
-| run | still tagged `20260827T210834Z-live`; step 8 ended 2026-08-29 00:00 |
-| dish | organism out since 2026-08-29 00:00. Nothing recording from the dish |
-| electrodes | flat since 2026-08-29 00:00: all three at -1.7 mV, 0.016 mV per sample, 90-200 s RMS 0.02-0.09 mV. Below every level ever recorded with electrodes in agar |
-| record | continuous 2026-08-27 23:08:34 to 2026-08-29 16:41:50, then paused by the user, resumed 2026-09-01 21:07:22. Not a fault |
-| services | `sllm-api` active since 2026-08-29 00:01:36, `sllm-loop` inactive |
-| recovery mode | ON since 2026-08-23, panel dark, LEDs blocked |
-| camera | working, 300 s timelapse |
-| lighting | rebuilt 2026-08-27 22:22. Frames stable at mean 117, 1.45% clipped |
-| matrix | unplugged |
+| run | `20260906T020300Z-live`, started 2026-09-06 04:03 CEST |
+| dish | organism in. Bridged ch1 2026-09-05 ~19:00 CEST |
+| electrodes | ch1 connected, per-sample noise 0.018-0.026 mV. ch0 0.13-0.51, ch2 0.24-1.73, both unbridged |
+| record | continuous. 36 min of 2026-09-06 03:27-04:03 sits under `readings/test/` after an unrecorded mode switch; 3.7 s gap at 04:15 for an API restart |
+| services | `sllm-api` active, `sllm-loop` and `sllm-demo` inactive |
+| recovery mode | ON since 2026-09-06 03:27 |
+| camera | working, 120 s timelapse since 2026-09-06 02:20 (was 300 s) |
+| matrix | unplugged. Showed pixels nothing commanded, 2026-09-06 03:2x. Replacement expected 2026-09-06 |
 
 ## Channel map
 
@@ -175,6 +174,25 @@ Board A rows are the source of truth.
   across the two implementations. Every number in the table above is from the
   one implementation.
 
+- **ch1 bridged 2026-09-05, and the line came with it.** Per-sample noise fell
+  from 0.10-0.18 to 0.018-0.026 mV between 18:50 and 19:10 CEST and held for
+  9 h. The 60-200 s peak on ch1 runs +1.96 to +3.22 dex at the p floor for
+  every hour from 19:00, period 106-116 s. ch0 and ch2 stay at +0.54 to +1.12
+  over the same hours. Visible events from the timelapse, in PDT: tube contacts
+  the blob 07:43, creeps onto the flake 09:13, electrode goes quiet 10:00-10:20,
+  flake engulfed 10:53. Conduction precedes feeding.
+
+  All three channels swing together 09:10-09:30 PDT, DC -3 mV to +4.3/+8.3/+3.4
+  and back by 10:50, ch1 about twice the others. Chamber temperature over that
+  window runs 22.26 -> 22.56 -> 22.40 C, which does not produce a per-sample
+  noise change. Unexplained. The rig was not handled.
+
+  Estimator caveat: run 2026-09-06 from a re-implementation of the
+  pre-registered statistic, in the session scratchpad, not in the repo. Compare
+  within this entry, not against dex recorded elsewhere in this file.
+
+  Period is 1.8-1.9 min here against 2.2-2.4 min in runs 6 and 8.
+
 ## Observed 2026-08-26 10:45, unconfirmed
 
 - No visible tubes anywhere in the dish. Organism alive on the reference island.
@@ -225,11 +243,32 @@ sclerotia formation, and growth away from the oat flake.
 4. **`/dev/media3` permission error** at `sllm-api` start. Harmless now, but a
    reboot that renumbers media nodes will present as a dead camera. Fix is a
    systemd drop-in with `DeviceAllow=char-media rw`; must be written by the user.
-5. **Deployed tree drifts.** Services run `/var/www/sllm`. A commit is not a
+5. **Matrix showing uncommanded pixels.** 2026-09-06 03:2x, during a dark
+   block with recovery off: one lit LED outside the barrier zone and a bright
+   white section. Nothing had commanded either -- `IMAGING_RED` is `False`, the
+   loop and demo were inactive, and the only commanded output was the barrier.
+   The panel has shorted on condensation before. Unplugged; replacement
+   expected. A new panel in a chamber at 95-100% RH fails the same way, so it
+   needs sealing or a lower setpoint.
+6. **Image archive thinned 1-in-10 to 2026-09-01.** 12 h264 segments written,
+   originals deleted except every 10th, 7193 frames -> 1801, 1.6 GB -> 752 MB.
+   Compression over the sparse pre-August record was 1.1:1, so those segments
+   cost their originals for no saving. `scripts/archive_video.py` now refuses to
+   thin a segment whose video exceeds 40% of its frames; the guard was written
+   after the backfill had run.
+7. **Run mode can change without a history entry.** `run.current()` auto-creates
+   a test run when `run.json` is unreadable. Observed 2026-09-06 03:27:02: the
+   live run became test with nothing in `runs.jsonl`. Now fixed to append, but
+   the cause of the unreadable file is unknown.
+8. **Deployed tree drifts.** Services run `/var/www/sllm`. A commit is not a
    deploy. Diff before assuming deployed behaviour.
 
 ## Next
 
+0. Replacement panel, sealed against condensation. Everything below waits on it.
+   Bench the thermal confound before committing 12 h: run the block schedule
+   with the bagged panel and check whether per-block mean temperature separates
+   light from dark. That is a void condition, and it is cheaper to find now.
 1. Light stimulus test, next run. Organism in, blue LED on for some minutes,
    off again, repeated, times recorded. This is the test that separates the
    organism from interface electrochemistry. Needs a light source; the matrix is
@@ -264,7 +303,7 @@ sclerotia formation, and growth away from the oat flake.
 | 6 | organism in | `live` | 24 h from bridge, 36 max | done, 2026-08-24 02:42 - 2026-08-26 21:15 |
 | 7 | organism removed | `test` | 2026-08-26 21:15 - 2026-08-27 21:47, 24.5 h, discard first 10 h | done, not yet analysed |
 | 8 | organism back in, same blobs | `live` | 24 h from bridge | done, 2026-08-27 23:08 - 2026-08-29 00:00. 21 h analysed post-bridge |
-| 9 | blue light stimulus, organism in | `live` | not scheduled | not run |
+| 9 | blue light stimulus, organism in | `live` | 12 h | pre-registered 2026-09-06; attempted 03:21:34 CEST, stopped 03:26:49 after two dark blocks, no blue block ran. Blocked on the panel |
 
 Steps 6 and 8: the 24 h counts from tube bridge, not inoculation. In run 6 the
 first bridge came 10.7 h after inoculation, so budget ~36 h wall clock for
