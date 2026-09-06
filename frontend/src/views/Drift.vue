@@ -765,7 +765,13 @@ export default {
    elements the page owns, so the compositor still had a pointer to draw
    whenever it sat outside them -- and because the page is rotated 180 and the
    pointer is drawn on top, unrotated, it appeared upside down on the object. */
-html.kiosk, html.kiosk body, html.kiosk * { cursor: none !important; }
+/* A 1x1 transparent GIF rather than `none`. cage draws a hardware cursor and
+   a client asking for no cursor at all is not always honoured; giving it a
+   real cursor surface with nothing in it leaves nothing to draw. `none` stays
+   as the fallback for anywhere that does honour it. */
+html.kiosk, html.kiosk body, html.kiosk * {
+  cursor: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") 0 0, none !important;
+}
 </style>
 
 <style scoped>
