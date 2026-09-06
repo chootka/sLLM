@@ -164,5 +164,5 @@ ADMIN_CREDENTIALS_FILE = os.path.join(DATA_DIR, 'admin_credentials.json')
 # chamber, `test` means there is not. Set it wrong and a real session lands in
 # the test subdirectory, so it gets corrected fast.
 #
-# Its one job today is to refuse `loop.py --demo`, which invents data and puts
-# real light on the panel.
+# It also routes the readings: `live` writes at the top level, every other mode
+# into its own subdirectory.

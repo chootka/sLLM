@@ -17,11 +17,11 @@
     </button>
     <div v-if="about" class="panel" @click.stop>
       <p><b>You are listening to</b> three oscillators tracking the voltage at
-      electrodes a slime mould has grown over, rising and falling about every
+      electrodes a slime {{ mould }} has grown over, rising and falling about every
       two minutes as its body pulses. There is one ring per
       oscillator: bright where the ripples line up, dark where they cancel.</p>
 
-      <p><b>A slime mould grows</b> in a covered dish. Four Ag/AgCl
+      <p><b>A slime {{ mould }} grows</b> in a covered dish. Four Ag/AgCl
       electrodes are set into the gel it creeps across. When it makes contact
       with an electrode, a very faint electrical signal appears there.</p>
 
@@ -29,7 +29,7 @@
       on each other. A strong signal pulls them onto the same note. A weak one
       lets them drift apart, and you hear them beat against each other. The
       sound drifts in sync with the expansion and contraction of the slime
-      mould's body.</p>
+      {{ mould }}'s body.</p>
 
       <dl class="now">
         <dt>playing</dt><dd>{{ sourceLine }}</dd>
@@ -47,6 +47,7 @@
 </template>
 
 <script>
+import { MOULD } from '../spelling'
 import axios from 'axios'
 
 const POLL_MS = 10000
@@ -119,6 +120,8 @@ export default {
   name: 'Drift',
   data() {
     return {
+      // Spelling follows the reader's locale; see spelling.js
+      mould: MOULD,
       running: false,
       err: '',
       about: false,

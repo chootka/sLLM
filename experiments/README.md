@@ -9,9 +9,13 @@ folder it belongs to, so months later a recording says what it was.
 ## Layout
 
     experiments/
-      electrodes/<name>.json     the dish wiring, shared between experiments
-      <experiment>/config.json   driver, electrode config, parameters
-      <experiment>/README.md     what it tests, in plain English
+      electrodes/<name>.json          the dish wiring, shared between experiments
+      calibration/<test>/             tests that establish the signal, not use it
+      <experiment>/config.json        driver, electrode config, parameters
+      <experiment>/README.md          what it tests, in plain English
+
+Calibration tests are named by their path -- `calibration/noise-floor` -- so a
+run tagged with one reads as what it is. See `calibration/README.md`.
 
 ## config.json
 
@@ -22,6 +26,7 @@ folder it belongs to, so months later a recording says what it was.
 | `electrodes` | a name under `electrodes/` |
 | `prompt` | prompt variant from `llm/filters/prompts.md`, for `loop` only |
 | `params` | driver arguments |
+| `establishes` | what a calibration test settles. Null for experiments that use the signal rather than establish it |
 | `preregistered` | where the pre-registration is written, if there is one |
 
 ## Runs

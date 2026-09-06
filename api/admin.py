@@ -76,12 +76,10 @@ admin = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 # Units and verbs are whitelisted fixed strings; subprocess takes an argv list,
 # so nothing from a request reaches a shell.
-# The two units are mutually exclusive -- both drive the panel, so starting
-# either stops the other. `demo` invents data, and interleaving it with a real
-# session would leave no way to tell which turn caused which light.
+# One unit drives the panel. Kept as a mapping rather than a bare constant so
+# a second driver can be added without the routes changing shape.
 UNITS = {
     'loop': 'sllm-loop.service',
-    'demo': 'sllm-demo.service',
 }
 UNIT = UNITS['loop']
 ACTIONS = ('start', 'stop')
@@ -536,7 +534,6 @@ def register(app, config):
     # No separate occupancy control: the recording mode says it. test means
     # nothing is in the chamber, live means something is, and getting the mode
     # wrong has a visible consequence so it stays accurate.
-    # llm/loop.py refuses --demo while the mode is live.
 
     @admin.route('/run', methods=['GET'])
     @guard
@@ -565,19 +562,6 @@ def register(app, config):
         note = body.get('note', '') or ''
         if mode not in run_state.MODES:
             return jsonify({"error": f"mode must be one of {list(run_state.MODES)}"}), 400
-
-        # `live` and a running demo cannot both be true, and the demo interlock
-        # only runs at start. Refused rather than stopping the demo: which of
-        # the two is wrong depends on whether the organism is actually in there,
-        # which only a human can see.
-        if mode == 'live':
-            demo_running, _ = unit_state(UNITS['demo'])
-            if demo_running:
-                return jsonify({
-                    "error": "stop demo mode first — it is driving invented "
-                             "light on the panel, and live means the chamber "
-                             "is occupied"
-                }), 409
 
         try:
             new_run = run_state.switch(config, mode, note)
@@ -678,15 +662,8 @@ def register(app, config):
         unit = UNITS[which]
 
         # Checked here as well as in the page, since this endpoint is reachable
-        # without it. Do NOT switch the mode to `test` here instead -- that
-        # defeats the interlock, because loop.py checks the mode after it has
-        # already been changed. A demo can only start from `test` anyway.
-        #
-        # Before the stop-the-other-unit step below, so a refusal does not leave
-        # the loop stopped for a demo that never started.
-        #
-        # Recovery means nothing reaches the dish. loop.py refuses on its own;
-        # the demo has no such check and would run against a panel held dark.
+        # without it. Recovery means nothing reaches the dish; loop.py refuses
+        # on its own, and a refusal here keeps the reason legible.
         if action == 'start':
             import recovery as recovery_state
 
@@ -697,20 +674,9 @@ def register(app, config):
                              "being held dark"
                 }), 409
 
-        if action == 'start' and which == 'demo':
-            import run as run_state
-
-            if run_state.current(config).get('mode') == 'live':
-                return jsonify({
-                    "error": "switch data acquisition to test first — live "
-                             "means the chamber is occupied"
-                }), 409
-
         try:
-            # Starting either unit stops the other first. They drive the same
-            # panel, and demo mode invents its data -- running both would mix
-            # fabricated stimulus into a real session with no way to separate
-            # them afterwards.
+            # Starting a unit stops any other panel driver first: two drivers
+            # on one panel leaves no way to say which turn caused which light.
             if action == 'start':
                 for other, other_unit in UNITS.items():
                     if other == which:

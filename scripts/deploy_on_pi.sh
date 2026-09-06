@@ -30,7 +30,7 @@
 # 3. It does not prompt. The old version had an interactive `read -p` for the
 #    nginx reload, which hangs any unattended run.
 #
-# It also never starts or restarts sllm-loop or sllm-demo. Putting light into a
+# It also never starts or restarts sllm-loop. Putting light into a
 # chamber is a deliberate act, not a side effect of deploying.
 
 set -euo pipefail
@@ -294,7 +294,7 @@ else
                 echo "      zone included. Restart it deliberately:"
                 echo "        sudo systemctl restart sllm-matrixd"
                 ;;
-            sllm-loop.service|sllm-demo.service)
+            sllm-loop.service)
                 echo "   note: $unit changed; it takes effect the next time you"
                 echo "      start it. Neither is started by a deploy."
                 ;;
@@ -310,8 +310,8 @@ if $DRY_RUN; then
     exit 0
 fi
 
-systemctl is-active sllm-matrixd sllm-api sllm-loop sllm-demo \
-    | paste -d' ' <(printf '%s\n' matrixd api loop demo) - \
+systemctl is-active sllm-matrixd sllm-api sllm-loop \
+    | paste -d' ' <(printf '%s\n' matrixd api loop) - \
     | sed 's/^/   /'
 
 echo

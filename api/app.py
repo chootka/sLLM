@@ -618,8 +618,8 @@ def get_status():
     env = environment.snapshot()
 
     # Public on purpose. Anyone looking at the dashboard should be able to see
-    # that what they are watching is a demo rather than the organism -- and
-    # more importantly, so should anyone who later finds a screenshot of it.
+    # whether what they are watching is a real session -- and more importantly,
+    # so should anyone who later finds a screenshot of it.
     try:
         import run as run_state
 
@@ -863,45 +863,44 @@ def generate_stream():
 # One folder per experiment under experiments/, one file per dish wiring under
 # experiments/electrodes/. See experiments/README.md.
 
-EXPERIMENTS_DIR = os.path.join(config.PROJECT_ROOT, 'experiments')
-
-
-def _read_json(path):
-    try:
-        with open(path, encoding='utf-8') as handle:
-            return json.load(handle)
-    except (OSError, ValueError):
-        return None
+sys.path.insert(0, config.PROJECT_ROOT)
 
 
 @app.route('/api/experiments', methods=['GET'])
 def list_experiments():
-    """Every experiment definition and every electrode configuration."""
-    experiments = []
-    electrodes = []
-    try:
-        for name in sorted(os.listdir(EXPERIMENTS_DIR)):
-            folder = os.path.join(EXPERIMENTS_DIR, name)
-            if name == 'electrodes':
-                for leaf in sorted(os.listdir(folder)):
-                    if not leaf.endswith('.json'):
-                        continue
-                    found = _read_json(os.path.join(folder, leaf))
-                    if found:
-                        electrodes.append(found)
-                continue
-            if not os.path.isdir(folder):
-                continue
-            found = _read_json(os.path.join(folder, 'config.json'))
-            if not found:
-                continue
-            readme = os.path.join(folder, 'README.md')
-            found['has_readme'] = os.path.exists(readme)
-            experiments.append(found)
-    except OSError as exc:
-        return jsonify({"error": str(exc)}), 500
+    """Every experiment definition and every electrode configuration.
 
-    return jsonify({"experiments": experiments, "electrodes": electrodes})
+    Walked by the same loader the drivers use, so the page cannot show a set of
+    experiments the launcher would not accept.
+    """
+    import experiments as experiments_module
+
+    found = []
+    for name in experiments_module.names():
+        try:
+            spec = experiments_module.load(name)
+        except experiments_module.UnknownExperiment as exc:
+            found.append({"name": name, "error": str(exc)})
+            continue
+        folder = os.path.join(config.PROJECT_ROOT, 'experiments', *name.split('/'))
+        spec['has_readme'] = os.path.exists(os.path.join(folder, 'README.md'))
+        found.append(spec)
+
+    wiring = []
+    directory = os.path.join(config.PROJECT_ROOT, 'experiments', 'electrodes')
+    try:
+        for leaf in sorted(os.listdir(directory)):
+            if not leaf.endswith('.json'):
+                continue
+            try:
+                with open(os.path.join(directory, leaf), encoding='utf-8') as handle:
+                    wiring.append(json.load(handle))
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        pass
+
+    return jsonify({"experiments": found, "electrodes": wiring})
 
 
 @app.route('/api/runs', methods=['GET'])

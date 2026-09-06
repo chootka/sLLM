@@ -50,20 +50,6 @@
                   @click="setUnit('loop', 'start')">running</button>
         </div>
 
-        <hr class="admin-rule" />
-
-        <p class="admin-label">Demo mode</p>
-        <div class="pill" :class="{ busy }">
-          <button :class="{ active: !demoActive }" :disabled="busy"
-                  @click="setUnit('demo', 'stop')">stopped</button>
-          <button :class="{ active: demoActive, demo: demoActive }"
-                  :disabled="busy || mode === 'live' || recovery.active"
-                  @click="setUnit('demo', 'start')">running</button>
-        </div>
-        <p class="admin-hint">
-          Demo invents data and drives the real panel. Model and Demo mode
-          toggle each other. Unavailable while recording live data.
-        </p>
 
         <hr class="admin-rule" />
 
@@ -72,11 +58,10 @@
           <button :class="{ active: mode === 'test' }" :disabled="busy"
                   @click="setMode('test')">test</button>
           <button :class="{ active: mode === 'live', live: mode === 'live' }"
-                  :disabled="busy || demoActive" @click="setMode('live')">live</button>
+                  :disabled="busy" @click="setMode('live')">live</button>
         </div>
         <p class="admin-hint">
-          Test data is written to its own directory. While live is
-          selected, demo mode is blocked.
+          Test data is written to its own directory.
         </p>
 
         <hr class="admin-rule" />
@@ -133,7 +118,6 @@ export default {
       enrolled: false,
       authenticated: false,
       loopActive: false,
-      demoActive: false,
       recovery: { active: false, dark: false, since: null },
       mode: '',
       modes: [],
@@ -280,7 +264,6 @@ export default {
         }
         const data = await response.json()
         this.loopActive = data.units ? data.units.loop.active : data.active
-        this.demoActive = data.units ? data.units.demo.active : false
         await this.refreshRecovery()
         await this.refreshRun()
         await this.refreshCameras()
@@ -313,7 +296,6 @@ export default {
         // stale the moment this returns.
         if (data.units) {
           this.loopActive = data.units.loop.active
-          this.demoActive = data.units.demo.active
         }
       } catch (e) {
         this.error = e.message || 'Could not switch recovery.'
@@ -403,10 +385,9 @@ export default {
         const data = await this.post('loop', { action, unit }, true)
         if (data.units) {
           this.loopActive = data.units.loop.active
-          this.demoActive = data.units.demo.active
         }
         // No notice: the pill already shows which side is active, and a
-        // line saying "demo inactive" underneath it is the same fact twice.
+        // line repeating the same fact underneath it is it twice.
       } catch (e) {
         this.error = e.message || `Could not ${action} ${unit}.`
       } finally {
@@ -474,13 +455,12 @@ export default {
   background: #1a1a1a; color: #777; font-size: 0.8rem; }
 .pill button + button { border-left: 1px solid #444; }
 .pill button:hover:not(:disabled):not(.active) { background: #242424; color: #bbb; }
-/* Selected-but-idle is neutral: only a running loop, a running demo or
+/* Selected-but-idle is neutral: only a running loop or
    live acquisition earns the highlight, so the panel reads at a glance. */
 .pill button.active { background: #262626; color: #b4b4b4; }
 .pill button.active.live,
 /* Demo mode has to stay obvious without a colour to shout in: it gets the
    full inversion, which nothing else in the panel uses. */
-.pill button.active.demo,
 /* Recovery is the installation deliberately doing nothing, which is otherwise
    indistinguishable from it being broken. It gets the same full inversion. */
 .pill button.active.recovery { background: #ededed; color: #0a0a0a; }

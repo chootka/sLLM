@@ -11,5 +11,8 @@
     "model": "qwen2.5:14b"
   },
   "preregistered": null,
-  "status": "in development"
+  "status": "in development",
+  "establishes": null,
+  "mode": "live",
+  "recovery": false
 }

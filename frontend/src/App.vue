@@ -17,7 +17,7 @@
     <div class="container">
       <div class="masthead">
         <div class="masthead-left">
-          <h1>Slime Mould Monitor</h1>
+          <h1>Slime {{ mouldCap }} Monitor</h1>
           <span class="dev-note">/// UNDER DEVELOPMENT ///</span>
         </div>
         <!-- Chamber conditions live here rather than in a panel of their own:
@@ -107,7 +107,7 @@
               key="livestream"
               :src="streamUrl"
               class="timelapse-image"
-              alt="Live slime mould stream"
+              :alt="`Live slime ${mould} stream`"
               @error="imageError = true"
               @load="imageError = false"
             >
@@ -146,7 +146,7 @@
               :key="currentImage"
               :src="currentImage"
               class="timelapse-image"
-              alt="Slime mould timelapse"
+              :alt="`Slime ${mould} timelapse`"
               @error="imageError = true"
               @load="imageError = false"
             >
@@ -333,6 +333,7 @@
 
 <script>
 import { markRaw } from 'vue'
+import { MOULD, MOULD_CAP } from './spelling'
 import { io } from 'socket.io-client'
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
@@ -451,6 +452,9 @@ export default {
       totalImagesOnServer: 0, // Full archive size reported by /api/images
       cameraAvailable: null, // null until /api/status reports; false hides livestream
       viewModeChosenByUser: false, // Don't override an explicit toggle
+      // Spelling follows the reader's locale; see spelling.js
+      mould: MOULD,
+      mouldCap: MOULD_CAP,
       lightboxOpen: false, // Timelapse frame enlarged over the page
       // Encoded timelapse. `video` is recent.json: fps, frame count and the
       // capture time of every frame, which is what the overlay reads.
