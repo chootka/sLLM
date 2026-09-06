@@ -145,7 +145,7 @@ rsync -a --delete "${RSYNC_DRY[@]}" \
 # because the loop reads the CSV the *service* writes, under $DEPLOY_DIR/data.
 # Run from ~/sllm it resolves its own empty data directory and reports 0
 # samples, which looks exactly like a dead ADC and is not.
-for component in gpio llm scripts processing; do
+for component in gpio llm scripts processing experiments; do
     mkdir -p "$DEPLOY_DIR/$component"
     # processing/ also holds the archived Processing sketches, ~570 KB of .pde
     # and PNG that the service never reads. Only the DSP module is deployed.

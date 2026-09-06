@@ -53,7 +53,7 @@ def _history_path(config):
     return os.path.join(config.DATA_DIR, 'runs.jsonl')
 
 
-def _new_run(mode, note=''):
+def _new_run(mode, note='', experiment=None, electrodes=None):
     now = time.time()
     stamp = datetime.fromtimestamp(now, timezone.utc)
     return {
@@ -62,6 +62,11 @@ def _new_run(mode, note=''):
         'started_at': now,
         'started_at_iso': stamp.isoformat(),
         'note': note,
+        # Which folder under experiments/ this run belongs to, and which dish
+        # wiring it assumed. Without these a recording months old says what it
+        # measured and nothing about what it was measuring.
+        'experiment': experiment,
+        'electrodes': electrodes,
     }
 
 
@@ -81,11 +86,20 @@ def current(config):
     except (OSError, ValueError):
         pass
 
-    run = _new_run(DEFAULT_MODE, note='auto-created')
+    # run.json was missing or unreadable. Recording continues, but the mode
+    # has just changed underneath whoever was watching, so it goes in the
+    # history like any other boundary -- an unrecorded mode change is exactly
+    # the thing runs.jsonl exists to prevent.
+    run = _new_run(DEFAULT_MODE, note='auto-created: run.json unreadable')
     try:
         _write(config, run)
     except OSError:
         pass  # A read-only moment must not stop the recorders.
+    try:
+        with open(_history_path(config), 'a', encoding='utf-8') as handle:
+            handle.write(json.dumps(run) + '\n')
+    except OSError:
+        pass
     return run
 
 
@@ -98,14 +112,22 @@ def _write(config, run):
     os.replace(tmp, path)
 
 
-def switch(config, mode, note=''):
+def switch(config, mode, note='', experiment=None, electrodes=None):
     """End the current run and start one in `mode`. Returns the new run."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
 
     with _lock:
         previous = current(config)
-        if previous['mode'] == mode:
+        # Carried forward unless the caller names new ones: a mode switch is
+        # not a change of dish.
+        if experiment is None:
+            experiment = previous.get('experiment')
+        if electrodes is None:
+            electrodes = previous.get('electrodes')
+        if (previous['mode'] == mode
+                and previous.get('experiment') == experiment
+                and previous.get('electrodes') == electrodes):
             # Already there. Do not manufacture a run boundary that did not
             # happen -- a spurious boundary is itself misleading history.
             return previous
@@ -119,7 +141,7 @@ def switch(config, mode, note=''):
         except OSError:
             pass
 
-        run = _new_run(mode, note)
+        run = _new_run(mode, note, experiment, electrodes)
         _write(config, run)
         return run
 

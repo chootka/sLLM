@@ -859,6 +859,74 @@ def generate_stream():
         time.sleep(max(0.0, interval - (time.monotonic() - started)))
 
 
+# --- experiments ------------------------------------------------------------
+# One folder per experiment under experiments/, one file per dish wiring under
+# experiments/electrodes/. See experiments/README.md.
+
+EXPERIMENTS_DIR = os.path.join(config.PROJECT_ROOT, 'experiments')
+
+
+def _read_json(path):
+    try:
+        with open(path, encoding='utf-8') as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+@app.route('/api/experiments', methods=['GET'])
+def list_experiments():
+    """Every experiment definition and every electrode configuration."""
+    experiments = []
+    electrodes = []
+    try:
+        for name in sorted(os.listdir(EXPERIMENTS_DIR)):
+            folder = os.path.join(EXPERIMENTS_DIR, name)
+            if name == 'electrodes':
+                for leaf in sorted(os.listdir(folder)):
+                    if not leaf.endswith('.json'):
+                        continue
+                    found = _read_json(os.path.join(folder, leaf))
+                    if found:
+                        electrodes.append(found)
+                continue
+            if not os.path.isdir(folder):
+                continue
+            found = _read_json(os.path.join(folder, 'config.json'))
+            if not found:
+                continue
+            readme = os.path.join(folder, 'README.md')
+            found['has_readme'] = os.path.exists(readme)
+            experiments.append(found)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"experiments": experiments, "electrodes": electrodes})
+
+
+@app.route('/api/runs', methods=['GET'])
+def list_runs():
+    """Run history, newest first, with the dish each one used.
+
+    Readings and turn logs both carry run_id, so this is the index that says
+    what any of those rows were recording.
+    """
+    import run as run_state
+
+    try:
+        limit = min(500, max(1, int(request.args.get('limit', 50))))
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    past = run_state.history(config, limit=limit)
+    now = run_state.current(config)
+    runs = [dict(entry) for entry in past]
+    if not runs or runs[-1].get('id') != now.get('id'):
+        runs.append(dict(now))
+    runs.reverse()
+    return jsonify({"runs": runs, "current": now.get('id')})
+
+
 @app.route('/api/turns', methods=['GET'])
 def get_turns():
     """The model's turn records, newest last, for the /logs page.

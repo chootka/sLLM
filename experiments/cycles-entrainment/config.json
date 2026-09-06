@@ -1,0 +1,15 @@
+{
+  "name": "cycles-entrainment",
+  "driver": "loop",
+  "electrodes": "three-radial",
+  "prompt": "cycles",
+  "params": {
+    "script": "llm/loop.py",
+    "window_s": 1800,
+    "sham_rate": 0.25,
+    "min_gap_s": 60,
+    "model": "qwen2.5:14b"
+  },
+  "preregistered": null,
+  "status": "in development"
+}
