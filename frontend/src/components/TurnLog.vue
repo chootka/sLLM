@@ -8,7 +8,10 @@
         </span>
         <span class="count">{{ visible.length }} turns</span>
         <label class="follow">
-          <input type="checkbox" v-model="allRuns" /> all runs
+          <input type="checkbox" v-model="dryRun" @change="reload" /> dry run
+        </label>
+        <label class="follow">
+          <input type="checkbox" v-model="allRuns" @change="reload" /> all runs
         </label>
         <label class="follow">
           <input type="checkbox" v-model="follow" /> follow
@@ -17,17 +20,22 @@
       </div>
     </header>
 
+    <!-- Dry and replay turns are read from logs/replay/ and never mixed with
+         the real record, so the page has to say which one it is showing. -->
+    <p v-if="dryRun" class="turnlog-dry">
+      {{ embedded
+        ? 'Dry run — no action reaches the panel; not part of the record.'
+        : 'Dry run — the model is taking real turns on live readings, but no action reaches the panel. These turns are not part of the experimental record.' }}
+    </p>
+
     <p v-if="error" class="turnlog-error">{{ error }}</p>
     <p v-if="!visible.length && !error" class="turnlog-empty">
-      No turns recorded yet. The loop writes one record per turn, including
-      turns where it chose to do nothing.
+      {{ dryRun
+        ? 'No dry-run turns yet. Start the loop with --dry-run; the first turn lands once its window fills.'
+        : 'No turns recorded yet. The loop writes one record per turn, including turns where it chose to do nothing.' }}
     </p>
 
     <div class="turnlog-scroll" ref="scroller">
-      <p v-if="!allRuns && hidden" class="turnlog-prior">
-        {{ hidden }} turns from earlier runs hidden
-      </p>
-
       <article v-for="t in visible" :key="t.datetime + '-' + t.turn" class="turn">
         <div class="turn-head">
           <time>{{ stamp(t.datetime) }}</time>
@@ -74,10 +82,16 @@ export default {
     // Following is always on when embedded -- there is no room for a toggle,
     // and a panel that does not track the newest turn is just a stale box.
     embedded: { type: Boolean, default: false },
+    // Pin the log to one run instead of whichever is recording. The archive
+    // passes a past run's id; the dashboard and /logs leave it empty and get
+    // the current one from the server.
+    run: { type: String, default: '' },
   },
   data() {
     return {
       turns: [],
+      dryRun: false,
+      sourcePicked: false,
       allRuns: false,
       loopRunning: null,
       error: '',
@@ -94,32 +108,58 @@ export default {
   beforeUnmount() {
     if (this.timer) clearInterval(this.timer)
   },
+  watch: {
+    run() {
+      this.reload()
+    },
+  },
   computed: {
-    // Each run numbers its turns from 0, so the last turn 0 in the list is
-    // where the current run started. Without this every run bleeds into the
-    // previous one and the page is unreadable after a few days.
-    runStart() {
-      for (let i = this.turns.length - 1; i >= 0; i--) {
-        if (this.turns[i].turn === 0) return i
-      }
-      return 0
-    },
+    // The server filters to one run, so there is nothing left to slice here.
     visible() {
-      return this.allRuns ? this.turns : this.turns.slice(this.runStart)
+      return this.turns
     },
-    hidden() {
-      return this.allRuns ? 0 : this.runStart
+    runParam() {
+      if (this.run) return `&run=${encodeURIComponent(this.run)}`
+      return this.allRuns ? '&run=all' : ''
     },
   },
 
   methods: {
+    // The live record keeps its August turns forever, so "newest turn wins"
+    // rather than "live unless empty": a dry run that is producing turns now
+    // is what the page should be showing. Chosen once; the checkbox on /logs
+    // overrides it and reload() marks the choice as made.
+    async newest(source) {
+      try {
+        const q = source === 'replay' ? '&source=replay' : ''
+        const r = await fetch(`${this.apiUrl}/api/turns?limit=1${q}${this.runParam}`)
+        if (!r.ok) return 0
+        const d = await r.json()
+        if (!d.turns.length) return 0
+        return Date.parse(d.turns[d.turns.length - 1].datetime) || 0
+      } catch (e) {
+        return 0
+      }
+    },
+
+    async pickSource() {
+      this.sourcePicked = true
+      const [live, replay] = await Promise.all([
+        this.newest('live'), this.newest('replay'),
+      ])
+      this.dryRun = replay > live
+    },
+
     async load() {
+      if (!this.sourcePicked) await this.pickSource()
       try {
         // `after` fetches only what is new once the first page is loaded.
         const last = this.turns.length
           ? `&after=${encodeURIComponent(this.turns[this.turns.length - 1].datetime)}`
           : ''
-        const response = await fetch(`${this.apiUrl}/api/turns?limit=300${last}`)
+        const source = this.dryRun ? '&source=replay' : ''
+        const response = await fetch(
+          `${this.apiUrl}/api/turns?limit=300${source}${this.runParam}${last}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
         this.loopRunning = data.loop_running
@@ -131,6 +171,15 @@ export default {
       } catch (e) {
         this.error = `Could not load turns: ${e.message}`
       }
+    },
+    // Changing either filter is not a refresh: the two directories are separate
+    // records and concatenating them is the one thing this must not do. The
+    // source is picked again too, because "all runs" changes which is newer.
+    reload() {
+      this.sourcePicked = false
+      this.turns = []
+      this.error = ''
+      this.load()
     },
     toBottom() {
       const el = this.$refs.scroller
@@ -216,6 +265,13 @@ export default {
   border-left: 2px dashed var(--rule-strong); padding-left: 0.5rem; }
 .turn-state { display: flex; flex-wrap: wrap; gap: 0.9rem;
   font-size: 0.68rem; color: var(--ink-faint); margin-top: 0.35rem; }
+.turnlog-dry {
+  font-size: .85rem;
+  opacity: .75;
+  border-left: 2px solid currentColor;
+  padding-left: .6rem;
+  margin: .5rem 0;
+}
 .turnlog-error { color: var(--ink); border-left: 2px solid var(--ink);
   padding-left: 0.5rem; }
 .turnlog-empty { color: var(--ink-faint); }

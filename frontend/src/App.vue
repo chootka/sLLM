@@ -8,6 +8,10 @@
     <AdminPanel :api-url="apiUrl" />
   </div>
 
+  <!-- /runs is the public archive: every past dish, its timelapse and its
+       turns, addressed by run id. -->
+  <RunArchive v-else-if="isRunsRoute" :api-url="apiUrl" />
+
   <!-- /viz is deliberately not wired into the dashboard yet. The signal it
        draws is synthetic and the electrode sites are inferred, so it earns a
        place next to the real readings only once both are measured. -->
@@ -19,6 +23,9 @@
         <div class="masthead-left">
           <h1>Slime {{ mouldCap }} Monitor</h1>
           <span class="dev-note">/// UNDER DEVELOPMENT ///</span>
+          <!-- The dashboard is whichever run is recording. /runs is all of
+               them; without this the page can only be reached by typing it. -->
+          <a href="/runs" class="masthead-nav">Past runs &rarr;</a>
         </div>
         <!-- Chamber conditions live here rather than in a panel of their own:
              two numbers that move on the scale of hours did not need a third
@@ -345,6 +352,7 @@ import { format as formatDate } from 'date-fns'
 import AdminPanel from './components/AdminPanel.vue'
 import TurnLog from './components/TurnLog.vue'
 import PhaseLock from './components/PhaseLock.vue'
+import RunArchive from './components/RunArchive.vue'
 import SlimeViz from './components/SlimeViz.vue'
 
 Chart.register(...registerables)
@@ -377,7 +385,7 @@ Chart.defaults.color = '#8f8f8f'
 
 export default {
   name: 'App',
-  components: { AdminPanel, TurnLog, SlimeViz, PhaseLock },
+  components: { AdminPanel, TurnLog, SlimeViz, PhaseLock, RunArchive },
   data() {
     return {
       // App version - increment on each deployment
@@ -390,6 +398,7 @@ export default {
       theme: localStorage.getItem('sllm-theme') === 'light' ? 'light' : 'dark',
       isLogsRoute: window.location.pathname.replace(/\/+$/, '') === '/logs',
       isVizRoute: window.location.pathname.replace(/\/+$/, '') === '/viz',
+      isRunsRoute: window.location.pathname.replace(/\/+$/, '') === '/runs',
       socket: null,
       
       // Electrical readings
@@ -611,6 +620,12 @@ export default {
     // at. TurnLog polls /api/turns on its own.
     if (this.isLogsRoute) {
       console.log('📜 Log view')
+      return
+    }
+
+    // Same for /runs: RunArchive fetches its own index and detail.
+    if (this.isRunsRoute) {
+      console.log('🗄 Run archive')
       return
     }
 

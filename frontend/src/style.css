@@ -1,3 +1,54 @@
+/* IBM Plex Sans for buttons and labels. One variable file per subset covers
+   400-600, so the weight range is declared rather than two static faces. */
+@font-face {
+    font-family: 'IBM Plex Sans';
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('/fonts/ibmplexsans-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+        U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'IBM Plex Sans';
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('/fonts/ibmplexsans-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Amarante, self-hosted rather than linked from Google. The exhibit ships as a
+   sealed player and a webfont fetched over the network is a blank heading the
+   moment it has none. Two subsets, latin-ext first so latin wins for ASCII. */
+@font-face {
+    font-family: 'Amarante';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/amarante-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+        U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Amarante';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/amarante-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* Monochrome. White ink on black paper, the way the plotter prints read: no
    hue anywhere, weight and lightness carry every distinction that colour used
    to. Nothing here is rounded and nothing casts a shadow -- the panels are
@@ -25,6 +76,37 @@
     --rule-strong: rgba(255, 255, 255, 0.55);
     --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas,
         'Liberation Mono', monospace;
+    /* Headings only. Amarante has one weight and no italic, so anything that
+       needs bold or long-form reading stays on --mono. */
+    --display: 'Amarante', Georgia, 'Times New Roman', serif;
+    /* Interface chrome: anything the reader operates or that names a control.
+       Readings, timestamps and the model's text stay on --mono, where the
+       tabular figures are. */
+    --ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* Every heading, including the ones inside scoped components: a scoped style
+   adds an attribute selector but does not stop a bare element rule applying. */
+h1, h2, h3 {
+    font-family: var(--display);
+}
+
+/* Buttons and labels, including inside scoped components -- a scoped style
+   adds an attribute selector but does not stop a bare element rule applying.
+   `button` and `select` do not inherit font by default, so this is also what
+   stops them falling back to the browser's own UI face. */
+button,
+select,
+option,
+label,
+legend,
+.tag,
+.env-label,
+.admin-label,
+.admin-hint,
+.masthead-nav,
+.dev-note {
+    font-family: var(--ui);
 }
 
 /* Light mode inverts paper and ink and nothing else. The wire colours and the
@@ -117,6 +199,31 @@ body {
     gap: 16px;
 }
 
+/* A button, not a quiet link: the archive is the only route to every past
+   run and nobody finds it if it reads as fine print. Matches .theme-toggle's
+   border and invert-on-hover so it belongs to the same set of controls. */
+.masthead-nav {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--rule-strong);
+    padding: 6px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.15s linear, color 0.15s linear;
+}
+
+.masthead-nav:hover,
+.masthead-nav:focus-visible {
+    background: var(--ink);
+    color: var(--paper);
+}
+
 h1 {
     color: var(--ink);
     font-size: 1.05rem;
@@ -124,6 +231,14 @@ h1 {
     letter-spacing: 0.18em;
     text-transform: uppercase;
     margin: 0;
+}
+
+/* The masthead title only. /logs and /runs set their own, and a bare h1 rule
+   at this size would drag those with it. Tracking comes down as the size goes
+   up: 0.18em is set for small caps and reads as gaps at 2rem. */
+.masthead-left h1 {
+    font-size: 2rem;
+    letter-spacing: 0.08em;
 }
 
 /* Sits beside the title while the instrument is not yet trustworthy: the
@@ -189,9 +304,11 @@ h1 {
 .panel h2 {
     margin: 0 0 14px 0;
     color: var(--ink);
-    font-size: 0.68rem;
+    /* Amarante carries more weight at size than the old mono did, so the
+       tracking comes down as the size goes up or the caps read as spaced-out. */
+    font-size: 1rem;
     font-weight: 500;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 
@@ -751,6 +868,10 @@ body.bare {
 
     h1 {
         font-size: 0.85rem;
+    }
+
+    .masthead-left h1 {
+        font-size: 1.3rem;
     }
 
     /* The masthead stacks on narrow screens, so the note wraps under the

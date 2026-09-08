@@ -6,7 +6,7 @@
   "params": {
     "script": "llm/loop.py",
     "window_s": 1800,
-    "sham_rate": 0.25,
+    "sham_rate": 0.0,
     "min_gap_s": 60,
     "model": "qwen2.5:14b"
   },

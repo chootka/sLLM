@@ -25,11 +25,13 @@ import math
 
 import numpy as np
 
-# Contraction band to search for a period when none is given. Wide enough for
-# the 30-40 min regime these islands produce and the shorter one the short-tube
-# literature reports, and no wider -- drift below it would otherwise win.
-PERIOD_MIN_S = 30.0
-PERIOD_MAX_S = 3600.0
+# Contraction band to search for a period when none is given. Narrowed
+# 2026-09-07 to the band this rig actually produces: measured lines run
+# 106-164 s across runs 6, 8 and the 2026-09-05 window. The 30-40 min regime
+# the wider band was sized for is established as absent, and including it let
+# slow drift win the period estimate.
+PERIOD_MIN_S = 60.0
+PERIOD_MAX_S = 300.0
 MIN_EVENTS = 8
 
 
