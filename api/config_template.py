@@ -103,6 +103,12 @@ CAMERA_FOCUS_DIOPTRES = None
 DEFAULT_STIMULUS_ZONE = 4
 MAX_STIMULUS_DURATION = 300    # seconds; a manual stimulus always self-cancels
 
+# Rolling cap on the LLM loop's light, in intensity-seconds per hour. Step 8's
+# protocol delivered 1800 (0.50 continuous for 60 min of each pair); this is a
+# sixth of that, about 8% duty at full intensity. MAX_STIMULUS_DURATION bounds
+# one stimulus and nothing bounded the sum until this.
+MAX_DOSE_PER_HOUR = 300.0
+
 # --- live preview -----------------------------------------------------------
 # /api/stream fps. Low on purpose: every frame competes with the timelapse for
 # the capture lock.

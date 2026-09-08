@@ -84,6 +84,7 @@ import recovery as recovery_state  # noqa: E402
 import run as run_state  # noqa: E402
 
 from prompts import load_prompts  # noqa: E402
+import prediction  # noqa: E402
 
 
 class LiveSource:
@@ -350,6 +351,41 @@ def wait_for_turn(source, turn, previous, window_s, args, requested_s):
             return 'state'
 
 
+# Reference period for metered budgets. The established line on this rig runs
+# 106-164 s; 130 s sits in the middle and is the point where metering returns
+# the configured defaults unchanged.
+METER_REFERENCE_S = 130.0
+METER_MIN = 0.25
+METER_MAX = 4.0
+
+
+def metered_budget(period_s, base_ctx, base_history):
+    """Scale the model's context and memory by the organism's current period.
+
+    A faster organism buys a bigger budget, a slower one shrinks it. Blue light
+    is assumed to lengthen the period, so every pulse the model orders costs it
+    capacity -- it can only think at full width by leaving the organism alone.
+    The model is not told this; it has to read it off the telemetry history.
+
+    Direction chosen 2026-09-08. The inverse mapping was built first and is the
+    one to restore if the light-to-period assumption turns out backwards.
+
+    Clamped either side so a bad period estimate cannot ask Ollama for a
+    context it cannot allocate or starve the model to nothing.
+
+    Returns (num_ctx, history_turns), either unchanged if there is no period or
+    no configured base to scale.
+    """
+    if not period_s:
+        return base_ctx, base_history
+    scale = min(METER_MAX, max(METER_MIN, METER_REFERENCE_S / period_s))
+    ctx = int(base_ctx * scale) if base_ctx else base_ctx
+    # 0 means uncapped and -1 means none; neither is a quantity to scale.
+    history = (max(1, int(round(base_history * scale)))
+               if base_history and base_history > 0 else base_history)
+    return ctx, history
+
+
 def measured_period(state):
     """Median contraction period across channels that reported one, or None.
 
@@ -444,6 +480,77 @@ def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
         action["duration_cycles"] = float(light['duration_cycles'])
         action["period_s_at_request"] = period_s
     return action, None
+
+
+class DoseLedger:
+    """Rolling cap on how much light the model can put on the organism.
+
+    Dose is intensity x seconds, summed over the last hour. Nothing else in the
+    rig bounds cumulative exposure: MAX_STIMULUS_DURATION caps one stimulus, so
+    a model that asks for the maximum every turn is inside every existing limit
+    and still floods the dish.
+
+    The cap trims the duration rather than refusing the action, and both the
+    asked-for and the allowed value are logged. A refusal would leave the trace
+    reasoning about a stimulus that never happened; a trim leaves a record of
+    the difference.
+
+    Spent only when a stimulus is actually applied. A sham turn lights nothing
+    and costs nothing.
+    """
+
+    WINDOW_S = 3600.0
+
+    def __init__(self, budget):
+        self.budget = float(budget)
+        self.entries = []
+
+    def _prune(self, now):
+        cutoff = now - self.WINDOW_S
+        self.entries = [(t, d) for t, d in self.entries if t > cutoff]
+
+    def spent(self, now=None):
+        now = time.time() if now is None else now
+        self._prune(now)
+        return sum(d for _, d in self.entries)
+
+    def remaining(self, now=None):
+        return max(0.0, self.budget - self.spent(now))
+
+    def allowed_duration(self, intensity, duration_s, now=None):
+        """The most of this request the hour's budget will carry, in seconds."""
+        if intensity <= 0 or duration_s <= 0:
+            return duration_s
+        return min(duration_s, self.remaining(now) / intensity)
+
+    def spend(self, intensity, duration_s, now=None):
+        now = time.time() if now is None else now
+        dose = max(0.0, intensity) * max(0.0, duration_s)
+        if dose > 0:
+            self.entries.append((now, dose))
+        return dose
+
+
+def apply_dose_cap(action, ledger):
+    """Trim an action to the hour's remaining dose. Returns a record, or None.
+
+    Mutates the action's duration in place, which is what then gets applied and
+    logged, so the turn log says what reached the organism rather than what was
+    asked for.
+    """
+    if not action or ledger is None:
+        return None
+    asked = action["duration_s"]
+    allowed = ledger.allowed_duration(action["intensity"], asked)
+    if allowed >= asked:
+        return None
+    action["duration_s"] = allowed
+    return {
+        "duration_asked_s": round(asked, 1),
+        "duration_allowed_s": round(allowed, 1),
+        "remaining_dose": round(ledger.remaining(), 1),
+        "budget": ledger.budget,
+    }
 
 
 def open_matrix(dry_run):
@@ -600,6 +707,9 @@ def main():
                         help='ceiling on seconds between turns; 0 means a '
                              'quiet organism produces no turns at all, which '
                              'is the intended behaviour')
+    parser.add_argument('--metered', action='store_true',
+                        help="scale context and history by the organism's "
+                             'measured period rather than holding them fixed')
     parser.add_argument('--sham-rate', type=float, default=None)
     parser.add_argument('--num-ctx', type=int, default=None,
                         help='context window in tokens; pins the denominator '
@@ -694,6 +804,12 @@ def main():
     elif history_turns == 0 and not num_ctx:
         print("history is uncapped with no num_ctx set: the context will fill\n"
               "and Ollama will silently drop the oldest turns. Set LLM_NUM_CTX.")
+
+    # Metering scales a base, so it needs one. LLM_NUM_CTX is None by default
+    # and there would be nothing to scale; this base applies only under
+    # --metered and leaves the unmetered loop exactly as it was.
+    if args.metered and not num_ctx:
+        num_ctx = 8192
     sham_rate = (args.sham_rate if args.sham_rate is not None
                  else getattr(config, 'LLM_SHAM_RATE', 0.25))
     channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
@@ -783,6 +899,11 @@ def main():
     requested_s, trigger_why = None, 'start'
     context_used, last_turn_cost = 0, 0
     chars_per_token = None
+    # The trend the model predicted last turn and the period it predicted
+    # from, held until the next measurement can settle it.
+    pending_trend, pending_period_s = None, None
+    prediction_scores = []
+    dose = DoseLedger(getattr(config, 'MAX_DOSE_PER_HOUR', 300.0))
     if args.trigger == 'clock' or args.replay:
         print(f"\nrunning, a turn every {args.interval}s. ctrl-c to stop.\n")
     else:
@@ -830,11 +951,25 @@ def main():
                 if drift:
                     sending['since_last_turn'] = drift
 
-            if num_ctx:
-                remaining = max(0, num_ctx - context_used)
+            # Metering is recomputed every turn, not once at startup: the
+            # point is that the budget moves when the organism's tempo moves.
+            turn_ctx, turn_history = num_ctx, history_turns
+            metered_info = None
+            if args.metered:
+                turn_ctx, turn_history = metered_budget(
+                    measured_period(state), num_ctx, history_turns)
+                ollama.num_ctx = turn_ctx
+                metered_info = {
+                    'period_s': measured_period(state),
+                    'num_ctx': turn_ctx,
+                    'history_turns': turn_history,
+                }
+
+            if turn_ctx:
+                remaining = max(0, turn_ctx - context_used)
                 sending["context"] = {
                     "tokens_remaining": remaining,
-                    "tokens_total": num_ctx,
+                    "tokens_total": turn_ctx,
                     "turns_remaining_at_this_rate": (
                         int(remaining / last_turn_cost) if last_turn_cost
                         else None),
@@ -880,12 +1015,12 @@ def main():
                 record["events_planted"] = source.planted_at(turn)
 
             # -1 sends nothing, 0 keeps everything, n keeps the last n turns.
-            if history_turns < 0:
+            if turn_history < 0:
                 recent = []
-            elif history_turns == 0:
+            elif turn_history == 0:
                 recent = history
             else:
-                recent = history[-history_turns * 2:]
+                recent = history[-turn_history * 2:]
 
             try:
                 reply, usage, logprobs = ollama.ask(system, sending, recent)
@@ -922,6 +1057,8 @@ def main():
 
             period_s = measured_period(state)
             record["measured_period_s"] = period_s
+            if metered_info:
+                record["metered"] = metered_info
 
             if cycles_mode:
                 # Its estimate, not ours: a wrong belief makes a wrong-length
@@ -937,11 +1074,26 @@ def main():
             else:
                 conversion_period = period_s
 
+            # Last turn's prediction, now that the period it was about has
+            # been measured. Scored here rather than in analysis so the run is
+            # self-contained and a miss cannot be reinterpreted after the fact.
+            scored = prediction.score(pending_trend, pending_period_s,
+                                      period_s, window_s)
+            if scored:
+                prediction_scores.append(scored)
+                record["prediction"] = scored
+                record["prediction_tally"] = prediction.tally(prediction_scores)
+            pending_trend = prediction.parse_trend(
+                reply.get('expected_period_trend'))
+            pending_period_s = period_s
+            record["expected_period_trend"] = pending_trend
+
             action, refusal = validate_action(
                 reply, leds.ZONES, leds.BARRIER_ZONE,
                 getattr(config, 'MAX_STIMULUS_DURATION', 300),
                 period_s=conversion_period)
             record["action_refused"] = refusal
+            record["dose_capped"] = apply_dose_cap(action, dose)
 
             # Decided before the action is applied, and never revealed to the
             # model. The reply is already in hand either way, so a sham turn
@@ -956,6 +1108,8 @@ def main():
                                  min_duration=min_stimulus_s,
                                  on_switch=switch_recorder(turn))
                     record["applied"] = True
+                    dose.spend(action["intensity"], action["duration_s"])
+                    record["dose_spent_hour"] = round(dose.spent(), 1)
                 except Exception as exc:
                     record["apply_error"] = str(exc)
                     print(f"[turn {turn}] apply failed: {exc}")
