@@ -1,5 +1,5 @@
 """
-Matrix control: blue stimulus by zone, red imaging light, barrier zone.
+Matrix control: blue stimulus by zone, red imaging light.
 
 Two jobs on one device, per the build notes. Blue is the stimulus the model
 drives, nine zones addressed independently. Red is the imaging backlight,
@@ -10,7 +10,6 @@ Run with sudo, like everything else that touches the matrix.
 
     sudo python3 gpio/leds.py grid      # print the index map, no hardware
     sudo python3 gpio/leds.py zones     # light each zone 0..8 in turn
-    sudo python3 gpio/leds.py barrier   # hold zone 2 only, as in the run
     sudo python3 gpio/leds.py capture    # demo the blank/flash/restore cycle
 
 Orientation was measured with matrix_map.py, not assumed: the chain starts at
@@ -57,50 +56,23 @@ IMAGING_BRIGHTNESS = 0.012  # every dish pixel red at once, ~0.04A, brief
 # Red wants ~8ms and the IR flood ~60ms, so they cannot share a frame. Set True
 # only if the panel gains a diffuser and the flood goes away.
 IMAGING_RED = False
-BARRIER_BRIGHTNESS = 0.06  # zone 2, lit continuously, so keep it low
-
 # --- recovery mode ----------------------------------------------------------
 # Set while the plasmodium is coming back from sclerotium. Stimulus zones are
 # not rendered and captures run without red. set_zone is still accepted and
 # recorded as off, so active_zones stays true to what the organism got.
 #
-# `dark` drops the barrier too. Safe because a plasmodium leaving sclerotium
-# cannot cross to the reference electrode yet, and blue would suppress the
-# emergence the barrier exists to protect. Relight it once it is moving.
+# In recovery nothing is lit at all. Until 2026-09-08 zone 2 was held lit as a
+# barrier keeping the plasmodium off the reference electrode; the organism now
+# starts ON the reference island, so the barrier was removed and every zone is
+# drivable. recovery.json still carries a `dark` flag, now inert -- there is no
+# longer a lit barrier for it to drop.
 #
 # llm/loop.py refuses a live run in recovery, so no turns are logged against an
 # organism that could not have responded.
 #
 # State lives in data/recovery.json, read on every render; see gpio/recovery.py.
 # The admin page owns it and the panel follows within one refresh interval.
-RECOVERY_BARRIER_BRIGHTNESS = 0.03  # unused while recovery is `dark`
-
-# Zone 2 is the TOP-RIGHT sector, held lit as the barrier keeping the
-# plasmodium off the reference electrode. The electrode must physically sit
-# that way; moving it means changing this constant.
-BARRIER_ZONE = 2  # over the reference electrode, never offered to the model
-
-# Only the outer ring of zone 2 is lit -- 6 of its 21 pixels. The plasmodium
-# reaches the reference electrode along the rim, so a band across that approach
-# blocks it as well as a full wedge, with far less blue.
-#
-# Radial, not angular: narrowing the angle would leave the wall routes open on
-# both flanks, which is where Physarum prefers to travel.
-#
-# The zone map is untouched -- zone 2 is still a ninth of the dish. This changes
-# only which of its pixels are energised.
-BARRIER_MIN_RADIUS = 6.5  # of DISH_RADIUS 7.5; 21 sector pixels -> 6 lit
 BLANK_SETTLE = 0.1  # 100ms, imperceptible to the organism
-
-# One global brightness, so the barrier is carried as a fraction of
-# STIM_BRIGHTNESS and holds its absolute level when the stimulus is retuned.
-# That breaks if the stimulus drops below it: the fraction exceeds 1.0, _render
-# clamps, and the barrier silently comes up dim with nothing logging it.
-if STIM_BRIGHTNESS < BARRIER_BRIGHTNESS:
-    raise ValueError(
-        f"STIM_BRIGHTNESS {STIM_BRIGHTNESS} must be at or above "
-        f"BARRIER_BRIGHTNESS {BARRIER_BRIGHTNESS}"
-    )
 
 # --- dish geometry ----------------------------------------------------------
 # The arena is the dish, not the panel. Corner pixels fall outside the agar:
@@ -114,7 +86,7 @@ DISH_CENTRE = (SIDE / 2.0, SIDE / 2.0)
 
 # Nine zones: a centre disc plus eight rim sectors. A round arena does not
 # divide into a 3x3 grid -- the bands this replaced put four zones mostly
-# outside the dish, the barrier among them.
+# outside the dish.
 #
 # r/3 makes the centre disc exactly one ninth of the dish area, so all nine
 # zones carry equal weight.
@@ -178,42 +150,11 @@ DISH_PIXELS = tuple(
 )
 
 
-# The lit part of the barrier zone: its outer band only, see BARRIER_MIN_RADIUS.
-BARRIER_PIXELS = tuple(
-    electrical_index(x, y)
-    for y in range(SIDE) for x in range(SIDE)
-    if zone_of(x, y) == BARRIER_ZONE
-    and math.hypot(x + 0.5 - DISH_CENTRE[0], y + 0.5 - DISH_CENTRE[1])
-        >= BARRIER_MIN_RADIUS
-)
-
-if not BARRIER_PIXELS:
-    raise ValueError(
-        f"BARRIER_MIN_RADIUS {BARRIER_MIN_RADIUS} leaves the barrier with no "
-        f"pixels; it must be below DISH_RADIUS {DISH_RADIUS}"
-    )
-
-
 def zone_pixels(zone):
-    """Zone 0..8 -> the chain indices it occupies.
-
-    Geometry, not what is lit. The barrier zone is only partly energised --
-    use lit_pixels for that.
-    """
+    """Zone 0..8 -> the chain indices it occupies, and that _render energises."""
     if not 0 <= zone < ZONES:
         raise ValueError(f"zone {zone} out of range 0..{ZONES - 1}")
     return ZONE_PIXELS[zone]
-
-
-def lit_pixels(zone):
-    """Zone 0..8 -> the chain indices _render actually energises.
-
-    Same as zone_pixels for every drivable zone. The barrier is the one
-    exception: it lights only its outer band.
-    """
-    if zone == BARRIER_ZONE:
-        return BARRIER_PIXELS
-    return zone_pixels(zone)
 
 
 def print_grid():
@@ -223,23 +164,15 @@ def print_grid():
     for y in range(SIDE):
         print(f"{y:>3}  " + "".join(f"{electrical_index(x, y):>5}" for x in range(SIDE)))
 
-    print(f"\nzone layout, dish radius {DISH_RADIUS} px, '.' is outside it,")
-    print(f"'B' is the lit part of barrier zone {BARRIER_ZONE}\n")
+    print(f"\nzone layout, dish radius {DISH_RADIUS} px, '.' is outside it\n")
     for y in range(SIDE):
         cells = []
         for x in range(SIDE):
             zone = zone_of(x, y)
-            if zone is None:
-                cells.append(".")
-            elif electrical_index(x, y) in BARRIER_PIXELS:
-                cells.append("B")
-            else:
-                cells.append(str(zone))
+            cells.append("." if zone is None else str(zone))
         print("     " + " ".join(cells))
 
-    print(f"\nzone {BARRIER_ZONE} is the barrier, not offered to the model; "
-          f"{len(BARRIER_PIXELS)} of its {len(zone_pixels(BARRIER_ZONE))} pixels "
-          f"are held lit (r >= {BARRIER_MIN_RADIUS})")
+    print("\nall nine zones are drivable")
     target = len(DISH_PIXELS) / ZONES
     for z in range(ZONES):
         px = zone_pixels(z)
@@ -264,39 +197,29 @@ class Matrix:
         )
         # Intensity 0.0..1.0 per zone, the model's requested blue level.
         self._blue = [0.0] * ZONES
-        self._blue[BARRIER_ZONE] = BARRIER_BRIGHTNESS / STIM_BRIGHTNESS
         self._render()
 
     def _render(self):
         """Push current blue state to the panel."""
         self._px.fill((0, 0, 0))
-        state = recovery.state()
-        if state['active']:
-            if state['dark']:
-                # Nothing lit, barrier included. Every pixel is zero, so the
-                # brightness scaler has nothing to scale.
-                self._px.show()
-                return
-            # Barrier only, at its own brightness -- no stimulus to scale
-            # against, so it is written directly rather than as a fraction.
-            for i in lit_pixels(BARRIER_ZONE):
-                self._px[i] = (0, 0, 255)
-            self._px.brightness = RECOVERY_BARRIER_BRIGHTNESS
+        if recovery.active():
+            # Nothing lit at all. Every pixel is zero, so the brightness scaler
+            # has nothing to scale.
             self._px.show()
             return
         for z, level in enumerate(self._blue):
             if level <= 0:
                 continue
             value = int(255 * min(level, 1.0))
-            for i in lit_pixels(z):
+            for i in zone_pixels(z):
                 self._px[i] = (0, 0, value)
         self._px.brightness = STIM_BRIGHTNESS
         self._px.show()
 
     def set_zone(self, zone, intensity):
-        """Set one zone's blue level, 0.0..1.0. The barrier zone is protected."""
-        if zone == BARRIER_ZONE:
-            raise ValueError(f"zone {BARRIER_ZONE} is the barrier and is not drivable")
+        """Set one zone's blue level, 0.0..1.0. All nine zones are drivable."""
+        if not 0 <= zone < ZONES:
+            raise ValueError(f"zone {zone} out of range 0..{ZONES - 1}")
         if not 0.0 <= intensity <= 1.0:
             raise ValueError(f"intensity {intensity} outside 0.0..1.0")
         # In recovery the panel shows no stimulus, so record none: active_zones
@@ -305,24 +228,16 @@ class Matrix:
         self._render()
 
     def active_zones(self):
-        """Zones currently lit as stimulus, {zone: intensity}.
-
-        Excludes the barrier, which is always lit and is not a stimulus.
-        """
-        return {
-            z: level for z, level in enumerate(self._blue)
-            if level > 0 and z != BARRIER_ZONE
-        }
+        """Zones currently lit as stimulus, {zone: intensity}."""
+        return {z: level for z, level in enumerate(self._blue) if level > 0}
 
     def stimulus_active(self):
         """Whether any drivable zone is currently lit."""
         return bool(self.active_zones())
 
     def clear_stimulus(self):
-        """All zones off except the barrier."""
-        for z in range(ZONES):
-            if z != BARRIER_ZONE:
-                self._blue[z] = 0.0
+        """All zones off."""
+        self._blue = [0.0] * ZONES
         self._render()
 
     def imaging_on(self):
@@ -340,8 +255,7 @@ class Matrix:
         time.sleep(BLANK_SETTLE)
 
         if recovery.active() or not IMAGING_RED:
-            # No red backlight; the IR flood lights the exposure. The blank
-            # above still keeps the barrier out of the frame.
+            # No red backlight; the IR flood lights the exposure.
             return
 
         self._px.brightness = IMAGING_BRIGHTNESS
@@ -375,7 +289,7 @@ class Matrix:
             self.imaging_off()
 
     def off(self):
-        """Everything dark, including the barrier. For shutdown only."""
+        """Everything dark. For shutdown only."""
         self._px.brightness = MAX_BRIGHTNESS
         self._px.fill((0, 0, 0))
         self._px.show()
@@ -392,18 +306,11 @@ def main():
     try:
         if mode == "zones":
             for z in range(ZONES):
-                label = " (barrier, already lit)" if z == BARRIER_ZONE else ""
-                print(f"zone {z}{label}")
-                if z != BARRIER_ZONE:
-                    m.set_zone(z, 1.0)
+                print(f"zone {z}")
+                m.set_zone(z, 1.0)
                 time.sleep(2)
                 m.clear_stimulus()
                 time.sleep(0.3)
-        elif mode == "barrier":
-            print(f"zone {BARRIER_ZONE} held lit. ctrl-c to stop")
-            m.clear_stimulus()
-            while True:
-                time.sleep(1)
         elif mode == "capture":
             print("blank, flash red, expose 0.5s, restore")
             m.set_zone(4, 1.0)
@@ -411,7 +318,7 @@ def main():
             m.capture_flash(lambda: time.sleep(0.5))
             time.sleep(2)
         else:
-            print(f"usage: sudo python3 {sys.argv[0]} [grid|zones|barrier|capture]")
+            print(f"usage: sudo python3 {sys.argv[0]} [grid|zones|capture]")
             return 1
     except KeyboardInterrupt:
         pass

@@ -1,19 +1,38 @@
 {
   "name": "three-radial",
-  "description": "Three measuring electrodes in agar islands, one reference island under the barrier zone.",
+  "description": "Three measuring electrodes in agar islands, one reference island at the centre of the dish.",
   "reference": {
-    "ads": "A3", "row": "r38R", "pair": "brown",
-    "note": "inoculation island, sits under LED zone 2 (BARRIER_ZONE)"
+    "ads": "A3",
+    "row": "r38R",
+    "pair": "brown",
+    "note": "inoculation island, central, under LED zone 4. The plasmodium is placed here at the start"
   },
   "channels": [
-    {"ads": "A0", "channel": "ch0", "row": "r38L", "pair": "orange"},
-    {"ads": "A1", "channel": "ch1", "row": "r40L", "pair": "blue"},
-    {"ads": "A2", "channel": "ch2", "row": "r40R", "pair": "green"}
+    {
+      "ads": "A0",
+      "channel": "ch0",
+      "row": "r38L",
+      "pair": "orange",
+      "zone": null
+    },
+    {
+      "ads": "A1",
+      "channel": "ch1",
+      "row": "r40L",
+      "pair": "blue",
+      "zone": null
+    },
+    {
+      "ads": "A2",
+      "channel": "ch2",
+      "row": "r40R",
+      "pair": "green",
+      "zone": null
+    }
   ],
-  "barrier_zone": 2,
   "gain": 16,
   "sample_hz": 8,
   "logged_hz": 1,
   "used_from": "2026-08-24",
-  "note": "Board A rows are the source of truth. leds.BARRIER_ZONE must match the reference position."
+  "note": "Board A rows are the source of truth. Per-channel `zone` is the LED zone each recording island sits under: unmeasured, and required before a single-zone stimulus can be attributed to a channel. The barrier zone was removed 2026-09-08."
 }

@@ -1,4 +1,4 @@
-"""Whether the organism is in recovery, and how dark the panel is held.
+"""Whether the organism is in recovery. While it is, the panel is unlit.
 
 Recovery is a state of the *organism*, not a run mode: the plasmodium is coming
 back from sclerotium and should be left alone. While it is set the panel shows
@@ -21,13 +21,11 @@ seconds with nothing restarted, and the admin page can own it.
 
     {active, dark, since, since_iso, note}
 
-`dark` takes the barrier out too, leaving the panel entirely unlit. Blue is the
-band Physarum avoids most strongly, so holding the barrier lit through
-rehydration risks suppressing the emergence it is there to protect -- and it is
-safe to drop, because the barrier guards a journey the organism cannot make
-yet. Relight it once the plasmodium is actually moving. It is a sub-setting of
-`active`, never on its own: a dark panel with the loop still driving it would
-be a session logged in the dark.
+`dark` is inert as of 2026-09-08. It used to drop the lit barrier zone as well
+as the stimulus; the barrier was removed when the organism started being placed
+on the reference island, so `active` alone now leaves the panel entirely unlit.
+The field is still read and written so the stored state and the admin API keep
+their shape.
 
 Closed recovery periods are appended to `data/recovery.jsonl`, for the same
 reason runs.jsonl exists -- a week later, when a reading looks strange, the
@@ -76,7 +74,7 @@ def _read():
     return {
         'active': active,
         # dark is meaningless without active, and letting it stand alone would
-        # allow a state that reads "not in recovery" while blanking the barrier.
+        # allow a state that reads "not in recovery" while blanking the panel.
         'dark': active and bool(data.get('dark')),
         'since': data.get('since'),
         'since_iso': data.get('since_iso'),
@@ -198,12 +196,9 @@ if __name__ == '__main__':
     elif argv[0] in ('on', 'dark'):
         print(json.dumps(set_state(True, dark_=True,
                                    note=' '.join(argv[1:])), indent=2))
-    elif argv[0] == 'barrier':
-        print(json.dumps(set_state(True, dark_=False,
-                                   note=' '.join(argv[1:])), indent=2))
     elif argv[0] == 'off':
         print(json.dumps(set_state(False, note=' '.join(argv[1:])), indent=2))
     else:
         print(__doc__)
-        print("usage: recovery.py [status|on|barrier|off] [note...]")
+        print("usage: recovery.py [status|on|off] [note...]")
         sys.exit(2)

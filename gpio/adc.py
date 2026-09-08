@@ -1,7 +1,7 @@
 """Electrode sampling: ADS1115, three differential channels, 1 Hz.
 
-Three recording electrodes are read against the reference in the corner under
-the barrier zone. Differential, not single-ended: what matters is the potential
+Three recording electrodes are read against the reference in the central agar
+island. Differential, not single-ended: what matters is the potential
 between a recording tip and the reference, and a differential pair rejects the
 common-mode noise both wires pick up from the mains and from the panel.
 

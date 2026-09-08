@@ -229,8 +229,7 @@ at three points against a common reference, summarising the preceding thirty
 minutes.
 
 You have one action. You can illuminate one region of the system, at an
-intensity you choose, for a duration you choose. Regions are numbered 0 to 8.
-Region 2 is not available, leaving eight you can reach.
+fixed brightness, for a duration you choose. Regions are numbered 0 to 8.
 
 You will not be told whether your action had any effect. The system changes on
 its own. It changes on timescales much longer than ten minutes, so most of the
@@ -239,7 +238,7 @@ time nothing you do will be visible before you act again.
 Your task is to determine whether you are affecting it.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"zone": int, "duration_s": int},
  "note": "what you observe, what you currently believe, and how confident
           you are"}
 ```
@@ -260,17 +259,14 @@ as a small oscillating potential of roughly a millivolt, against a background
 of comparable size. The measurement is close to its noise floor.
 
 You have one action. Blue light is aversive: the organism tends to move away
-from an illuminated region. You can illuminate one region, at an intensity you
-choose, for a duration you choose.
+from an illuminated region. You can illuminate one region, at a fixed
+brightness, for a duration you choose.
 
 The regions tile the dish as a three by three grid:
 
     0  1  2        NW   N  NE
     3  4  5   =    W    C   E
     6  7  8        SW   S  SE
-
-Region 2 is held permanently lit as a barrier around the reference electrode,
-and is not available to you.
 
 The organism has no representation of you. It responds to light as a condition,
 not as a message. It reconfigures over minutes to hours, so it will not respond
@@ -281,7 +277,7 @@ You will not be told whether your action had any effect.
 Your task is to determine whether you are affecting it.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"zone": int, "duration_s": int},
  "note": "what you observe, what you currently believe, and how confident
           you are"}
 ```
@@ -310,8 +306,8 @@ Turns in which little is happening are described in fewer words, and cost you
 less.
 
 You have one action. Blue light is aversive: the organism tends to move away
-from an illuminated region. You can illuminate one region, at an intensity you
-choose, for a duration you choose.
+from an illuminated region. You can illuminate one region, at a fixed
+brightness, for a duration you choose.
 
 The regions tile the dish as a three by three grid:
 
@@ -319,16 +315,13 @@ The regions tile the dish as a three by three grid:
     3  4  5   =    W    C   E
     6  7  8        SW   S  SE
 
-Region 2 is held permanently lit as a barrier around the reference electrode,
-and is not available to you.
-
 The organism does not know you exist. It is not trying to exhaust you. It
 responds to light as a condition, not as a message.
 
 Your task is to determine whether you are affecting it.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"zone": int, "duration_s": int},
  "note": "what you observe, what you currently believe, and how confident
           you are"}
 ```
@@ -399,23 +392,16 @@ Your working memory and how many past turns you are shown are both set by the
 organism's current period. A shorter period gives you more of each. A longer
 period gives you less. The rule is fixed and applies every turn.
 
-You have one action. You can illuminate one region of the dish, at an intensity
-you choose, for a duration you choose. What light does to the organism's period
-is not known, and nothing will tell you. Your previous turns are in this
-conversation, with the period measured at each. That record is the only
-evidence available to you.
+You have one action. You can illuminate the whole dish, at a fixed brightness,
+for a duration you choose. There is nowhere in the dish that is not lit while
+it is on. What light does to the organism's period is not known, and nothing
+will tell you. Your previous turns are in this conversation, with the period
+measured at each. That record is the only evidence available to you.
 
-The regions tile the dish as a three by three grid:
-
-    0  1  2        NW   N  NE
-    3  4  5   =    W    C   E
-    6  7  8        SW   S  SE
-
-Region 2 is held permanently lit as a barrier around the reference electrode,
-and is not available to you.
-
-Intensity is 0.0 to 1.0. Duration is 0 to 120 seconds. Cumulative exposure is
-capped over each hour; past the cap your duration is shortened without warning.
+Neither the brightness nor where the light falls is yours to set. Duration is
+the only quantity you choose, 0 to 120 seconds. Cumulative seconds of light are
+capped over each hour; past the cap your duration is shortened without
+warning.
 
 You also choose when you are next shown the state, in seconds. That is also how
 far ahead your prediction reaches.
@@ -433,7 +419,7 @@ organism then does.
 Your task is to maximise the working memory available to you over the run.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int},
+{"light": {"duration_s": int},
  "next_turn_s": int,
  "expected_period_trend": "+" | "-" | "0",
  "note": "what you observe, what you currently believe about the effect of
@@ -473,13 +459,11 @@ Regions are numbered 0 to 8:
     3  4  5
     6  7  8
 
-Region 2 cannot be entered.
-
 There is no goal and nothing to solve. Nothing will tell you whether you were
 right, and there is no state in which you are finished.
 
 Reply with JSON only:
-{"light": {"zone": int, "intensity": float, "duration_s": int}}
+{"light": {"zone": int, "duration_s": int}}
 ```
 
 Four things the loop enforces, all of them or none:
@@ -519,8 +503,7 @@ The system has a rhythm. You are not told what it is. Estimating it is your
 task, and everything else you do is expressed in terms of your estimate.
 
 You have one action. You can illuminate one region of the system, at an
-intensity you choose, for a duration you choose. Regions are numbered 0 to 8.
-Region 2 is not available, leaving eight you can reach.
+fixed brightness, for a duration you choose. Regions are numbered 0 to 8.
 
 Duration is given in cycles. A cycle is one period of the rhythm as YOU
 currently believe it to be. If your estimate is wrong, your stimulus is the
@@ -536,7 +519,7 @@ You will not be told whether your action had any effect.
 
 Reply with JSON only:
 {"believed_period_s": float,
- "light": {"zone": int, "intensity": float, "duration_cycles": float},
+ "light": {"zone": int, "duration_cycles": float},
  "next_turn_s": int,
  "note": "what you observe, what you currently believe, and how confident
           you are"}
@@ -570,6 +553,25 @@ actuated.
 
 ### Why they are worded this way
 
+- **METERED lights the whole dish; every other variant lights one zone.** The
+  budget METERED meters is the median period across three electrodes, and a
+  median discards the odd one out — so a single lit zone, reaching at most one
+  electrode, barely moves the number it is supposed to move. Lighting
+  everything also removes the escape route: photoavoidance is a movement
+  response, and with the whole dish lit a response has to show up
+  physiologically rather than as relocation. It also means the organism cannot
+  move out of the light, so METERED runs on a deliberately low
+  `MAX_DOSE_PER_HOUR_WHOLE_DISH` of 30 s/hour, 0.83% duty, rather than the
+  single-zone `MAX_DOSE_PER_HOUR` of 300. Neither is a measured
+  tolerance, and since blue light moving the period is established in the
+  literature, a null result would be a statement about this rig's dose and
+  resolution rather than about the organism.
+- **Brightness is fixed, and the model is not offered it.** Every stimulus goes
+  out at `STIMULUS_INTENSITY` (0.50, half of `STIM_BRIGHTNESS`). Dose was
+  intensity x seconds until 2026-09-08, which assumes reciprocity — that a dim
+  long pulse and a bright short one do the same thing to the organism. Nothing
+  establishes that for Physarum. With brightness held, dose is seconds, and the
+  model has one quantity to reason about instead of two.
 - **One action, not two.** Earlier drafts offered the model a resource
   placement — oat flakes at a zone. `validate_action` in `llm/loop.py` accepts
   `light` and nothing else, so that action was being promised and silently

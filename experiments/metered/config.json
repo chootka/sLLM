@@ -1,0 +1,21 @@
+{
+  "name": "metered",
+  "driver": "loop",
+  "electrodes": "three-radial",
+  "prompt": "metered",
+  "params": {
+    "script": "llm/loop.py",
+    "metered": true,
+    "window_s": 1800,
+    "interval_s": 600,
+    "sham_rate": 0.0,
+    "min_gap_s": 300,
+    "num_ctx": 8192,
+    "model": "qwen2.5:14b"
+  },
+  "preregistered": null,
+  "status": "in development, never run",
+  "establishes": null,
+  "mode": "live",
+  "recovery": false
+}

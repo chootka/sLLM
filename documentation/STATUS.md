@@ -246,8 +246,8 @@ sclerotia formation, and growth away from the oat flake.
 5. **Matrix showing uncommanded pixels.** 2026-09-06 03:2x, during a dark
    block with recovery off: one lit LED outside the barrier zone and a bright
    white section. Nothing had commanded either -- `IMAGING_RED` is `False`, the
-   loop and demo were inactive, and the only commanded output was the barrier.
-   The panel has shorted on condensation before. That panel was unplugged and
+   loop and demo were inactive, and the only commanded output was the barrier
+   (removed 2026-09-08). The panel has shorted on condensation before. That panel was unplugged and
    replaced 2026-09-08. The replacement is sealed in a zip-lock bag, leads out
    through a taped slit, no exposed wire. Sealing is the mitigation; the
    setpoint is unchanged. Lit and behaving as expected 2026-09-08; no
@@ -522,6 +522,11 @@ as controls. Reference on A3 as before.
 Intensity 0.50 on the 8 drivable zones; zone 2 over the reference is not driven.
 Every transition is timestamped into `data/stimulus_<ts>.jsonl` by the script
 that made it. That file, not recollection, defines the block edges.
+
+**Amended 2026-09-08, before any of this run was recorded.** The barrier zone
+was removed and the reference now sits in the central island, so the stimulus
+is intensity 0.50 on all 9 zones. Nothing else in the pre-registration
+changes.
 
 ### Statistic
 

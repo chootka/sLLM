@@ -16,7 +16,7 @@ Protocol: newline-delimited JSON, one request per connection.
 
     -> {"cmd": "set_zone", "zone": 4, "intensity": 0.8}
     <- {"ok": true}
-    <- {"ok": false, "error": "zone 2 is the barrier and is not drivable"}
+    <- {"ok": false, "error": "zone 9 out of range 0..8"}
 
 One request per connection is deliberate. A persistent connection would save a
 few hundred microseconds and cost the ability to reason about what happens when
@@ -149,7 +149,7 @@ class MatrixService:
     # --- commands -----------------------------------------------------------
 
     def ping(self):
-        return {"zones": leds.ZONES, "barrier": leds.BARRIER_ZONE}
+        return {"zones": leds.ZONES}
 
     def set_zone(self, zone, intensity):
         with self._lock:

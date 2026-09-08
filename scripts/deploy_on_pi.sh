@@ -284,14 +284,13 @@ else
     echo "   sllm-api restarted"
 
     # matrixd is not restarted automatically even when its unit changes: it owns
-    # the panel, and bouncing it blanks the matrix, including the barrier zone
-    # that must stay lit whenever the organism is in the chamber.
+    # the panel, and bouncing it blanks the matrix under whatever is driving it.
     for unit in "${CHANGED_UNITS[@]}"; do
         case "$unit" in
             sllm-matrixd.service)
                 echo "   !! sllm-matrixd.service changed but was NOT restarted."
-                echo "      It owns the panel and a restart blanks it, barrier"
-                echo "      zone included. Restart it deliberately:"
+                echo "      It owns the panel and a restart blanks it."
+                echo "      Restart it deliberately:"
                 echo "        sudo systemctl restart sllm-matrixd"
                 ;;
             sllm-loop.service)

@@ -8,8 +8,8 @@ it rather than remembered afterwards. Analysis cuts on this log.
     ./scripts/py scripts/stimulus_run.py --dry-run
     ./scripts/py scripts/stimulus_run.py
 
-Blocks alternate starting dark. Six pairs of 60 min is 12 h. The barrier zone
-over the reference electrode is never driven.
+Blocks alternate starting dark. Six pairs of 60 min is 12 h. All nine zones
+are driven.
 """
 
 import argparse
@@ -68,6 +68,8 @@ def main():
                         help='block length in minutes (default 60)')
     parser.add_argument('--pairs', type=int, default=6,
                         help='dark/light pairs (default 6)')
+    # Default matches api/config.py STIMULUS_INTENSITY. The loop no longer
+    # varies brightness; this stays settable for a deliberate block protocol.
     parser.add_argument('--intensity', type=float, default=0.5,
                         help='blue level 0.0-1.0 (default 0.5)')
     parser.add_argument('--dry-run', action='store_true',
@@ -77,9 +79,9 @@ def main():
     if not 0.0 <= args.intensity <= 1.0:
         sys.exit('intensity must be 0.0-1.0')
 
-    from matrix_client import open_matrix, ZONES, BARRIER_ZONE  # noqa: E402
+    from matrix_client import open_matrix, ZONES  # noqa: E402
 
-    zones = [z for z in range(ZONES) if z != BARRIER_ZONE]
+    zones = list(range(ZONES))
     total_min = args.block_min * args.pairs * 2
 
     try:
@@ -93,7 +95,6 @@ def main():
     print('duration     %.1f h, ending about %s' % (
         total_min / 60, stamp(time.time() + total_min * 60)[11:16]))
     print('intensity    %.2f on zones %s' % (args.intensity, zones))
-    print('barrier zone %d, not driven' % BARRIER_ZONE)
 
     if args.dry_run:
         at = time.time()

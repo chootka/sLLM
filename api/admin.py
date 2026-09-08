@@ -669,9 +669,8 @@ def register(app, config):
         if 'active' not in body:
             return jsonify({"error": "active must be true or false"}), 400
         want = bool(body.get('active'))
-        # Dark by default: coming out of sclerotium, blue from the barrier is
-        # more likely to suppress the emergence than to guard anything, because
-        # the organism cannot yet make the journey the barrier blocks.
+        # Kept for the stored state's shape. Inert since the barrier zone was
+        # removed 2026-09-08: recovery now blanks the panel either way.
         want_dark = bool(body.get('dark', True))
         note = body.get('note', '') or ''
 

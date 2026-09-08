@@ -367,8 +367,9 @@ def metered_budget(period_s, base_ctx, base_history):
     capacity -- it can only think at full width by leaving the organism alone.
     The model is not told this; it has to read it off the telemetry history.
 
-    Direction chosen 2026-09-08. The inverse mapping was built first and is the
-    one to restore if the light-to-period assumption turns out backwards.
+    That blue light shifts the period at all is sourced; which way it shifts is
+    not. See documentation/metered_loop.md, Direction. The inverse mapping was
+    built first and is the one to restore if the sign turns out backwards.
 
     Clamped either side so a bad period estimate cannot ask Ollama for a
     context it cannot allocate or starve the model to nothing.
@@ -434,7 +435,8 @@ def believed_period(reply):
     return value if 10.0 <= value <= 1800.0 else None
 
 
-def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
+def validate_action(reply, zones, max_duration, intensity, period_s=None,
+                    whole_dish=False):
     """Pull a usable light action out of the reply, or None.
 
     The model is asked for JSON but is not constrained to sensible values, so
@@ -447,14 +449,24 @@ def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
     being fixed against a clock that has nothing to do with it. duration_s is
     still accepted, for replaying older sessions and for the case where no
     period was measured.
+
+    Intensity is NOT taken from the reply. Every stimulus goes out at
+    STIMULUS_INTENSITY. Dose used to be intensity x seconds, which assumes
+    reciprocity -- that a dim long pulse and a bright short one do the same
+    thing to the organism. Nothing establishes that for Physarum. Holding
+    intensity makes dose seconds, and leaves the model one quantity to reason
+    about instead of two.
+
+    `whole_dish` drops the zone: the action lights every zone, and the reply is
+    not expected to name one. Used by METERED, where the metered quantity is a
+    median across all three electrodes and a single zone cannot move it.
     """
     light = reply.get('light')
     if not isinstance(light, dict):
         return None, "no light action"
 
     try:
-        zone = int(light['zone'])
-        intensity = float(light.get('intensity', 1.0))
+        zone = None if whole_dish else int(light['zone'])
         if light.get('duration_cycles') is not None:
             cycles = float(light['duration_cycles'])
             if not period_s:
@@ -465,14 +477,12 @@ def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
     except (KeyError, TypeError, ValueError) as exc:
         return None, f"malformed light action: {exc}"
 
-    if zone == barrier_zone:
-        return None, f"zone {zone} is the barrier and is not drivable"
-    if not 0 <= zone < zones:
+    if zone is not None and not 0 <= zone < zones:
         return None, f"zone {zone} outside 0..{zones - 1}"
 
     action = {
         "zone": zone,
-        "intensity": min(max(intensity, 0.0), 1.0),
+        "intensity": intensity,
         "duration_s": min(max(duration, 0.0), max_duration),
     }
     if light.get('duration_cycles') is not None:
@@ -485,10 +495,14 @@ def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
 class DoseLedger:
     """Rolling cap on how much light the model can put on the organism.
 
-    Dose is intensity x seconds, summed over the last hour. Nothing else in the
-    rig bounds cumulative exposure: MAX_STIMULUS_DURATION caps one stimulus, so
-    a model that asks for the maximum every turn is inside every existing limit
-    and still floods the dish.
+    Dose is SECONDS of light, summed over the last hour. It was intensity x
+    seconds until 2026-09-08; intensity is now fixed at STIMULUS_INTENSITY, so
+    the product carried no information and implied a reciprocity assumption
+    nothing establishes for this organism.
+
+    Nothing else in the rig bounds cumulative exposure: MAX_STIMULUS_DURATION
+    caps one stimulus, so a model that asks for the maximum every turn is
+    inside every existing limit and still floods the dish.
 
     The cap trims the duration rather than refusing the action, and both the
     asked-for and the allowed value are logged. A refusal would leave the trace
@@ -517,15 +531,15 @@ class DoseLedger:
     def remaining(self, now=None):
         return max(0.0, self.budget - self.spent(now))
 
-    def allowed_duration(self, intensity, duration_s, now=None):
+    def allowed_duration(self, duration_s, now=None):
         """The most of this request the hour's budget will carry, in seconds."""
-        if intensity <= 0 or duration_s <= 0:
+        if duration_s <= 0:
             return duration_s
-        return min(duration_s, self.remaining(now) / intensity)
+        return min(duration_s, self.remaining(now))
 
-    def spend(self, intensity, duration_s, now=None):
+    def spend(self, duration_s, now=None):
         now = time.time() if now is None else now
-        dose = max(0.0, intensity) * max(0.0, duration_s)
+        dose = max(0.0, duration_s)
         if dose > 0:
             self.entries.append((now, dose))
         return dose
@@ -541,7 +555,7 @@ def apply_dose_cap(action, ledger):
     if not action or ledger is None:
         return None
     asked = action["duration_s"]
-    allowed = ledger.allowed_duration(action["intensity"], asked)
+    allowed = ledger.allowed_duration(asked)
     if allowed >= asked:
         return None
     action["duration_s"] = allowed
@@ -573,7 +587,8 @@ def open_matrix(dry_run):
 _stimulus_timer = None
 
 
-def apply_action(matrix, action, speed=1.0, min_duration=0.0, on_switch=None):
+def apply_action(matrix, action, speed=1.0, min_duration=0.0, on_switch=None,
+                 zones=9):
     """Light the zone, and take it off again after the duration requested.
 
     `speed` compresses the duration alongside the turn interval, so a fast run
@@ -627,7 +642,13 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0, on_switch=None):
         return
 
     matrix.clear_stimulus()
-    matrix.set_zone(action["zone"], intensity)
+    if action["zone"] is None:
+        # Whole dish. One set_zone per zone rather than a new panel command,
+        # so matrixd's protocol and the direct Matrix stay one implementation.
+        for z in range(zones):
+            matrix.set_zone(z, intensity)
+    else:
+        matrix.set_zone(action["zone"], intensity)
     _switch('on')
 
     def _expire():
@@ -722,6 +743,19 @@ def main():
     experiment = None
     electrode_config = None
     overrides = {}
+
+    # With no --experiment, fall back to whatever the current run says it is.
+    # The admin page's experiment selector writes that field, so choosing an
+    # experiment there and starting sllm-loop runs it -- without this the unit
+    # would have to name one on its command line and the two could disagree.
+    if not args.experiment:
+        try:
+            import run as run_state
+
+            args.experiment = run_state.current(config).get('experiment') or ''
+        except Exception:
+            args.experiment = ''
+
     if args.experiment:
         try:
             experiment = experiments.require(args.experiment, 'loop')
@@ -731,7 +765,9 @@ def main():
             return 2
         params = experiment.get('params', {})
         for flag, key in (('prompt', 'prompt'), ('model', 'model'),
-                          ('min_gap', 'min_gap_s'), ('sham_rate', 'sham_rate')):
+                          ('min_gap', 'min_gap_s'), ('sham_rate', 'sham_rate'),
+                          ('interval', 'interval_s'), ('num_ctx', 'num_ctx'),
+                          ('metered', 'metered')):
             value = experiment.get(key) if key == 'prompt' else params.get(key)
             if value is None:
                 continue
@@ -787,6 +823,15 @@ def main():
     # of it. Everything the model expresses in cycles is converted with its
     # estimate rather than with the measurement.
     cycles_mode = args.prompt == 'cycles'
+
+    # METERED lights the whole dish, not a zone. The budget it meters is the
+    # median period across the three electrodes, and a median is the statistic
+    # that discards the odd one out -- so a single lit zone, reaching at most
+    # one electrode, barely moves the number it is supposed to move. Lighting
+    # everything also removes the escape route: photoavoidance is a movement
+    # response, and with the whole dish lit a response has to appear
+    # physiologically rather than as relocation.
+    whole_dish = args.prompt == 'metered'
     believed_s = None      # the model's period from the previous turn
     last_turn_at = None
     num_ctx = args.num_ctx or getattr(config, 'LLM_NUM_CTX', None)
@@ -851,13 +896,14 @@ def main():
                 # the whole point, and that is arithmetic, not string parsing.
                 "timestamp": time.time(),
                 "zone": act["zone"],
+                "whole_dish": act["zone"] is None,
                 "intensity": act["intensity"],
                 "requested_s": act.get("duration_s"),
             })
         return record
 
     # Zone geometry comes from leds.py so there is one definition of how many
-    # zones exist and which one is the barrier.
+    # zones exist.
     import leds
 
     if args.replay:
@@ -903,7 +949,9 @@ def main():
     # from, held until the next measurement can settle it.
     pending_trend, pending_period_s = None, None
     prediction_scores = []
-    dose = DoseLedger(getattr(config, 'MAX_DOSE_PER_HOUR', 300.0))
+    dose = DoseLedger(
+        getattr(config, 'MAX_DOSE_PER_HOUR_WHOLE_DISH', 30.0) if whole_dish
+        else getattr(config, 'MAX_DOSE_PER_HOUR', 300.0))
     if args.trigger == 'clock' or args.replay:
         print(f"\nrunning, a turn every {args.interval}s. ctrl-c to stop.\n")
     else:
@@ -1089,9 +1137,10 @@ def main():
             record["expected_period_trend"] = pending_trend
 
             action, refusal = validate_action(
-                reply, leds.ZONES, leds.BARRIER_ZONE,
+                reply, leds.ZONES,
                 getattr(config, 'MAX_STIMULUS_DURATION', 300),
-                period_s=conversion_period)
+                getattr(config, 'STIMULUS_INTENSITY', 0.5),
+                period_s=conversion_period, whole_dish=whole_dish)
             record["action_refused"] = refusal
             record["dose_capped"] = apply_dose_cap(action, dose)
 
@@ -1105,10 +1154,11 @@ def main():
             if action and not is_sham and not args.dry_run:
                 try:
                     apply_action(matrix, action, speed=args.speed,
+                                 zones=leds.ZONES,
                                  min_duration=min_stimulus_s,
                                  on_switch=switch_recorder(turn))
                     record["applied"] = True
-                    dose.spend(action["intensity"], action["duration_s"])
+                    dose.spend(action["duration_s"])
                     record["dose_spent_hour"] = round(dose.spent(), 1)
                 except Exception as exc:
                     record["apply_error"] = str(exc)
@@ -1135,7 +1185,7 @@ def main():
                 laid = record["applied"] or (args.dry_run and action
                                              and not is_sham)
                 if laid:
-                    trail.mark(action["zone"], action["intensity"])
+                    trail.mark(action["zone"])
                 trail.save()
                 record["trail"] = trail.view()
 

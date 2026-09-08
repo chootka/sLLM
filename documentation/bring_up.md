@@ -220,8 +220,7 @@ message has moved on by the time the reply arrives.
    print(MatrixClient().active_zones())"
    ```
 
-Barrier zone lit and nothing else is the correct resting state.
-`active_zones()` excludes the barrier, so `{}` means barrier only.
+An unlit panel is the correct resting state. `{}` means no zone is lit.
 
 ## Running the loop
 
@@ -358,8 +357,7 @@ What the script does not do:
    is `deploy/nginx-sllm.visceral.systems.conf`, validated with `nginx -t`
    before reload.
 3. **Does not restart `sllm-matrixd`, `sllm-loop` or `sllm-demo`.** Bouncing
-   matrixd blanks the panel including the barrier zone; starting the loop puts
-   light into the chamber. If a unit file for one of them changed, the script
+   matrixd blanks the panel; starting the loop puts light into the chamber. If a unit file for one of them changed, the script
    reports it and leaves it.
 
 `QUICK_DEPLOY.md` and `DEPLOY_NOW.md` are deleted. This section is the

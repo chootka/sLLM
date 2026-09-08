@@ -112,10 +112,10 @@ in `leds.py grid`.
 
 ```
      . . . . . . . . . . . . . . . .
-     . . . . 0 1 1 1 1 1 1 B . . . .
-     . . . 0 0 0 1 1 1 1 2 B B . . .
-     . . 0 0 0 0 1 1 1 1 2 2 2 B . .
-     . 0 0 0 0 0 0 1 1 2 2 2 2 B B .
+     . . . . 0 1 1 1 1 1 1 2 . . . .
+     . . . 0 0 0 1 1 1 1 2 2 2 . . .
+     . . 0 0 0 0 1 1 1 1 2 2 2 2 . .
+     . 0 0 0 0 0 0 1 1 2 2 2 2 2 2 .
      . 3 0 0 0 0 0 1 1 2 2 2 2 2 5 .
      . 3 3 3 0 0 4 4 4 4 2 2 5 5 5 .
      . 3 3 3 3 3 4 4 4 4 5 5 5 5 5 .
@@ -129,7 +129,7 @@ in `leds.py grid`.
      . . . . . . . . . . . . . . . .
 ```
 
-`.` is outside the dish, `B` is the lit ring of barrier zone 2. Print it with
+`.` is outside the dish. Print it with
 `./scripts/py gpio/leds.py`. The map is computed from `DISH_RADIUS` and
 `CENTRE_RADIUS`, not stored.
 
@@ -138,11 +138,12 @@ of 7.5 px, so the corners fall outside the agar. Zone numbers keep their 3×3
 compass directions; the shapes are a centre disc plus eight rim sectors.
 `CENTRE_RADIUS` is r/3, making the centre one ninth of the dish area.
 
-**Zone 2 is the barrier.** Held lit at low intensity to stop the plasmodium
-reaching the reference electrode. Not offered to the model; `set_zone()` raises
-if anything tries to drive it. Only its outermost ring is energised — 6 of its
-21 pixels. The reference electrode must sit in the top-right. If it moves,
-change `BARRIER_ZONE`.
+**All nine zones are drivable.** Until 2026-09-08 zone 2 was held lit as a
+barrier keeping the plasmodium off the reference electrode. The organism is now
+placed on the reference island to begin with, so the barrier was removed along
+with `BARRIER_ZONE`, `BARRIER_BRIGHTNESS`, `BARRIER_MIN_RADIUS` and
+`lit_pixels()`. Zone 4, the centre disc, sits over the reference island: light
+there enters as common mode on all three channels.
 
 ## Measurements
 
@@ -158,7 +159,6 @@ change `BARRIER_ZONE`.
 |---|---|---|
 | `STIM_BRIGHTNESS` | 0.12 | one zone of blue, under 100mA |
 | `IMAGING_BRIGHTNESS` | 0.012 | all dish pixels red at once, ~0.04A, brief |
-| `BARRIER_BRIGHTNESS` | 0.06 | zone 2's outer ring, lit continuously |
 | `MAX_BRIGHTNESS` | 0.30 | global ceiling |
 
 `IMAGING_RED` is False. Captures use no red; the dish is backlit by the 850nm

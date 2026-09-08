@@ -729,9 +729,8 @@ def main():
             camera.close()
             # Only blank the panel if this process owns it. Through matrixd the
             # panel outlives this command and other clients are using it, so
-            # off() here would drop the barrier zone out from under them --
-            # and the barrier is what keeps the plasmodium off the reference
-            # electrode. The daemon blanks on its own shutdown instead.
+            # off() here would blank zones out from under them. The daemon
+            # blanks on its own shutdown instead.
             if matrix is not None and isinstance(matrix, leds.Matrix):
                 matrix.off()
         return 0
