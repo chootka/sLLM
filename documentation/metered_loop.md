@@ -191,8 +191,12 @@ The second is the more likely first result. `signed_hit_rate` against
 `base_rate` is what distinguishes an inferred transfer function from a
 confabulated one.
 
-## Not covered here
+## Where the prediction comes from
 
-The system prompt that asks for `expected_period_trend` is not yet in
-`llm/filters/prompts.md`. The scorer reads that key from the model's JSON
-reply.
+`llm/filters/prompts.md`, under `## METERED`. The reply schema asks for
+`expected_period_trend` as `"+"`, `"-"` or `"0"`, and `loop.py` passes it
+through `prediction.parse_trend`. A reply that omits the key parses to None and
+`prediction.score` returns None for that turn: no score, not a miss.
+
+An earlier version of this file said the prompt was not written yet. It was
+added in the same commit that said so, 405100d.
