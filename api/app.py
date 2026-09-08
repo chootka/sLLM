@@ -1280,7 +1280,10 @@ def trigger_light():
     data = request.get_json(silent=True) or {}
     state = data.get('state', 'toggle')
     zone = data.get('zone', getattr(config, 'DEFAULT_STIMULUS_ZONE', 4))
-    intensity = float(data.get('intensity', 1.0))
+    # Defaults to the rig's fixed stimulus level so a manual pulse matches what
+    # the loop delivers. Still overridable from the body for bench work.
+    intensity = float(data.get('intensity',
+                               getattr(config, 'STIMULUS_INTENSITY', 0.5)))
 
     max_duration = getattr(config, 'MAX_STIMULUS_DURATION', 300)
     duration = data.get('duration') or max_duration
@@ -1400,8 +1403,7 @@ def main():
         if matrix is not None:
             # Clear this service's stimulus, but do not blank the panel. The
             # API no longer owns it -- matrixd does, and llm/loop.py may be
-            # driving zones through the same daemon. off() would also drop the
-            # barrier zone, which must stay lit whenever the organism is in.
+            # driving zones through the same daemon.
             try:
                 matrix.clear_stimulus()
             except Exception as exc:  # noqa: BLE001 -- shutdown must not raise

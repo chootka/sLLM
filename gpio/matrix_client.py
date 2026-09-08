@@ -29,7 +29,6 @@ from matrixd import SOCKET_PATH
 TIMEOUT_S = 10.0
 
 ZONES = leds.ZONES
-BARRIER_ZONE = leds.BARRIER_ZONE
 
 
 class MatrixUnavailable(Exception):

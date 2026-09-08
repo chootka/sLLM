@@ -15,8 +15,9 @@ LOG_DIR = os.path.join(DATA_DIR, 'logs')
 CSV_DIR = os.path.join(DATA_DIR, 'readings')
 
 # --- electrodes, ADS1115 ----------------------------------------------------
-# Three electrodes read differentially against the reference under the barrier
-# zone. Gain 16 is +/-0.256V full scale; surface potentials are single-digit mV.
+# Three electrodes read differentially against the reference in the central
+# agar island. Gain 16 is +/-0.256V full scale; surface potentials are
+# single-digit mV.
 ADC_ADDRESS = 0x48
 ADC_GAIN = 16
 ADC_DATA_RATE = 8              # SPS, 125ms integration per conversion
@@ -98,16 +99,38 @@ USB_CAMERA_FLUSH_FRAMES = 6
 CAMERA_FOCUS_DIOPTRES = None
 
 # --- stimulus ---------------------------------------------------------------
-# Zone the dashboard light button drives. 4 is the centre. Zone 2 is the
-# barrier and gpio/leds.py refuses it.
+# Zone the dashboard light button drives. 4 is the centre disc, over the
+# reference island. All nine zones are drivable.
 DEFAULT_STIMULUS_ZONE = 4
 MAX_STIMULUS_DURATION = 300    # seconds; a manual stimulus always self-cancels
 
-# Rolling cap on the LLM loop's light, in intensity-seconds per hour. Step 8's
-# protocol delivered 1800 (0.50 continuous for 60 min of each pair); this is a
-# sixth of that, about 8% duty at full intensity. MAX_STIMULUS_DURATION bounds
-# one stimulus and nothing bounded the sum until this.
-MAX_DOSE_PER_HOUR = 300.0
+# Every stimulus is delivered at this fixed level, scaling STIM_BRIGHTNESS in
+# gpio/leds.py. The model chooses where and for how long, never how bright.
+#
+# Fixed 2026-09-08. Dose used to be intensity x seconds, which assumes
+# reciprocity -- that 1.0 for 60s and 0.25 for 240s do the same thing to the
+# organism. That is an unestablished claim about photoresponse. With intensity
+# held, dose is seconds and the assumption never arises.
+#
+# 0.50 is the level already pre-registered in blue-light-response and STATUS
+# step 9, so a metered run stays comparable with the light-response blocks.
+# Absolute panel brightness 0.50 x STIM_BRIGHTNESS 0.12 = 0.06.
+STIMULUS_INTENSITY = 0.50
+
+# Rolling cap on the LLM loop's light, in SECONDS per hour now that intensity
+# is fixed. 300 s is 8.3% duty. Derived from this rig's own step 8 protocol,
+# which held 0.50 continuous for 60 min of each pair; at a fixed 0.50 that is
+# 3600 s of light per light-hour, and this is a twelfth of it. The fraction is
+# a choice, not a measured threshold. MAX_STIMULUS_DURATION bounds one
+# stimulus; nothing bounded the sum until this.
+#
+# This figure is for a SINGLE zone.
+MAX_DOSE_PER_HOUR = 300
+
+# METERED lights the whole dish. 30 s/hour, 0.83% duty. Set 2026-09-08 by the
+# user, who did not want the exposure raised: the organism cannot move out of
+# a whole-dish stimulus, and sporangia are forming.
+MAX_DOSE_PER_HOUR_WHOLE_DISH = 30
 
 # --- live preview -----------------------------------------------------------
 # /api/stream fps. Low on purpose: every frame competes with the timelapse for

@@ -19,9 +19,10 @@ them. A stimulus the organism responds to and the metal does not is the test.
 ## Driver
 
 `scripts/stimulus_run.py`. 1 h dark, 1 h blue, 6 pairs, dark first, 12 h.
-Intensity 0.50 on the 8 drivable zones. Zone 2 is the barrier and is never
-driven. Every transition is timestamped into `data/stimulus_<ts>.jsonl` by the
-script that made it; that file defines the block edges for the analysis.
+Intensity 0.50 on all 9 zones. Amended 2026-09-08: the barrier zone was
+removed, so zone 2 is now driven with the rest. Every transition is timestamped
+into `data/stimulus_<ts>.jsonl` by the script that made it; that file defines
+the block edges for the analysis.
 
 ## Pre-registration
 

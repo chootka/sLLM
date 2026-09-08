@@ -12,7 +12,7 @@ current budget: `led_matrix.md`.
 | Raspberry Pi 5 | — | host, replacement board fitted 2026-08-05 |
 | ADS1115 | I²C `0x48` | electrode potentials, 3 differential channels at 1 Hz |
 | SHT31 | I²C `0x44` | chamber temperature and humidity |
-| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus zones + barrier zone. Replacement panel fitted 2026-09-08, sealed in a zip-lock bag |
+| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus, all nine zones drivable. Replacement panel fitted 2026-09-08, sealed in a zip-lock bag |
 | Camera Module 3 NoIR (IMX708) | CSI | stills, 2304×1296 |
 | 850nm IR flood | not GPIO-controlled | imaging illumination, always on. Confirmed fitted and running 2026-08-26 |
 | Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 300s |
@@ -28,13 +28,12 @@ electrode on the perf board.
 A0 ---- buffer ---- recording electrode 1  \
 A1 ---- buffer ---- recording electrode 2   >  each measured against A3
 A2 ---- buffer ---- recording electrode 3  /
-A3 ---- buffer ---- reference electrode       (top-right corner, under barrier zone 2)
+A3 ---- buffer ---- reference electrode       (central agar island, under zone 4)
 ADDR -- GND                                   address 0x48
 ```
 
 Mux pairs available: 0-1, 0-3, 1-3, 2-3. Reference on A3 is the only
-arrangement giving three channels from one chip. If the reference moves,
-`BARRIER_ZONE` in `gpio/leds.py` moves with it.
+arrangement giving three channels from one chip.
 
 Gain 16, ±0.256V full scale, 7.8125 µV per count.
 
@@ -280,8 +279,7 @@ dots. Exposures differ by an order of magnitude — ~8ms for red at
 `IMAGING_BRIGHTNESS` against ~60ms for the flood. Re-enable only with a
 diffuser above the panel and the IR flood removed.
 
-The capture sequence blanks the panel before every exposure, which keeps the
-barrier zone out of frame.
+The capture sequence blanks the panel before every exposure.
 
 ## Matrix — WS2812B 16×16
 

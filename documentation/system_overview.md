@@ -150,9 +150,15 @@ Two outcomes are expected, and the scores separate them. The model infers that
 light costs it capacity and settles at zero; or it attributes ordinary drift to
 its own actuation and keeps acting. The second is the more likely first result.
 
-A rolling cap bounds cumulative exposure at 300 intensity-seconds per hour,
-about a sixth of what the earlier block protocol delivered. It trims the
-duration rather than refusing the action, and logs both numbers.
+Brightness is fixed at `STIMULUS_INTENSITY` and is not offered to the model.
+METERED lights the whole dish rather than a zone, so duration is the only thing
+it varies at all; the other prompts still choose a zone. A rolling cap bounds cumulative
+exposure at 30 seconds of whole-dish light per hour for METERED, set low
+because the organism cannot move out of a whole-dish stimulus, and 300 seconds
+of single-zone light for the rest. Neither is a measured tolerance. Blue light moving the period is established
+in the literature, so a null result would be evidence about this rig's dose and
+resolution, not about the organism. It trims the duration rather than refusing
+the action, and logs both numbers.
 
 Full detail in `metered_loop.md`.
 
@@ -194,7 +200,7 @@ fields against each other. `av_instrument.md` and `av_instrument_build.md`.
 - The metered loop has never been run end to end. It is committed but not
   deployed to the machine that runs the services.
 - A new LED matrix and fresh organism are going in before the first run.
-- `method_basis.md` records that the lit barrier zone was dropped and that the
-  plasmodium now starts on the reference island. The prompts and the matrix
-  code still hold zone 2 as a permanently lit barrier. One of the two is out of
-  date and it should be settled before a run.
+- Settled 2026-09-08: the barrier zone is gone from the code, the prompts and
+  the docs. All nine zones are drivable and nothing is held lit. The plasmodium
+  starts on the central reference island, so zone 4 sits over the reference and
+  light there enters as common mode on all three channels.
