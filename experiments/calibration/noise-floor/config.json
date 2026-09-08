@@ -1,0 +1,15 @@
+{
+  "name": "noise-floor",
+  "driver": "none",
+  "electrodes": "three-radial",
+  "prompt": null,
+  "establishes": "what the chamber and fresh agar do with no organism",
+  "params": {
+    "duration_h": 12,
+    "mode": "test",
+    "discard_first_h": 10
+  },
+  "status": "not run as its own step; the pre-bridge window of run 6 served",
+  "mode": "test",
+  "recovery": true
+}

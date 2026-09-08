@@ -1,0 +1,17 @@
+{
+  "name": "blank-vs-organism",
+  "driver": "none",
+  "electrodes": "three-radial",
+  "prompt": null,
+  "establishes": "whether the 60-200 s line requires the organism",
+  "params": {
+    "blank_h": 24,
+    "organism_h": 24,
+    "discard_first_h": 10,
+    "paired": true
+  },
+  "preregistered": "documentation/STATUS.md#step-7-pre-registration",
+  "status": "done 2026-08-27 to 2026-08-29, scored 2026-09-01",
+  "mode": "test",
+  "recovery": true
+}

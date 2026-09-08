@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly sLLM timelapse encode
+
+[Timer]
+OnCalendar=hourly
+# Frames land every 120 s, so nothing depends on the exact minute. The jitter
+# keeps the encode off the same instant as any other hourly job.
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

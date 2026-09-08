@@ -30,7 +30,7 @@
 # 3. It does not prompt. The old version had an interactive `read -p` for the
 #    nginx reload, which hangs any unattended run.
 #
-# It also never starts or restarts sllm-loop or sllm-demo. Putting light into a
+# It also never starts or restarts sllm-loop. Putting light into a
 # chamber is a deliberate act, not a side effect of deploying.
 
 set -euo pipefail
@@ -145,7 +145,7 @@ rsync -a --delete "${RSYNC_DRY[@]}" \
 # because the loop reads the CSV the *service* writes, under $DEPLOY_DIR/data.
 # Run from ~/sllm it resolves its own empty data directory and reports 0
 # samples, which looks exactly like a dead ADC and is not.
-for component in gpio llm scripts processing; do
+for component in gpio llm scripts processing experiments; do
     mkdir -p "$DEPLOY_DIR/$component"
     # processing/ also holds the archived Processing sketches, ~570 KB of .pde
     # and PNG that the service never reads. Only the DSP module is deployed.
@@ -211,7 +211,7 @@ fi
 say "systemd units"
 # Installed only when they actually differ, so a routine code deploy does not
 # churn unit files or trigger a daemon-reload it does not need.
-for unit_src in deploy/*.service; do
+for unit_src in deploy/*.service deploy/*.timer; do
     unit_name="$(basename "$unit_src")"
     unit_dst="/etc/systemd/system/$unit_name"
     if cmp -s "$unit_src" "$unit_dst"; then
@@ -294,7 +294,7 @@ else
                 echo "      zone included. Restart it deliberately:"
                 echo "        sudo systemctl restart sllm-matrixd"
                 ;;
-            sllm-loop.service|sllm-demo.service)
+            sllm-loop.service)
                 echo "   note: $unit changed; it takes effect the next time you"
                 echo "      start it. Neither is started by a deploy."
                 ;;
@@ -310,8 +310,8 @@ if $DRY_RUN; then
     exit 0
 fi
 
-systemctl is-active sllm-matrixd sllm-api sllm-loop sllm-demo \
-    | paste -d' ' <(printf '%s\n' matrixd api loop demo) - \
+systemctl is-active sllm-matrixd sllm-api sllm-loop \
+    | paste -d' ' <(printf '%s\n' matrixd api loop) - \
     | sed 's/^/   /'
 
 echo

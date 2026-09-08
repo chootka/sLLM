@@ -9,6 +9,8 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 IMAGE_DIR = os.path.join(DATA_DIR, 'images')
+# Encoded timelapse: recent.mp4 for playback, seg_*.mp4 as the archive
+VIDEO_DIR = os.path.join(DATA_DIR, 'video')
 LOG_DIR = os.path.join(DATA_DIR, 'logs')
 CSV_DIR = os.path.join(DATA_DIR, 'readings')
 
@@ -79,7 +81,7 @@ CAMERA_SOURCE = 'auto'
 # full-field; the full 4608x2592 adds nothing and bloats the timelapse.
 CAMERA_RESOLUTION = (2304, 1296)
 CAMERA_WARMUP_TIME = 2         # seconds
-IMAGE_CAPTURE_INTERVAL = 300   # seconds
+IMAGE_CAPTURE_INTERVAL = 120   # seconds
 
 # USB only. Separate because a UVC camera silently substitutes its nearest
 # mode when asked for one it does not have.
@@ -100,6 +102,12 @@ CAMERA_FOCUS_DIOPTRES = None
 # barrier and gpio/leds.py refuses it.
 DEFAULT_STIMULUS_ZONE = 4
 MAX_STIMULUS_DURATION = 300    # seconds; a manual stimulus always self-cancels
+
+# Rolling cap on the LLM loop's light, in intensity-seconds per hour. Step 8's
+# protocol delivered 1800 (0.50 continuous for 60 min of each pair); this is a
+# sixth of that, about 8% duty at full intensity. MAX_STIMULUS_DURATION bounds
+# one stimulus and nothing bounded the sum until this.
+MAX_DOSE_PER_HOUR = 300.0
 
 # --- live preview -----------------------------------------------------------
 # /api/stream fps. Low on purpose: every frame competes with the timelapse for
@@ -162,5 +170,5 @@ ADMIN_CREDENTIALS_FILE = os.path.join(DATA_DIR, 'admin_credentials.json')
 # chamber, `test` means there is not. Set it wrong and a real session lands in
 # the test subdirectory, so it gets corrected fast.
 #
-# Its one job today is to refuse `loop.py --demo`, which invents data and puts
-# real light on the panel.
+# It also routes the readings: `live` writes at the top level, every other mode
+# into its own subdirectory.

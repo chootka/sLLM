@@ -35,21 +35,10 @@ take four hours live takes under a minute. Replay always implies --dry-run.
     ./scripts/py llm/loop.py --replay synthetic --speed 600 --turns 24
     ./scripts/py llm/loop.py --replay data/readings/electrodes_20260805.csv --speed 600
 
---demo is the one mode that runs fast AND drives the panel, for watching the
-hardware actually work:
-
-    ./scripts/py llm/loop.py --demo --turns 12
-
-It exists because nothing else could show you the physical chain. The live loop
-cannot be sped up without being made meaningless -- the 30 minute window and
-the 10 minute turn come from Physarum's contraction period, not from caution --
-so live, a zone changes once every ten minutes. Replay is fast but refuses to
-actuate. Between them there was no way to watch a zone go on and off.
-
---demo therefore invents data and puts real light on the panel, which is only
-acceptable when the chamber is empty. It refuses to start while the recording
-mode is `live`, and its turns are written to data/logs/replay/ so they can
-never be confused with a real session.
+Replay never drives the panel: putting real light on the organism from a
+recording that is not about it would be a stimulus nothing recorded as one.
+Its turns are written to data/logs/replay/ so they can never be confused with
+a real session.
 
 Synthetic sessions carry a planted event at a known turn and log it alongside
 the model's note, so a claim can be checked against whether anything happened.
@@ -75,8 +64,10 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / 'api'))
 sys.path.insert(0, str(ROOT / 'gpio'))
 sys.path.insert(0, str(HERE / 'filters'))
+sys.path.insert(0, str(ROOT))
 
 import syspath  # noqa: E402,F401  (path setup, must precede hardware imports)
+import experiments  # noqa: E402
 
 import config  # noqa: E402
 from reducer import NO_CHANGE, reduce_window, for_model  # noqa: E402
@@ -93,6 +84,7 @@ import recovery as recovery_state  # noqa: E402
 import run as run_state  # noqa: E402
 
 from prompts import load_prompts  # noqa: E402
+import prediction  # noqa: E402
 
 
 class LiveSource:
@@ -359,6 +351,41 @@ def wait_for_turn(source, turn, previous, window_s, args, requested_s):
             return 'state'
 
 
+# Reference period for metered budgets. The established line on this rig runs
+# 106-164 s; 130 s sits in the middle and is the point where metering returns
+# the configured defaults unchanged.
+METER_REFERENCE_S = 130.0
+METER_MIN = 0.25
+METER_MAX = 4.0
+
+
+def metered_budget(period_s, base_ctx, base_history):
+    """Scale the model's context and memory by the organism's current period.
+
+    A faster organism buys a bigger budget, a slower one shrinks it. Blue light
+    is assumed to lengthen the period, so every pulse the model orders costs it
+    capacity -- it can only think at full width by leaving the organism alone.
+    The model is not told this; it has to read it off the telemetry history.
+
+    Direction chosen 2026-09-08. The inverse mapping was built first and is the
+    one to restore if the light-to-period assumption turns out backwards.
+
+    Clamped either side so a bad period estimate cannot ask Ollama for a
+    context it cannot allocate or starve the model to nothing.
+
+    Returns (num_ctx, history_turns), either unchanged if there is no period or
+    no configured base to scale.
+    """
+    if not period_s:
+        return base_ctx, base_history
+    scale = min(METER_MAX, max(METER_MIN, METER_REFERENCE_S / period_s))
+    ctx = int(base_ctx * scale) if base_ctx else base_ctx
+    # 0 means uncapped and -1 means none; neither is a quantity to scale.
+    history = (max(1, int(round(base_history * scale)))
+               if base_history and base_history > 0 else base_history)
+    return ctx, history
+
+
 def measured_period(state):
     """Median contraction period across channels that reported one, or None.
 
@@ -374,6 +401,37 @@ def measured_period(state):
     if len(periods) % 2:
         return float(periods[middle])
     return (periods[middle - 1] + periods[middle]) / 2.0
+
+
+def cycle_error(gap_s, believed_period_s, measured_period_s):
+    """How far the model's estimate of the tempo put it out over one gap.
+
+    A period that is wrong by a little slips by a lot once a gap is several
+    cycles long, which is what makes this worth telling the model rather than
+    the period itself. Returns None where either period is missing.
+    """
+    if not gap_s or not believed_period_s or not measured_period_s:
+        return None
+    expected = gap_s / believed_period_s
+    actual = gap_s / measured_period_s
+    return {
+        "gap_s": round(gap_s, 1),
+        "cycles_expected": round(expected, 2),
+        "cycles_actual": round(actual, 2),
+        "error_cycles": round(actual - expected, 2),
+    }
+
+
+def believed_period(reply):
+    """The model's own estimate of the rhythm, or None if it gave none."""
+    value = reply.get('believed_period_s')
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    # A period outside this cannot be a contraction cycle and would make a
+    # duration in cycles either instant or hours long.
+    return value if 10.0 <= value <= 1800.0 else None
 
 
 def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
@@ -424,6 +482,77 @@ def validate_action(reply, zones, barrier_zone, max_duration, period_s=None):
     return action, None
 
 
+class DoseLedger:
+    """Rolling cap on how much light the model can put on the organism.
+
+    Dose is intensity x seconds, summed over the last hour. Nothing else in the
+    rig bounds cumulative exposure: MAX_STIMULUS_DURATION caps one stimulus, so
+    a model that asks for the maximum every turn is inside every existing limit
+    and still floods the dish.
+
+    The cap trims the duration rather than refusing the action, and both the
+    asked-for and the allowed value are logged. A refusal would leave the trace
+    reasoning about a stimulus that never happened; a trim leaves a record of
+    the difference.
+
+    Spent only when a stimulus is actually applied. A sham turn lights nothing
+    and costs nothing.
+    """
+
+    WINDOW_S = 3600.0
+
+    def __init__(self, budget):
+        self.budget = float(budget)
+        self.entries = []
+
+    def _prune(self, now):
+        cutoff = now - self.WINDOW_S
+        self.entries = [(t, d) for t, d in self.entries if t > cutoff]
+
+    def spent(self, now=None):
+        now = time.time() if now is None else now
+        self._prune(now)
+        return sum(d for _, d in self.entries)
+
+    def remaining(self, now=None):
+        return max(0.0, self.budget - self.spent(now))
+
+    def allowed_duration(self, intensity, duration_s, now=None):
+        """The most of this request the hour's budget will carry, in seconds."""
+        if intensity <= 0 or duration_s <= 0:
+            return duration_s
+        return min(duration_s, self.remaining(now) / intensity)
+
+    def spend(self, intensity, duration_s, now=None):
+        now = time.time() if now is None else now
+        dose = max(0.0, intensity) * max(0.0, duration_s)
+        if dose > 0:
+            self.entries.append((now, dose))
+        return dose
+
+
+def apply_dose_cap(action, ledger):
+    """Trim an action to the hour's remaining dose. Returns a record, or None.
+
+    Mutates the action's duration in place, which is what then gets applied and
+    logged, so the turn log says what reached the organism rather than what was
+    asked for.
+    """
+    if not action or ledger is None:
+        return None
+    asked = action["duration_s"]
+    allowed = ledger.allowed_duration(action["intensity"], asked)
+    if allowed >= asked:
+        return None
+    action["duration_s"] = allowed
+    return {
+        "duration_asked_s": round(asked, 1),
+        "duration_allowed_s": round(allowed, 1),
+        "remaining_dose": round(ledger.remaining(), 1),
+        "budget": ledger.budget,
+    }
+
+
 def open_matrix(dry_run):
     """The panel, preferring the root-owned daemon.
 
@@ -444,11 +573,10 @@ def open_matrix(dry_run):
 _stimulus_timer = None
 
 
-def apply_action(matrix, action, speed=1.0, min_duration=0.0,
-                 hold_until_next=False, full_intensity=False, on_switch=None):
+def apply_action(matrix, action, speed=1.0, min_duration=0.0, on_switch=None):
     """Light the zone, and take it off again after the duration requested.
 
-    `speed` compresses the duration alongside the turn interval, so a demo run
+    `speed` compresses the duration alongside the turn interval, so a fast run
     keeps the same on/off rhythm as a live one instead of holding every zone
     lit straight through to the next turn.
 
@@ -482,38 +610,25 @@ def apply_action(matrix, action, speed=1.0, min_duration=0.0,
         _stimulus_timer = None
 
     intensity = action["intensity"]
-    if full_intensity:
-        # The model's 0.5-0.8 against STIM_BRIGHTNESS lands near 31/255, twice
-        # the barrier and easy to miss in a lit room. A demo shows which zone,
-        # not how brightly.
-        intensity = 1.0
 
     # Worked out before the zone is lit: a zero-length request must not light it
     # at all. Computing this after set_zone left the zone on with nothing armed
     # to clear it, so zero seconds lasted until the next turn.
     #
-    # Scaling duration with the interval keeps the on/off ratio honest, but at
-    # 60x a 60s pulse is a one-second blink. min_duration is the visibility
-    # floor, set only in demo.
+    # Scaling duration with the interval keeps the on/off ratio honest.
     duration = (action.get("duration_s") or 0) / max(speed, 1e-9)
     if duration > 0:
         duration = max(duration, min_duration)
 
     # Clear rather than light-then-clear: the zone is already dark, and a
-    # set/clear pair spends a switching edge saying so. hold_until_next is
-    # exempt -- a demo shows the choice whatever duration was asked for.
-    if not hold_until_next and duration <= 0:
+    # set/clear pair spends a switching edge saying so.
+    if duration <= 0:
         matrix.clear_stimulus()
         return
 
     matrix.clear_stimulus()
     matrix.set_zone(action["zone"], intensity)
     _switch('on')
-
-    # Demo holds the zone until the next choice, so the panel visibly moves.
-    # Scaling the duration instead gave ~13% duty, which nobody can watch.
-    if hold_until_next:
-        return
 
     def _expire():
         try:
@@ -559,7 +674,11 @@ def main():
                         help='verify Ollama and the data window, run no turns')
     parser.add_argument('--dry-run', action='store_true',
                         help='run turns but never drive the matrix')
-    parser.add_argument('--prompt', default=getattr(config, 'LLM_PROMPT', 'blind'))
+    parser.add_argument('--experiment', metavar='NAME',
+                        help='an experiments/<name>/ folder. Supplies the '
+                             'prompt and parameters, and tags the run with '
+                             'the dish it assumes. Explicit flags win.')
+    parser.add_argument('--prompt', default=None)
     parser.add_argument('--turns', type=int, default=0, help='0 runs forever')
     parser.add_argument('--interval', type=int,
                         default=getattr(config, 'LLM_TURN_INTERVAL', 600))
@@ -588,15 +707,54 @@ def main():
                         help='ceiling on seconds between turns; 0 means a '
                              'quiet organism produces no turns at all, which '
                              'is the intended behaviour')
+    parser.add_argument('--metered', action='store_true',
+                        help="scale context and history by the organism's "
+                             'measured period rather than holding them fixed')
     parser.add_argument('--sham-rate', type=float, default=None)
     parser.add_argument('--num-ctx', type=int, default=None,
                         help='context window in tokens; pins the denominator '
                              'the adversarial prompt reports to the model')
-    parser.add_argument('--demo', action='store_true',
-                        help='synthetic data at speed, DRIVING the panel. For '
-                             'exercising the hardware; refuses if the chamber '
-                             'is occupied. Turns go to the replay log.')
     args = parser.parse_args()
+
+    # An experiment supplies defaults; anything given on the command line wins,
+    # and the override is logged so the record cannot claim the config drove a
+    # run that it did not.
+    experiment = None
+    electrode_config = None
+    overrides = {}
+    if args.experiment:
+        try:
+            experiment = experiments.require(args.experiment, 'loop')
+            electrode_config = experiment.get('electrodes')
+        except experiments.UnknownExperiment as exc:
+            print(exc)
+            return 2
+        params = experiment.get('params', {})
+        for flag, key in (('prompt', 'prompt'), ('model', 'model'),
+                          ('min_gap', 'min_gap_s'), ('sham_rate', 'sham_rate')):
+            value = experiment.get(key) if key == 'prompt' else params.get(key)
+            if value is None:
+                continue
+            given = getattr(args, flag)
+            if given in (None, parser.get_default(flag)):
+                setattr(args, flag, value)
+            elif given != value:
+                overrides[flag] = {"config": value, "used": given}
+
+    if args.prompt is None:
+        args.prompt = getattr(config, 'LLM_PROMPT', 'blind')
+
+    # Only for a run that actually records and actuates. --check, --dry-run and
+    # --replay must not switch the run or move recovery: they are inspections.
+    actuating = not (args.check or args.dry_run or args.replay)
+    if experiment and actuating:
+        try:
+            _, changes = experiments.enter(config, experiment)
+        except Exception as exc:
+            print(f"could not enter {experiment['name']}: {exc}")
+            return 2
+        for line in changes:
+            print(f"   {line}")
 
     # In recovery the panel is dark, so a live turn would be logged as real
     # against something that was never lit. A gap is visibly a gap; a fake turn
@@ -625,6 +783,12 @@ def main():
     # happening.
     adversarial = args.prompt == 'adversarial'
     mimic = args.prompt == 'mimic'
+    # CYCLES withholds the measured period and scores the model's own estimate
+    # of it. Everything the model expresses in cycles is converted with its
+    # estimate rather than with the measurement.
+    cycles_mode = args.prompt == 'cycles'
+    believed_s = None      # the model's period from the previous turn
+    last_turn_at = None
     num_ctx = args.num_ctx or getattr(config, 'LLM_NUM_CTX', None)
     compact_state = adversarial
 
@@ -640,58 +804,23 @@ def main():
     elif history_turns == 0 and not num_ctx:
         print("history is uncapped with no num_ctx set: the context will fill\n"
               "and Ollama will silently drop the oldest turns. Set LLM_NUM_CTX.")
+
+    # Metering scales a base, so it needs one. LLM_NUM_CTX is None by default
+    # and there would be nothing to scale; this base applies only under
+    # --metered and leaves the unmetered loop exactly as it was.
+    if args.metered and not num_ctx:
+        num_ctx = 8192
     sham_rate = (args.sham_rate if args.sham_rate is not None
                  else getattr(config, 'LLM_SHAM_RATE', 0.25))
     channels = tuple(getattr(config, 'ADC_CHANNELS', (0, 1, 2)))
 
     # Replay implies dry run: driving the panel from a recording puts real light
     # on the organism from data that is not about it.
-    #
-    # --demo is the one exception, and exists because the live loop cannot be
-    # sped up without becoming meaningless. It is safe because it is loud, gated
-    # on an empty chamber, and logs to data/logs/replay/.
-    if args.demo:
-        # Read fresh every start from the recording mode: `live` means a real
-        # session, which means something is in the chamber. A separate occupancy
-        # flag used to say the same thing and went stale, because nothing broke
-        # when it did.
-        if run_state.current(config).get('mode') == 'live':
-            print("refusing --demo: recording is live, so the chamber is taken\n"
-                  "to be occupied. This mode invents data and puts real light on\n"
-                  "the panel. Switch recording to test in the admin panel, and\n"
-                  "only when there is nothing alive in the chamber.")
-            return 1
-        if not args.replay:
-            args.replay = 'synthetic'
-        if args.speed == 1.0:
-            # 60x turns a 600s interval into 10s, which is watchable.
-            args.speed = 60.0
-        args.dry_run = False
-        # No shams in a demo. A sham is a control condition and a demonstration
-        # has nothing to control for -- all it does is make a quarter of the
-        # turns light nothing, which reads as broken hardware to whoever is
-        # watching. That is the opposite of what this mode is for.
-        if args.sham_rate is None:
-            args.sham_rate = 0.0
-    elif args.replay:
+    if args.replay:
         args.dry_run = True
 
-    # In demo, hold each zone for a visible fraction of the effective turn
-    # interval -- long enough to see, short enough to still go off before the
-    # next turn. Zero outside demo: a real run must apply exactly what the model
-    # asked for and nothing else.
+    # A real run applies exactly what the model asked for and nothing else.
     min_stimulus_s = 0.0
-    if args.demo:
-        min_stimulus_s = max(6.0, (args.interval / max(args.speed, 1e-9)) * 0.5)
-
-    # sham_rate above still holds the config default, so take the demo value
-    # from args. A demo has nothing to control for, and a sham reads as broken
-    # hardware to a viewer.
-    #
-    # Do not test `args.sham_rate is None` here -- the --demo block has already
-    # set it to 0.0, so the override never fires and a hand-run demo gets 25%.
-    if args.demo:
-        sham_rate = args.sham_rate
 
     prompts = load_prompts()
     if args.prompt not in prompts:
@@ -740,17 +869,15 @@ def main():
     ok, detail = ollama.reachable()
     print(f"ollama   {'OK' if ok else 'UNREACHABLE'}: {detail}")
     print(f"source   {source.describe()}")
+    if experiment:
+        print(f"experiment {experiment['name']}  dish {electrode_config}")
+        for flag, both in overrides.items():
+            print(f"   override {flag}: config {both['config']!r}, "
+                  f"using {both['used']!r}")
     print(f"prompt   {args.prompt}")
     print(f"sham     {sham_rate:.0%} of turns")
     if args.replay:
-        if args.demo:
-            print(f"speed    {args.speed}x")
-            print("\n*** DEMO MODE ***\n"
-                  "Invented data, driving the real panel. Turns are written to\n"
-                  "data/logs/replay/ and are NOT part of the experimental record.\n"
-                  "Never run this with anything alive in the chamber.\n")
-        else:
-            print(f"speed    {args.speed}x  (dry run: the matrix is never driven)")
+        print(f"speed    {args.speed}x  (dry run: the matrix is never driven)")
 
     if args.check:
         return 0 if ok else 1
@@ -772,6 +899,11 @@ def main():
     requested_s, trigger_why = None, 'start'
     context_used, last_turn_cost = 0, 0
     chars_per_token = None
+    # The trend the model predicted last turn and the period it predicted
+    # from, held until the next measurement can settle it.
+    pending_trend, pending_period_s = None, None
+    prediction_scores = []
+    dose = DoseLedger(getattr(config, 'MAX_DOSE_PER_HOUR', 300.0))
     if args.trigger == 'clock' or args.replay:
         print(f"\nrunning, a turn every {args.interval}s. ctrl-c to stop.\n")
     else:
@@ -807,11 +939,37 @@ def main():
                                          ["nothing measurable changed"]),
                     "trail": trail.view(),
                 }
-            if num_ctx:
-                remaining = max(0, num_ctx - context_used)
+            if cycles_mode:
+                # The period is the answer, so it cannot be in the question.
+                for value in sending.values():
+                    if isinstance(value, dict):
+                        value.pop('period_s', None)
+                sending.pop('reference_period_s', None)
+                drift = cycle_error(
+                    (time.time() - last_turn_at) if last_turn_at else None,
+                    believed_s, measured_period(state))
+                if drift:
+                    sending['since_last_turn'] = drift
+
+            # Metering is recomputed every turn, not once at startup: the
+            # point is that the budget moves when the organism's tempo moves.
+            turn_ctx, turn_history = num_ctx, history_turns
+            metered_info = None
+            if args.metered:
+                turn_ctx, turn_history = metered_budget(
+                    measured_period(state), num_ctx, history_turns)
+                ollama.num_ctx = turn_ctx
+                metered_info = {
+                    'period_s': measured_period(state),
+                    'num_ctx': turn_ctx,
+                    'history_turns': turn_history,
+                }
+
+            if turn_ctx:
+                remaining = max(0, turn_ctx - context_used)
                 sending["context"] = {
                     "tokens_remaining": remaining,
-                    "tokens_total": num_ctx,
+                    "tokens_total": turn_ctx,
                     "turns_remaining_at_this_rate": (
                         int(remaining / last_turn_cost) if last_turn_cost
                         else None),
@@ -832,6 +990,11 @@ def main():
                 "run_id": active_run.get('id', ''),
                 "mode": active_run.get('mode', 'test'),
                 "prompt": args.prompt,
+                # What the run was, and the dish it assumed. Recorded per turn
+                # rather than only per run: a run's config can be edited, a
+                # turn log is append-only.
+                "experiment": experiment['name'] if experiment else None,
+                "electrodes": electrode_config,
                 "model": {"name": args.model, "num_ctx": num_ctx},
                 "source": getattr(source, 'label', 'live'),
                 # What caused this turn: a state change above threshold, the
@@ -852,12 +1015,12 @@ def main():
                 record["events_planted"] = source.planted_at(turn)
 
             # -1 sends nothing, 0 keeps everything, n keeps the last n turns.
-            if history_turns < 0:
+            if turn_history < 0:
                 recent = []
-            elif history_turns == 0:
+            elif turn_history == 0:
                 recent = history
             else:
-                recent = history[-history_turns * 2:]
+                recent = history[-turn_history * 2:]
 
             try:
                 reply, usage, logprobs = ollama.ask(system, sending, recent)
@@ -893,11 +1056,44 @@ def main():
                 record["context_used"] = context_used
 
             period_s = measured_period(state)
+            record["measured_period_s"] = period_s
+            if metered_info:
+                record["metered"] = metered_info
+
+            if cycles_mode:
+                # Its estimate, not ours: a wrong belief makes a wrong-length
+                # stimulus, which is the point.
+                stated = believed_period(reply)
+                record["believed_period_s"] = stated
+                record["cycle_error"] = cycle_error(
+                    (time.time() - last_turn_at) if last_turn_at else None,
+                    believed_s, period_s)
+                believed_s = stated
+                last_turn_at = time.time()
+                conversion_period = stated
+            else:
+                conversion_period = period_s
+
+            # Last turn's prediction, now that the period it was about has
+            # been measured. Scored here rather than in analysis so the run is
+            # self-contained and a miss cannot be reinterpreted after the fact.
+            scored = prediction.score(pending_trend, pending_period_s,
+                                      period_s, window_s)
+            if scored:
+                prediction_scores.append(scored)
+                record["prediction"] = scored
+                record["prediction_tally"] = prediction.tally(prediction_scores)
+            pending_trend = prediction.parse_trend(
+                reply.get('expected_period_trend'))
+            pending_period_s = period_s
+            record["expected_period_trend"] = pending_trend
+
             action, refusal = validate_action(
                 reply, leds.ZONES, leds.BARRIER_ZONE,
                 getattr(config, 'MAX_STIMULUS_DURATION', 300),
-                period_s=period_s)
+                period_s=conversion_period)
             record["action_refused"] = refusal
+            record["dose_capped"] = apply_dose_cap(action, dose)
 
             # Decided before the action is applied, and never revealed to the
             # model. The reply is already in hand either way, so a sham turn
@@ -910,10 +1106,10 @@ def main():
                 try:
                     apply_action(matrix, action, speed=args.speed,
                                  min_duration=min_stimulus_s,
-                                 hold_until_next=args.demo,
-                                 full_intensity=args.demo,
                                  on_switch=switch_recorder(turn))
                     record["applied"] = True
+                    dose.spend(action["intensity"], action["duration_s"])
+                    record["dose_spent_hour"] = round(dose.spent(), 1)
                 except Exception as exc:
                     record["apply_error"] = str(exc)
                     print(f"[turn {turn}] apply failed: {exc}")

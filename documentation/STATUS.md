@@ -1,6 +1,6 @@
 # Status
 
-Updated 2026-09-01 22:40 CEST. This is the only current-state document. If
+Updated 2026-09-06 04:30 CEST. This is the only current-state document. If
 another file disagrees with this one, this one is right.
 
 ## In plain language
@@ -91,15 +91,14 @@ those three files and is not required to record.
 
 | | |
 |---|---|
-| run | still tagged `20260827T210834Z-live`; step 8 ended 2026-08-29 00:00 |
-| dish | organism out since 2026-08-29 00:00. Nothing recording from the dish |
-| electrodes | flat since 2026-08-29 00:00: all three at -1.7 mV, 0.016 mV per sample, 90-200 s RMS 0.02-0.09 mV. Below every level ever recorded with electrodes in agar |
-| record | continuous 2026-08-27 23:08:34 to 2026-08-29 16:41:50, then paused by the user, resumed 2026-09-01 21:07:22. Not a fault |
-| services | `sllm-api` active since 2026-08-29 00:01:36, `sllm-loop` inactive |
-| recovery mode | ON since 2026-08-23, panel dark, LEDs blocked |
-| camera | working, 300 s timelapse |
-| lighting | rebuilt 2026-08-27 22:22. Frames stable at mean 117, 1.45% clipped |
-| matrix | unplugged |
+| run | `20260906T231858Z-live`, started 2026-09-07 01:18 CEST. `cycles-entrainment`, three-radial, new dish with fresh agar islands and offset oat flakes. `20260906T020300Z-live` ran 2026-09-06 04:03 to 2026-09-07 01:18 CEST |
+| dish | organism in. Bridged ch1 2026-09-05 ~19:00 CEST |
+| electrodes | ch1 connected, per-sample noise 0.018-0.026 mV. ch0 0.13-0.51, ch2 0.24-1.73, both unbridged |
+| record | continuous. 36 min of 2026-09-06 03:27-04:03 sits under `readings/test/` after an unrecorded mode switch; 3.7 s gap at 04:15 for an API restart |
+| services | `sllm-api` active. `sllm-loop`, `sllm-capture` and `sllm-matrixd` inactive, checked 2026-09-08 |
+| recovery mode | ON since 2026-09-06 03:27 |
+| camera | working, 120 s timelapse since 2026-09-06 02:20 (was 300 s) |
+| matrix | replacement panel fitted and powered 2026-09-08, sealed in a taped zip-lock bag. Not yet lit |
 
 ## Channel map
 
@@ -175,6 +174,25 @@ Board A rows are the source of truth.
   across the two implementations. Every number in the table above is from the
   one implementation.
 
+- **ch1 bridged 2026-09-05, and the line came with it.** Per-sample noise fell
+  from 0.10-0.18 to 0.018-0.026 mV between 18:50 and 19:10 CEST and held for
+  9 h. The 60-200 s peak on ch1 runs +1.96 to +3.22 dex at the p floor for
+  every hour from 19:00, period 106-116 s. ch0 and ch2 stay at +0.54 to +1.12
+  over the same hours. Visible events from the timelapse, in PDT: tube contacts
+  the blob 07:43, creeps onto the flake 09:13, electrode goes quiet 10:00-10:20,
+  flake engulfed 10:53. Conduction precedes feeding.
+
+  All three channels swing together 09:10-09:30 PDT, DC -3 mV to +4.3/+8.3/+3.4
+  and back by 10:50, ch1 about twice the others. Chamber temperature over that
+  window runs 22.26 -> 22.56 -> 22.40 C, which does not produce a per-sample
+  noise change. Unexplained. The rig was not handled.
+
+  Estimator caveat: run 2026-09-06 from a re-implementation of the
+  pre-registered statistic, in the session scratchpad, not in the repo. Compare
+  within this entry, not against dex recorded elsewhere in this file.
+
+  Period is 1.8-1.9 min here against 2.2-2.4 min in runs 6 and 8.
+
 ## Observed 2026-08-26 10:45, unconfirmed
 
 - No visible tubes anywhere in the dish. Organism alive on the reference island.
@@ -225,15 +243,41 @@ sclerotia formation, and growth away from the oat flake.
 4. **`/dev/media3` permission error** at `sllm-api` start. Harmless now, but a
    reboot that renumbers media nodes will present as a dead camera. Fix is a
    systemd drop-in with `DeviceAllow=char-media rw`; must be written by the user.
-5. **Deployed tree drifts.** Services run `/var/www/sllm`. A commit is not a
+5. **Matrix showing uncommanded pixels.** 2026-09-06 03:2x, during a dark
+   block with recovery off: one lit LED outside the barrier zone and a bright
+   white section. Nothing had commanded either -- `IMAGING_RED` is `False`, the
+   loop and demo were inactive, and the only commanded output was the barrier.
+   The panel has shorted on condensation before. That panel was unplugged and
+   replaced 2026-09-08. The replacement is sealed in a zip-lock bag, leads out
+   through a taped slit, no exposed wire. Sealing is the mitigation; the
+   setpoint is unchanged. Not yet lit, so the fault is not known to be gone.
+6. **Image archive thinned 1-in-10 to 2026-09-01.** 12 h264 segments written,
+   originals deleted except every 10th, 7193 frames -> 1801, 1.6 GB -> 752 MB.
+   Compression over the sparse pre-August record was 1.1:1, so those segments
+   cost their originals for no saving. `scripts/archive_video.py` now refuses to
+   thin a segment whose video exceeds 40% of its frames; the guard was written
+   after the backfill had run.
+7. **Run mode can change without a history entry.** `run.current()` auto-creates
+   a test run when `run.json` is unreadable. Observed 2026-09-06 03:27:02: the
+   live run became test with nothing in `runs.jsonl`. Now fixed to append, but
+   the cause of the unreadable file is unknown.
+8. **Deployed tree drifts.** Services run `/var/www/sllm`. A commit is not a
    deploy. Diff before assuming deployed behaviour.
 
 ## Next
 
+0. Light the new panel. Fitted, powered and sealed 2026-09-08 but never
+   driven. Recovery mode is ON and dark and `sllm-matrixd` is inactive; both
+   have to be cleared to drive a zone. Confirm by eye, not by `matrixd`
+   returning success. Watch for uncommanded pixels -- issue 5 is not closed.
+   Then bench the thermal confound before committing 12 h: run the block
+   schedule with the bagged panel and check whether per-block mean temperature
+   separates light from dark. That is a void condition, and it is cheaper to
+   find now.
 1. Light stimulus test, next run. Organism in, blue LED on for some minutes,
    off again, repeated, times recorded. This is the test that separates the
-   organism from interface electrochemistry. Needs a light source; the matrix is
-   unplugged after a condensation short.
+   organism from interface electrochemistry. Waits on the new panel being
+   lit.
 2. Fix condensation before the next run.
 3. Decide the stimulus block length and repeat count, and write them down before
    the run starts.
@@ -242,8 +286,8 @@ sclerotia formation, and growth away from the oat flake.
 
 - **LLM loop.** Nothing to close a loop around until the signal question is
   settled.
-- **Matrix repair.** Unplugged, shorted on condensation. Any rebuild needs it
-  sealed. Required before the light-stimulus test.
+- **Matrix repair.** Done 2026-09-08. Replacement panel, sealed. Lighting it
+  is Next item 0, not deferred.
 - **Re-plating electrodes.** Not indicated. Shorted-lead test 2026-08-24 was
   flat: drift ch0 +0.025, ch1 +0.004, ch2 +0.031 mV over 27 min.
 - **Foil shield.** Not indicated. In-solution noise is at or below the shorted
@@ -264,7 +308,7 @@ sclerotia formation, and growth away from the oat flake.
 | 6 | organism in | `live` | 24 h from bridge, 36 max | done, 2026-08-24 02:42 - 2026-08-26 21:15 |
 | 7 | organism removed | `test` | 2026-08-26 21:15 - 2026-08-27 21:47, 24.5 h, discard first 10 h | done, not yet analysed |
 | 8 | organism back in, same blobs | `live` | 24 h from bridge | done, 2026-08-27 23:08 - 2026-08-29 00:00. 21 h analysed post-bridge |
-| 9 | blue light stimulus, organism in | `live` | not scheduled | not run |
+| 9 | blue light stimulus, organism in | `live` | 12 h | pre-registered 2026-09-06; attempted 03:21:34 CEST, stopped 03:26:49 after two dark blocks, no blue block ran. Blocked on the panel |
 
 Steps 6 and 8: the 24 h counts from tube bridge, not inoculation. In run 6 the
 first bridge came 10.7 h after inoculation, so budget ~36 h wall clock for
@@ -452,3 +496,76 @@ run so far.
 
 Not accurate: confirmed biological activity.
 
+
+## Step 9 pre-registration
+
+Written 2026-09-06 03:20 CEST. Nothing from the stimulus run had been recorded
+when this was written. ch1 bridged 2026-09-05 ~19:00 CEST; the 9 h since are
+known and are not part of the run.
+
+### In plain language
+
+The organism is connected to one electrode and that electrode is oscillating.
+Blue light is shone on the dish for an hour, then not for an hour, six times
+each. If the oscillation is the organism, the light should change it. If it is
+chemistry at the metal surface, the light has no reason to. What counts as a
+change is fixed here, before the run.
+
+### Dish
+
+Organism in, one dish, one tube. ch1 bridged 2026-09-05 19:00 CEST, confirmed by
+per-sample noise falling from 0.10-0.18 to 0.018-0.026 mV and holding for 9 h.
+ch0 and ch2 unbridged, per-sample noise 0.13-0.51 and 0.24-1.73 mV. Both serve
+as controls. Reference on A3 as before.
+
+### Stimulus
+
+`scripts/stimulus_run.py`, 1 h dark then 1 h blue, 6 pairs, 12 h, dark first.
+Intensity 0.50 on the 8 drivable zones; zone 2 over the reference is not driven.
+Every transition is timestamped into `data/stimulus_<ts>.jsonl` by the script
+that made it. That file, not recollection, defines the block edges.
+
+### Statistic
+
+Unchanged from step 7. Per channel per block, the largest periodogram peak in
+the 60-200 s band, as log10 excess (dex) over the local median background taken
+over +-0.6 octave in log period. One implementation for all 12 blocks; absolute
+dex is not comparable to values from other implementations recorded above.
+
+Primary window is the full 60 min of each block. The last 45 min of each block
+is reported as a secondary window to allow for response latency. The secondary
+window does not bear on the decision.
+
+### Comparison
+
+Six light blocks against six dark blocks on ch1, exact Wilcoxon rank-sum,
+two-sided. Same test run on ch0 and ch2. Minimum attainable two-sided p at
+6 v 6 is 0.0022.
+
+### Decision rule
+
+| result | conclusion |
+|---|---|
+| ch1 p <= 0.01 and both ch0 and ch2 p > 0.05 | blue light changes the ch1 line. Direction recorded |
+| ch1 p <= 0.01 and ch0 or ch2 p <= 0.05 | common-mode. No claim about the organism; suspect heat or panel coupling |
+| ch1 0.01 < p <= 0.05 | inconclusive. No claim either way |
+| ch1 p > 0.05 | no response detected at intensity 0.50 in 1 h blocks. Not evidence of no response |
+
+### Void conditions
+
+- Per-block mean chamber temperature separates light from dark at exact rank
+  p <= 0.05 **and** the group means differ by >= 0.2 C. The channels follow
+  temperature at +8.1 mV/C, r = 0.73.
+- ch1 per-sample noise exceeds 0.06 mV in any block: the electrode has
+  disconnected. Truncate at that block. Fewer than 4 remaining pairs voids the
+  run.
+
+### Exclusions declared in advance
+
+- 2026-09-05 18:00-19:00 PDT (2026-09-06 03:00-04:00 CEST). The panel was on
+  18:01:29-18:05:59 PDT, 4 min 30 s, uncontrolled.
+- Any block in which the rig was handled or the lid opened.
+- Any `sllm-api` restart gap.
+- Any partial block at either end of the run.
+
+No other statistic will be substituted after the data is seen.

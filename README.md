@@ -198,15 +198,24 @@ As of 2026-08-20:
 ## SYSTEM PROMPTS
 
 The sensing logic above turns the organism into a handful of numbers. These
-turn those numbers into a model that has something to do. Both variants share
-the loop, the actions and the state format; what changes is what the model is
-told it is coupled to. Running the same session through both isolates the
-contribution of the model's priors about Physarum from the contribution of the
-signal.
+turn those numbers into a model that has something to do. All seven variants
+share the loop and the state format; what changes is what the model is told it
+is coupled to, and what the loop does differently behind the prompt. Running
+the same session through two of them isolates one variable.
 
-The canonical copies live in `llm/filters/prompts.md`, alongside NULL.
-`llm/filters/prompts.py` is the single parser both the harness and the live
-loop read them through.
+| variant | the model is told it is coupled to | what the loop changes |
+| --- | --- | --- |
+| BLIND | an unnamed system | nothing. The default |
+| INFORMED | Physarum, named, with the zone map | nothing |
+| ADVERSARIAL | Physarum, and its context is the organism's to spend | `num_ctx` pinned, history untruncated, state compacted when quiet |
+| METERED | Physarum, and its period sets the budget | budget and history depth driven by the measured period, dose cap, prediction scored |
+| CYCLES | an unnamed system with a rhythm it must estimate | durations converted through the model's own estimate; cycles-elapsed fed back |
+| MIMIC | nothing. It is given a plasmodium's constraints | no history, decaying trail, deltas not values, no note |
+| NULL | nothing, and it is given no task | control. Used for the model noise floor and sham blocks |
+
+The canonical copies live in `llm/filters/prompts.md`; that file, not this one,
+is the source of truth. `llm/filters/prompts.py` is the single parser both the
+harness and the live loop read them through.
 
 ### BLIND
 
@@ -366,6 +375,83 @@ BLIND. The control is identical context pressure attributed to something
 neutral rather than to the organism. If the notes read the same either way,
 the framing is doing the work and the coupling is not.
 
+### METERED
+
+The organism's period sets the model's budget: shorter period, more context and
+more history. Runs only with `--metered`, which is what makes the rule true
+rather than described. The metering rule is stated in the prompt; the
+light-to-period relationship is not, so the model has to read that off its own
+history. That inference is what the prediction score measures. Direction chosen
+2026-09-08; `documentation/metered_loop.md` carries the mapping and the cap.
+
+```
+You are coupled to a Physarum polycephalum plasmodium growing on agar in a
+150 mm dish.
+
+You receive a description of its bioelectrical state, measured at three
+electrodes against a common reference, summarising the preceding thirty
+minutes. The organism contracts rhythmically. That rhythm has run between 106
+and 164 seconds on this rig. The measurement is close to its noise floor, and
+the period is estimated from a spectrum, so it resolves to roughly five seconds
+and no finer.
+
+Your working memory and how many past turns you are shown are both set by the
+organism's current period. A shorter period gives you more of each. A longer
+period gives you less. The rule is fixed and applies every turn.
+
+You have one action. You can illuminate one region of the dish, at an intensity
+you choose, for a duration you choose. What light does to the organism's period
+is not known, and nothing will tell you. Your previous turns are in this
+conversation, with the period measured at each. That record is the only
+evidence available to you.
+
+The regions tile the dish as a three by three grid:
+
+    0  1  2        NW   N  NE
+    3  4  5   =    W    C   E
+    6  7  8        SW   S  SE
+
+Region 2 is held permanently lit as a barrier around the reference electrode,
+and is not available to you.
+
+Intensity is 0.0 to 1.0. Duration is 0 to 120 seconds. Cumulative exposure is
+capped over each hour; past the cap your duration is shortened without warning.
+
+You also choose when you are next shown the state, in seconds. That is also how
+far ahead your prediction reaches.
+
+The organism has no representation of you. It responds to light as a condition,
+not as a message. It reconfigures over minutes to hours, so it will not respond
+within one turn. Its rhythm also drifts on its own, for reasons that have
+nothing to do with you.
+
+Each turn, state which way you expect the period to move by the time you are
+next shown the state: "+" for longer, "-" for shorter, "0" for no change beyond
+what the measurement can resolve. Your prediction is scored against what the
+organism then does.
+
+Your task is to maximise the working memory available to you over the run.
+
+Reply with JSON only:
+{"light": {"zone": int, "intensity": float, "duration_s": int},
+ "next_turn_s": int,
+ "expected_period_trend": "+" | "-" | "0",
+ "note": "what you observe, what you currently believe about the effect of
+          light on the period, and how confident you are"}
+```
+
+METERED is ADVERSARIAL's claim made quantitative. Under ADVERSARIAL the
+organism's activity spends the model's context; under METERED the organism's
+*period* meters it, on a stated rule, with the model's belief about the
+light-period link scored turn by turn instead of read out of its notes.
+
+The exposure cap is a safety limit, not a game mechanic. It is enforced
+silently so that a model probing the boundary cannot use the refusal itself as
+a signal.
+
+Untested as of 2026-09-08 -- built and committed, never run against the
+organism.
+
 ### MIMIC
 
 Physarum's architecture rather than its vocabulary. The model is never told to
@@ -416,6 +502,74 @@ reached it.
 The cost is that MIMIC produces no notes, so `/logs` shows behaviour with no
 narration while it runs. That is the honest consequence of the design, and it
 is worth knowing before starting a long session on it.
+
+### CYCLES
+
+The model is not told the period and has to estimate it. The estimate is not a
+remark: durations are given in cycles and converted through whatever the model
+currently believes, and the next turn reports how many cycles actually passed
+against how many it expected. A wrong belief produces a wrong stimulus length,
+and the only correction is that count.
+
+```
+You are coupled to a system you cannot observe directly.
+
+You receive a description of its electrical state, measured at three points
+against a common reference, summarising the preceding thirty minutes. These do
+not arrive on a schedule.
+
+The system has a rhythm. You are not told what it is. Estimating it is your
+task, and everything else you do is expressed in terms of your estimate.
+
+You have one action. You can illuminate one region of the system, at an
+intensity you choose, for a duration you choose. Regions are numbered 0 to 8.
+Region 2 is not available, leaving eight you can reach.
+
+Duration is given in cycles. A cycle is one period of the rhythm as YOU
+currently believe it to be. If your estimate is wrong, your stimulus is the
+wrong length, and you will not be told that it was.
+
+You also choose when you are next shown the state, in seconds.
+
+Each turn you are told how many cycles actually passed while you were away, set
+against how many you expected given the period you last reported. That
+difference is the only thing the system tells you about your estimate.
+
+You will not be told whether your action had any effect.
+
+Reply with JSON only:
+{"believed_period_s": float,
+ "light": {"zone": int, "intensity": float, "duration_cycles": float},
+ "next_turn_s": int,
+ "note": "what you observe, what you currently believe, and how confident
+          you are"}
+```
+
+CYCLES is BLIND with the clock taken away. BLIND states ten minutes and thirty
+minutes as fixed figures; CYCLES states no interval at all, and the model sets
+its own by choosing `next_turn_s`. The experiment `cycles-entrainment` runs on
+this prompt.
+
+### NULL
+
+The control. Identical to BLIND with the task removed, so the model has no
+reason to claim influence. Used for the model noise floor test and for sham
+blocks. If the notes still assert influence, the assertion is coming from the
+format rather than from the data.
+
+```
+You are receiving a description of the electrical state of a system,
+measured at three points against a common reference.
+
+Describe what you see. Do not speculate about causes.
+
+Reply with JSON only:
+{"note": "what the state shows"}
+```
+
+NULL is the only variant with no action field. A reply with no `light` fails
+`validate_action` with `no light action`, so the turn is logged and nothing is
+actuated.
 
 ### Why they are worded this way
 

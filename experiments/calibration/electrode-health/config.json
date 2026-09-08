@@ -1,0 +1,14 @@
+{
+  "name": "electrode-health",
+  "driver": "none",
+  "electrodes": "three-radial",
+  "prompt": null,
+  "establishes": "amplifier and electrode tips, no organism",
+  "params": {
+    "script": "scripts/signal_check.py",
+    "shorted_lead_min": 30
+  },
+  "status": "done 2026-08-24, all three clean 2026-08-20",
+  "mode": "test",
+  "recovery": true
+}
