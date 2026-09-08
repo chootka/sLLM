@@ -12,7 +12,7 @@ current budget: `led_matrix.md`.
 | Raspberry Pi 5 | — | host, replacement board fitted 2026-08-05 |
 | ADS1115 | I²C `0x48` | electrode potentials, 3 differential channels at 1 Hz |
 | SHT31 | I²C `0x44` | chamber temperature and humidity |
-| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus zones + barrier zone. **Unplugged**, shorted on condensation |
+| WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus zones + barrier zone. Replacement panel fitted 2026-09-08, sealed in a zip-lock bag |
 | Camera Module 3 NoIR (IMX708) | CSI | stills, 2304×1296 |
 | 850nm IR flood | not GPIO-controlled | imaging illumination, always on. Confirmed fitted and running 2026-08-26 |
 | Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 300s |
@@ -285,10 +285,17 @@ barrier zone out of frame.
 
 ## Matrix — WS2812B 16×16
 
-**Fault: unplugged. Shorted from condensation inside the chamber.** Date
-unplugged: **TBC**. Humidity railed at 99.9-100.0% for the whole 20260821 run.
-The panel sits under the dish inside the humid box; any rebuild needs the
-matrix sealed against condensation.
+**Replacement panel fitted 2026-09-08, sealed against condensation.** The
+panel is inside a zip-lock bag. The leads exit through a slit, and the slit
+and every other opening are closed with electrical tape. It sits under the dish
+inside the humid box. No exposed wire anywhere on the run.
+
+Powered as of 2026-09-08. Not yet lit -- no zone has been driven and seen since
+the replacement.
+
+The panel it replaced shorted on condensation and was unplugged; date unplugged
+**TBC**. Humidity railed at 99.9-100.0% for the whole 20260821 run. Nothing
+unsealed goes back in the chamber.
 
 `sllm-matrixd` reports success with the panel unpowered - writes go out over
 GPIO 18 and there is no readback. Software state is not evidence the panel lit.

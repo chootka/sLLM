@@ -91,14 +91,14 @@ those three files and is not required to record.
 
 | | |
 |---|---|
-| run | `20260906T020300Z-live`, started 2026-09-06 04:03 CEST |
+| run | `20260906T231858Z-live`, started 2026-09-07 01:18 CEST. `cycles-entrainment`, three-radial, new dish with fresh agar islands and offset oat flakes. `20260906T020300Z-live` ran 2026-09-06 04:03 to 2026-09-07 01:18 CEST |
 | dish | organism in. Bridged ch1 2026-09-05 ~19:00 CEST |
 | electrodes | ch1 connected, per-sample noise 0.018-0.026 mV. ch0 0.13-0.51, ch2 0.24-1.73, both unbridged |
 | record | continuous. 36 min of 2026-09-06 03:27-04:03 sits under `readings/test/` after an unrecorded mode switch; 3.7 s gap at 04:15 for an API restart |
-| services | `sllm-api` active, `sllm-loop` and `sllm-demo` inactive |
+| services | `sllm-api` active. `sllm-loop`, `sllm-capture` and `sllm-matrixd` inactive, checked 2026-09-08 |
 | recovery mode | ON since 2026-09-06 03:27 |
 | camera | working, 120 s timelapse since 2026-09-06 02:20 (was 300 s) |
-| matrix | unplugged. Showed pixels nothing commanded, 2026-09-06 03:2x. Replacement expected 2026-09-06 |
+| matrix | replacement panel fitted and powered 2026-09-08, sealed in a taped zip-lock bag. Not yet lit |
 
 ## Channel map
 
@@ -247,9 +247,10 @@ sclerotia formation, and growth away from the oat flake.
    block with recovery off: one lit LED outside the barrier zone and a bright
    white section. Nothing had commanded either -- `IMAGING_RED` is `False`, the
    loop and demo were inactive, and the only commanded output was the barrier.
-   The panel has shorted on condensation before. Unplugged; replacement
-   expected. A new panel in a chamber at 95-100% RH fails the same way, so it
-   needs sealing or a lower setpoint.
+   The panel has shorted on condensation before. That panel was unplugged and
+   replaced 2026-09-08. The replacement is sealed in a zip-lock bag, leads out
+   through a taped slit, no exposed wire. Sealing is the mitigation; the
+   setpoint is unchanged. Not yet lit, so the fault is not known to be gone.
 6. **Image archive thinned 1-in-10 to 2026-09-01.** 12 h264 segments written,
    originals deleted except every 10th, 7193 frames -> 1801, 1.6 GB -> 752 MB.
    Compression over the sparse pre-August record was 1.1:1, so those segments
@@ -265,14 +266,18 @@ sclerotia formation, and growth away from the oat flake.
 
 ## Next
 
-0. Replacement panel, sealed against condensation. Everything below waits on it.
-   Bench the thermal confound before committing 12 h: run the block schedule
-   with the bagged panel and check whether per-block mean temperature separates
-   light from dark. That is a void condition, and it is cheaper to find now.
+0. Light the new panel. Fitted, powered and sealed 2026-09-08 but never
+   driven. Recovery mode is ON and dark and `sllm-matrixd` is inactive; both
+   have to be cleared to drive a zone. Confirm by eye, not by `matrixd`
+   returning success. Watch for uncommanded pixels -- issue 5 is not closed.
+   Then bench the thermal confound before committing 12 h: run the block
+   schedule with the bagged panel and check whether per-block mean temperature
+   separates light from dark. That is a void condition, and it is cheaper to
+   find now.
 1. Light stimulus test, next run. Organism in, blue LED on for some minutes,
    off again, repeated, times recorded. This is the test that separates the
-   organism from interface electrochemistry. Needs a light source; the matrix is
-   unplugged after a condensation short.
+   organism from interface electrochemistry. Waits on the new panel being
+   lit.
 2. Fix condensation before the next run.
 3. Decide the stimulus block length and repeat count, and write them down before
    the run starts.
@@ -281,8 +286,8 @@ sclerotia formation, and growth away from the oat flake.
 
 - **LLM loop.** Nothing to close a loop around until the signal question is
   settled.
-- **Matrix repair.** Unplugged, shorted on condensation. Any rebuild needs it
-  sealed. Required before the light-stimulus test.
+- **Matrix repair.** Done 2026-09-08. Replacement panel, sealed. Lighting it
+  is Next item 0, not deferred.
 - **Re-plating electrodes.** Not indicated. Shorted-lead test 2026-08-24 was
   flat: drift ch0 +0.025, ch1 +0.004, ch2 +0.031 mV over 27 min.
 - **Foil shield.** Not indicated. In-solution noise is at or below the shorted
