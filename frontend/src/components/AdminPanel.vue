@@ -54,6 +54,15 @@
         <hr class="admin-rule" />
 
         <p class="admin-label">Data acquisition</p>
+        <select class="admin-select" :disabled="busy || !experiments.length"
+                :value="experiment || ''"
+                @change="setExperiment($event.target.value)">
+          <option v-if="!experiments.length" value="">no experiments found</option>
+          <option v-else value="">no experiment</option>
+          <option v-for="spec in experiments" :key="spec.name" :value="spec.name">
+            {{ spec.name }} ({{ spec.driver }})
+          </option>
+        </select>
         <div class="pill" :class="{ busy }">
           <button :class="{ active: mode === 'test' }" :disabled="busy"
                   @click="setMode('test')">test</button>
@@ -61,7 +70,8 @@
                   :disabled="busy" @click="setMode('live')">live</button>
         </div>
         <p class="admin-hint">
-          Test data is written to its own directory.
+          An experiment applies its own mode and panel state. Test data is
+          written to its own directory.
         </p>
 
         <hr class="admin-rule" />
@@ -121,6 +131,8 @@ export default {
       recovery: { active: false, dark: false, since: null },
       mode: '',
       modes: [],
+      experiment: '',
+      experiments: [],
       cameras: [],
       cameraSource: '',
       // The session token lives here and nowhere else. Not a cookie (no CSRF
@@ -266,6 +278,7 @@ export default {
         this.loopActive = data.units ? data.units.loop.active : data.active
         await this.refreshRecovery()
         await this.refreshRun()
+        await this.refreshExperiments()
         await this.refreshCameras()
       } catch (e) {
         this.error = 'Could not read loop state.'
@@ -314,8 +327,47 @@ export default {
         const data = await response.json()
         this.mode = data.run.mode
         this.modes = data.modes
+        this.experiment = data.run.experiment || ''
       } catch (e) {
         // Non-fatal.
+      }
+    },
+
+    async refreshExperiments() {
+      try {
+        const response = await fetch(`${this.apiUrl}/api/admin/experiments`, {
+          headers: { Authorization: `Bearer ${this.token}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        this.experiments = data.experiments.filter((spec) => !spec.error)
+      } catch (e) {
+        // Non-fatal.
+      }
+    },
+
+    // Selecting an experiment is a run switch plus whatever panel state its
+    // definition declares, so mode and recovery are stale the moment this
+    // returns and both are taken from the response rather than assumed.
+    async setExperiment(name) {
+      if (!name || name === this.experiment) return
+      this.busy = true
+      this.error = ''
+      this.notice = ''
+      try {
+        const data = await this.post('experiments', { name }, true)
+        this.experiment = data.run.experiment || ''
+        this.mode = data.run.mode
+        this.recovery = data.recovery
+        this.notice = data.changes && data.changes.length
+          ? data.changes.join('; ')
+          : `${name}: nothing to change`
+        await this.refreshLoop()
+      } catch (e) {
+        this.error = e.message || 'Could not select the experiment.'
+        await this.refreshRun()
+      } finally {
+        this.busy = false
       }
     },
 

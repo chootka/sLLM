@@ -923,6 +923,14 @@ def list_runs():
     if not runs or runs[-1].get('id') != now.get('id'):
         runs.append(dict(now))
     runs.reverse()
+    # The archive lists runs by how long they lasted and whether one is still
+    # going; both are derivable from the record but not worth every caller
+    # recomputing, and `ended_at` missing is the only marker of the live run.
+    for entry in runs:
+        started, ended = entry.get('started_at'), entry.get('ended_at')
+        entry['recording'] = ended is None
+        entry['duration_s'] = (round((ended or time.time()) - started)
+                               if started else None)
     return jsonify({"runs": runs, "current": now.get('id')})
 
 
@@ -948,6 +956,26 @@ def get_turns():
         limit = 200
     after = request.args.get('after', '')
 
+    # Dry and replay runs write to logs/replay/. They are never merged with the
+    # real record -- a synthetic turn is indistinguishable from a live one once
+    # it is in a file -- so the caller asks for one directory or the other and
+    # the answer says which it got.
+    dry = request.args.get('source', '') == 'replay'
+    log_dir = (os.path.join(config.LOG_DIR, 'replay') if dry
+               else config.LOG_DIR)
+
+    # Turns from a previous run are not context for this one -- a different
+    # dish, often a different organism. Default to the run that is recording;
+    # `run=all` is the archive view and `run=<id>` browses a named one.
+    want_run = request.args.get('run', '')
+    if not want_run:
+        try:
+            import run as run_state
+
+            want_run = run_state.current(config).get('id') or ''
+        except Exception:
+            want_run = ''
+
     privileged = False
     try:
         import admin as admin_module
@@ -956,7 +984,7 @@ def get_turns():
     except Exception:
         privileged = False
 
-    paths = sorted(glob.glob(os.path.join(config.LOG_DIR, 'turns_*.jsonl')))
+    paths = sorted(glob.glob(os.path.join(log_dir, 'turns_*.jsonl')))
     # Newest files last; read backwards only far enough to satisfy the limit.
     lines = []
     for path in reversed(paths):
@@ -979,6 +1007,8 @@ def get_turns():
             continue
         if after and record.get('datetime', '') <= after:
             continue
+        if want_run and want_run != 'all' and record.get('run_id') != want_run:
+            continue
 
         reply = record.get('reply') or {}
         turn = {
@@ -990,6 +1020,8 @@ def get_turns():
             'note': reply.get('note'),
             'action': record.get('action'),
             'action_refused': record.get('action_refused'),
+            'run_id': record.get('run_id'),
+            'experiment': record.get('experiment'),
         }
         if privileged:
             turn['sham'] = record.get('sham')
@@ -1000,6 +1032,138 @@ def get_turns():
         'turns': turns[-limit:],
         'privileged': privileged,
         'loop_running': _loop_running(),
+        'source': 'replay' if dry else 'live',
+        'dry_run': dry,
+        'run': want_run,
+    })
+
+
+def _segments_for(start, end):
+    """Archived video segments overlapping [start, end], with a seek offset.
+
+    Segments are cut on frame count, not on runs, so one segment can span
+    several runs and one run several segments. `seek_s` is where in the encoded
+    file that run begins, read from the sidecar's per-frame timestamps rather
+    than interpolated -- the capture interval has changed twice and an even
+    spacing assumption would put the marker minutes out.
+    """
+    manifest_path = os.path.join(config.VIDEO_DIR, 'manifest.json')
+    try:
+        with open(manifest_path, encoding='utf-8') as handle:
+            manifest = json.load(handle)
+    except (OSError, ValueError):
+        return []
+
+    out = []
+    for seg in manifest.get('segments') or []:
+        first_at, last_at = seg.get('first_at'), seg.get('last_at')
+        if not first_at or not last_at:
+            continue
+        if last_at < start or first_at > (end or time.time()):
+            continue
+
+        seek_s, frames_in_run = None, None
+        fps = seg.get('fps') or 10
+        sidecar = os.path.join(config.VIDEO_DIR,
+                               os.path.splitext(seg['file'])[0] + '.json')
+        try:
+            with open(sidecar, encoding='utf-8') as handle:
+                stamps = json.load(handle).get('timestamps') or []
+            inside = [i for i, t in enumerate(stamps)
+                      if t >= start and (end is None or t <= end)]
+            if inside:
+                seek_s = round(inside[0] / fps, 2)
+                frames_in_run = len(inside)
+        except (OSError, ValueError, KeyError, ZeroDivisionError):
+            pass
+
+        out.append({
+            'file': seg['file'],
+            'url': '/api/video/%s' % seg['file'],
+            'frames': seg.get('frames'),
+            'fps': fps,
+            'first_at': first_at,
+            'last_at': last_at,
+            'thinned': seg.get('thinned'),
+            'seek_s': seek_s,
+            'frames_in_run': frames_in_run,
+        })
+    out.sort(key=lambda seg: seg['first_at'])
+    return out
+
+
+@app.route('/api/runs/<run_id>', methods=['GET'])
+def get_run(run_id):
+    """One run: its record, its video segments, and how much of each log it has."""
+    import run as run_state
+
+    record = None
+    path = os.path.join(config.DATA_DIR, 'runs.jsonl')
+    try:
+        with open(path, encoding='utf-8') as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if row.get('id') == run_id:
+                    record = row
+    except OSError:
+        pass
+    if record is None:
+        try:
+            live = run_state.current(config)
+            if live.get('id') == run_id:
+                record = dict(live)
+        except Exception:
+            pass
+    if record is None:
+        return jsonify({'error': 'no run %s' % run_id}), 404
+
+    start = record.get('started_at')
+    end = record.get('ended_at')
+    if not start:
+        return jsonify({'error': 'run %s has no start time' % run_id}), 500
+
+    turns = 0
+    for directory in (config.LOG_DIR, os.path.join(config.LOG_DIR, 'replay')):
+        for log in glob.glob(os.path.join(directory, 'turns_*.jsonl')):
+            try:
+                with open(log, encoding='utf-8') as handle:
+                    for line in handle:
+                        if run_id in line:
+                            turns += 1
+            except OSError:
+                continue
+
+    samples = None
+    log = getattr(electrodes, 'log', None)
+    if log is not None:
+        try:
+            rows = log.between(start, end or time.time(),
+                               mode=record.get('mode'))
+            samples = sum(1 for row in rows
+                          if row.get('run_id') in (run_id, None))
+        except Exception:
+            samples = None
+
+    return jsonify({
+        'run': {
+            'id': record.get('id'),
+            'mode': record.get('mode'),
+            'experiment': record.get('experiment'),
+            'electrodes': record.get('electrodes'),
+            'note': record.get('note') or '',
+            'started_at': start,
+            'started_at_iso': record.get('started_at_iso'),
+            'ended_at': end,
+            'ended_at_iso': record.get('ended_at_iso'),
+            'duration_s': round((end or time.time()) - start),
+            'recording': end is None,
+        },
+        'segments': _segments_for(start, end),
+        'turns': turns,
+        'samples': samples,
     })
 
 

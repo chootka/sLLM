@@ -572,6 +572,63 @@ def register(app, config):
               flush=True)
         return jsonify({"ok": True, "run": new_run})
 
+    # --- experiments ------------------------------------------------------
+    # An experiment definition names the mode and panel state it assumes, so
+    # selecting one applies them rather than leaving the operator to set three
+    # controls consistently by hand. experiments.enter() is the same call the
+    # drivers make at start, so the panel and a command line cannot diverge.
+
+    @admin.route('/experiments', methods=['GET'])
+    @guard
+    def experiments_list():
+        import experiments
+
+        out = []
+        for name in experiments.names():
+            try:
+                spec = experiments.load(name)
+            except experiments.UnknownExperiment as exc:
+                out.append({"name": name, "error": str(exc)})
+                continue
+            out.append({
+                "name": name,
+                "driver": spec.get('driver'),
+                "mode": spec.get('mode'),
+                "recovery": spec.get('recovery'),
+                "electrodes": spec.get('electrodes'),
+                "status": spec.get('status'),
+            })
+        return jsonify({"experiments": out})
+
+    @admin.route('/experiments', methods=['POST'])
+    @guard
+    def experiments_enter():
+        """Select an experiment and put the rig into the state it declares."""
+        import experiments
+        import recovery as recovery_state
+
+        body = request.get_json(silent=True) or {}
+        name = body.get('name', '')
+
+        try:
+            spec = experiments.load(name)
+            if spec.get('electrodes'):
+                experiments.electrodes(spec['electrodes'])   # raises if missing
+            run, changes = experiments.enter(config, spec)
+        except experiments.UnknownExperiment as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": f"could not enter {name}: {exc}"}), 500
+
+        print("admin: experiment -> %s (%s) by %s"
+              % (name, '; '.join(changes), _client_ip()), flush=True)
+        return jsonify({
+            "ok": True,
+            "run": run,
+            "recovery": recovery_state.state(fresh=True),
+            "changes": changes,
+        })
+
     # --- recovery ---------------------------------------------------------
     # State lives in data/recovery.json and is read on every render, so this
     # changes the panel within one refresh interval with nothing restarted.
