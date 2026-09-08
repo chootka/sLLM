@@ -290,8 +290,7 @@ panel is inside a zip-lock bag. The leads exit through a slit, and the slit
 and every other opening are closed with electrical tape. It sits under the dish
 inside the humid box. No exposed wire anywhere on the run.
 
-Powered as of 2026-09-08. Not yet lit -- no zone has been driven and seen since
-the replacement.
+Powered and tested 2026-09-08. Zones driven and confirmed lit by eye.
 
 The panel it replaced shorted on condensation and was unplugged; date unplugged
 **TBC**. Humidity railed at 99.9-100.0% for the whole 20260821 run. Nothing
