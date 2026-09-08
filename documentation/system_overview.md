@@ -197,9 +197,10 @@ fields against each other. `av_instrument.md` and `av_instrument_build.md`.
   95.7% RH. Blue and near-UV light plus starvation is the documented trigger
   for this species; infrared is not sourced either way, and the chamber's
   infrared flood currently runs continuously and cannot be gated from the Pi.
-- The metered loop has never been run end to end. It is committed but not
-  deployed to the machine that runs the services.
-- A new LED matrix and fresh organism are going in before the first run.
+- The metered loop has never been run end to end. Deployed 2026-09-08; still
+  never run.
+- Replacement LED matrix fitted, sealed and tested 2026-09-08. A fresh
+  organism goes in before the first run.
 - Settled 2026-09-08: the barrier zone is gone from the code, the prompts and
   the docs. All nine zones are drivable and nothing is held lit. The plasmodium
   starts on the central reference island, so zone 4 sits over the reference and
