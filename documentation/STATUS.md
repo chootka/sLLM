@@ -98,7 +98,7 @@ those three files and is not required to record.
 | services | `sllm-api` active. `sllm-loop`, `sllm-capture` and `sllm-matrixd` inactive, checked 2026-09-08 |
 | recovery mode | ON since 2026-09-06 03:27 |
 | camera | working, 120 s timelapse since 2026-09-06 02:20 (was 300 s) |
-| matrix | replacement panel fitted and powered 2026-09-08, sealed in a taped zip-lock bag. Not yet lit |
+| matrix | replacement panel fitted, sealed in a taped zip-lock bag, tested and lighting as expected 2026-09-08 |
 
 ## Channel map
 
@@ -250,7 +250,9 @@ sclerotia formation, and growth away from the oat flake.
    The panel has shorted on condensation before. That panel was unplugged and
    replaced 2026-09-08. The replacement is sealed in a zip-lock bag, leads out
    through a taped slit, no exposed wire. Sealing is the mitigation; the
-   setpoint is unchanged. Not yet lit, so the fault is not known to be gone.
+   setpoint is unchanged. Lit and behaving as expected 2026-09-08; no
+   uncommanded pixels seen in that test, but the old panel ran for weeks
+   before it faulted, so this is not yet closed.
 6. **Image archive thinned 1-in-10 to 2026-09-01.** 12 h264 segments written,
    originals deleted except every 10th, 7193 frames -> 1801, 1.6 GB -> 752 MB.
    Compression over the sparse pre-August record was 1.1:1, so those segments
@@ -266,14 +268,10 @@ sclerotia formation, and growth away from the oat flake.
 
 ## Next
 
-0. Light the new panel. Fitted, powered and sealed 2026-09-08 but never
-   driven. Recovery mode is ON and dark and `sllm-matrixd` is inactive; both
-   have to be cleared to drive a zone. Confirm by eye, not by `matrixd`
-   returning success. Watch for uncommanded pixels -- issue 5 is not closed.
-   Then bench the thermal confound before committing 12 h: run the block
-   schedule with the bagged panel and check whether per-block mean temperature
-   separates light from dark. That is a void condition, and it is cheaper to
-   find now.
+0. Panel lit and working, 2026-09-08. Bench the thermal confound before
+   committing 12 h: run the block schedule with the bagged panel and check
+   whether per-block mean temperature separates light from dark. That is a
+   void condition, and it is cheaper to find now.
 1. Light stimulus test, next run. Organism in, blue LED on for some minutes,
    off again, repeated, times recorded. This is the test that separates the
    organism from interface electrochemistry. Waits on the new panel being
