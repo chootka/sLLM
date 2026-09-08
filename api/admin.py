@@ -563,8 +563,19 @@ def register(app, config):
         if mode not in run_state.MODES:
             return jsonify({"error": f"mode must be one of {list(run_state.MODES)}"}), 400
 
+        # Omitted carries the previous run's order forward; [] clears it. The
+        # dish is rewired between runs, so this belongs to the run and not to
+        # the shared electrodes/<name> file.
+        lead_order = body.get('lead_order')
+        if lead_order is not None:
+            if (not isinstance(lead_order, list)
+                    or not all(isinstance(c, str) for c in lead_order)):
+                return jsonify({"error": "lead_order must be a list of colours"}), 400
+            lead_order = [c.strip().lower() for c in lead_order if c.strip()]
+
         try:
-            new_run = run_state.switch(config, mode, note)
+            new_run = run_state.switch(config, mode, note,
+                                       lead_order=lead_order)
         except (OSError, ValueError) as exc:
             return jsonify({"error": f"could not switch run: {exc}"}), 500
 

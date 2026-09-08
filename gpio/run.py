@@ -6,7 +6,8 @@ because holes punched in a 1 Hz series are harder to reason about afterwards
 than labelled stretches are. So nothing is ever withheld from the record. It is
 labelled, and analysis filters on the label.
 
-A run is `{id, mode, started_at, note}`. Modes:
+A run is `{id, mode, started_at, note, experiment, electrodes, lead_order}`.
+Modes:
 
     live    the real run. Nothing has been recorded in this mode yet.
     test    everything else -- bench work, demos, anything that is not the real
@@ -53,7 +54,8 @@ def _history_path(config):
     return os.path.join(config.DATA_DIR, 'runs.jsonl')
 
 
-def _new_run(mode, note='', experiment=None, electrodes=None):
+def _new_run(mode, note='', experiment=None, electrodes=None,
+             lead_order=None):
     now = time.time()
     stamp = datetime.fromtimestamp(now, timezone.utc)
     return {
@@ -67,6 +69,12 @@ def _new_run(mode, note='', experiment=None, electrodes=None):
         # measured and nothing about what it was measuring.
         'experiment': experiment,
         'electrodes': electrodes,
+        # The physical lead order, top to bottom, as a list of colours. Per-run
+        # because the dish is rewired between runs: the same electrodes/<name>
+        # file can be re-used while the leads sit in a different order, and
+        # recording the order there instead would silently reinterpret every
+        # past run that named the file.
+        'lead_order': lead_order,
     }
 
 
@@ -112,7 +120,8 @@ def _write(config, run):
     os.replace(tmp, path)
 
 
-def switch(config, mode, note='', experiment=None, electrodes=None):
+def switch(config, mode, note='', experiment=None, electrodes=None,
+           lead_order=None):
     """End the current run and start one in `mode`. Returns the new run."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
@@ -125,9 +134,12 @@ def switch(config, mode, note='', experiment=None, electrodes=None):
             experiment = previous.get('experiment')
         if electrodes is None:
             electrodes = previous.get('electrodes')
+        if lead_order is None:
+            lead_order = previous.get('lead_order')
         if (previous['mode'] == mode
                 and previous.get('experiment') == experiment
-                and previous.get('electrodes') == electrodes):
+                and previous.get('electrodes') == electrodes
+                and previous.get('lead_order') == lead_order):
             # Already there. Do not manufacture a run boundary that did not
             # happen -- a spurious boundary is itself misleading history.
             return previous
@@ -141,7 +153,7 @@ def switch(config, mode, note='', experiment=None, electrodes=None):
         except OSError:
             pass
 
-        run = _new_run(mode, note, experiment, electrodes)
+        run = _new_run(mode, note, experiment, electrodes, lead_order)
         _write(config, run)
         return run
 
