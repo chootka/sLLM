@@ -751,10 +751,11 @@ def main():
     # The admin page's experiment selector writes that field, so choosing an
     # experiment there and starting sllm-loop runs it -- without this the unit
     # would have to name one on its command line and the two could disagree.
+    # run_state is imported at module level. Importing it again here would
+    # make the name local to main() and leave it unbound on every path that
+    # skips this branch -- which is what --experiment does.
     if not args.experiment:
         try:
-            import run as run_state
-
             args.experiment = run_state.current(config).get('experiment') or ''
         except Exception:
             args.experiment = ''
