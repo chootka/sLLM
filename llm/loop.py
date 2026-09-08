@@ -703,6 +703,9 @@ def main():
     parser.add_argument('--turns', type=int, default=0, help='0 runs forever')
     parser.add_argument('--interval', type=int,
                         default=getattr(config, 'LLM_TURN_INTERVAL', 600))
+    parser.add_argument('--window', type=int,
+                        default=getattr(config, 'LLM_WINDOW_S', 1800),
+                        help='seconds of readings each turn summarises')
     parser.add_argument('--host', default=getattr(config, 'OLLAMA_HOST', ''))
     parser.add_argument('--model', default=getattr(config, 'OLLAMA_MODEL', ''))
     parser.add_argument('--replay', metavar='SOURCE',
@@ -767,7 +770,7 @@ def main():
         for flag, key in (('prompt', 'prompt'), ('model', 'model'),
                           ('min_gap', 'min_gap_s'), ('sham_rate', 'sham_rate'),
                           ('interval', 'interval_s'), ('num_ctx', 'num_ctx'),
-                          ('metered', 'metered')):
+                          ('window', 'window_s'), ('metered', 'metered')):
             value = experiment.get(key) if key == 'prompt' else params.get(key)
             if value is None:
                 continue
@@ -809,7 +812,11 @@ def main():
               file=sys.stderr)
         return 0
 
-    window_s = getattr(config, 'LLM_WINDOW_S', 1800)
+    # From the experiment when it names one, else --window, else config. An
+    # experiment that declares a window has to get the one it declares: the
+    # window is what the model's whole view of the organism is built from, and
+    # a config.py edit must not quietly reinterpret every past run at once.
+    window_s = args.window
     history_turns = getattr(config, 'LLM_HISTORY_TURNS', 8)
 
     # Each variant that changes the loop, not only the wording, is wired here.
