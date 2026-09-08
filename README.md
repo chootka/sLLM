@@ -449,9 +449,6 @@ The exposure cap is a safety limit, not a game mechanic. It is enforced
 silently so that a model probing the boundary cannot use the refusal itself as
 a signal.
 
-Untested as of 2026-09-08 -- built and committed, never run against the
-organism.
-
 ### MIMIC
 
 Physarum's architecture rather than its vocabulary. The model is never told to
