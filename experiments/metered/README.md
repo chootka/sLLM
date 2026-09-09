@@ -19,7 +19,7 @@ relationship the rule depends on.
 
 - Dish: `three-radial`. Reference island central, plasmodium placed on it.
 - Stimulus: whole dish, fixed brightness `STIMULUS_INTENSITY`.
-- Exposure: `MAX_DOSE_PER_HOUR_WHOLE_DISH`, 30 s per rolling hour.
+- Exposure: `MAX_DOSE_PER_HOUR_WHOLE_DISH`, 180 s per rolling hour, 5% duty.
 - Budget: `metered_budget()`, reference period 130 s, clamped x0.25 to x4.
 
 ## Running it

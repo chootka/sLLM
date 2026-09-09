@@ -122,9 +122,15 @@ once at startup.
 Dose is SECONDS of light, summed over the trailing hour.
 
 METERED lights the whole dish, so its cap is `MAX_DOSE_PER_HOUR_WHOLE_DISH`,
-30 s/hour, 0.83% duty. Set deliberately low: under a whole-dish stimulus the
-organism cannot move out of the light, and sporangia are forming. It is not
-derived from the single-zone figure.
+180 s/hour, 5% duty. It is not derived from the single-zone figure.
+
+Was 30 s/hour, set on 2026-09-08 while it was unclear whether the plasmodium
+had survived handling and the organism-cannot-flee concern was live. Raised to
+180 on 2026-09-09 after the timelapse showed it migrating and fanning out
+across the reference island. At roughly twelve turns an hour, 30 s bought the
+model a single probe per hour -- too few to separate its own effect from the
+organism's natural drift, which is the inference the whole run rests on. 180 s
+buys about four.
 
 `MAX_DOSE_PER_HOUR`, 300 s/hour, is the single-zone budget every other prompt
 uses. A zone is a ninth of the dish, so 300 s on one zone is about 33
@@ -139,7 +145,7 @@ in the literature, including electrically -- see Direction above. So a null
 here is not evidence about the organism. It is evidence about this rig, and
 means one of:
 
-- 30 s/hour is below the dose that produces a visible shift
+- the dose is below what produces a visible shift
 - the shift is smaller than `PERIOD_QUANTUM_S` (5 s) and is rounded away
 - the electrodes are not resolving it
 - the organism is not in a state to respond

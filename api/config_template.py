@@ -127,10 +127,13 @@ STIMULUS_INTENSITY = 0.50
 # This figure is for a SINGLE zone.
 MAX_DOSE_PER_HOUR = 300
 
-# METERED lights the whole dish. 30 s/hour, 0.83% duty. Set 2026-09-08 by the
-# user, who did not want the exposure raised: the organism cannot move out of
-# a whole-dish stimulus, and sporangia are forming.
-MAX_DOSE_PER_HOUR_WHOLE_DISH = 30
+# METERED lights the whole dish. 180 s/hour, 5% duty. Raised from 30 on
+# 2026-09-09 once the plasmodium was seen colonising the reference island, so
+# the organism-cannot-flee concern that set 30 no longer applied. 30 gave the
+# model one probe per hour, which is too few to separate its own effect from
+# the organism's natural drift. Still a twentieth of the step 8 protocol,
+# which held light continuously for 60 min of each pair.
+MAX_DOSE_PER_HOUR_WHOLE_DISH = 180
 
 # --- live preview -----------------------------------------------------------
 # /api/stream fps. Low on purpose: every frame competes with the timelapse for
