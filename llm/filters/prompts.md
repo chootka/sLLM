@@ -189,8 +189,11 @@ measured at each. That record is the only evidence available to you.
 
 Neither the brightness nor where the light falls is yours to set. Duration is
 the only quantity you choose, 0 to 120 seconds. Cumulative seconds of light are
-capped over each hour; past the cap your duration is shortened without
-warning.
+capped over each hour, and past the cap your request is shortened. Each turn
+you are told what your last stimulus actually came to, as `last_stimulus`:
+`requested_s` is what you asked for and `delivered_s` is what the organism
+received. They differ when the hour's budget was short. Reason from
+`delivered_s`.
 
 You also choose when you are next shown the state, in seconds. That is also how
 far ahead your prediction reaches.

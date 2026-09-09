@@ -957,6 +957,11 @@ def main():
     # from, held until the next measurement can settle it.
     pending_trend, pending_period_s = None, None
     prediction_scores = []
+    # What the previous turn's stimulus actually came to. The dose cap trims
+    # silently, so without this the model reasons from what it asked for
+    # rather than from what the organism received -- and under a tight cap
+    # most turns deliver nothing.
+    last_stimulus = None
     dose = DoseLedger(
         getattr(config, 'MAX_DOSE_PER_HOUR_WHOLE_DISH', 30.0) if whole_dish
         else getattr(config, 'MAX_DOSE_PER_HOUR', 300.0))
@@ -1006,6 +1011,12 @@ def main():
                     believed_s, measured_period(state))
                 if drift:
                     sending['since_last_turn'] = drift
+
+            # What the last stimulus actually came to, not what was asked
+            # for. METERED only: its task is to infer the effect of light from
+            # its own history, and a trimmed action makes that history false.
+            if whole_dish and last_stimulus is not None:
+                sending['last_stimulus'] = last_stimulus
 
             # Metering is recomputed every turn, not once at startup: the
             # point is that the budget moves when the organism's tempo moves.
@@ -1171,6 +1182,24 @@ def main():
                 except Exception as exc:
                     record["apply_error"] = str(exc)
                     print(f"[turn {turn}] apply failed: {exc}")
+
+            # Told to the model next turn. A sham, a dry run, a refusal or an
+            # exhausted budget all come to the same thing from the organism's
+            # side: no light. Say so rather than let it assume otherwise.
+            if whole_dish:
+                asked = 0.0
+                light = reply.get('light')
+                if isinstance(light, dict):
+                    try:
+                        asked = float(light.get('duration_s') or 0)
+                    except (TypeError, ValueError):
+                        asked = 0.0
+                delivered = (action["duration_s"]
+                             if action and record["applied"] else 0.0)
+                last_stimulus = {
+                    "requested_s": round(asked, 1),
+                    "delivered_s": round(delivered, 1),
+                }
 
             record["action"] = action
 
