@@ -142,8 +142,11 @@ compass directions; the shapes are a centre disc plus eight rim sectors.
 barrier keeping the plasmodium off the reference electrode. The organism is now
 placed on the reference island to begin with, so the barrier was removed along
 with `BARRIER_ZONE`, `BARRIER_BRIGHTNESS`, `BARRIER_MIN_RADIUS` and
-`lit_pixels()`. Zone 4, the centre disc, sits over the reference island: light
-there enters as common mode on all three channels.
+`lit_pixels()`. The reference island sits under zone 5, so light there enters
+as common mode on all three channels. Whether each island falls cleanly inside
+one zone is not established -- the third island may overlap zone 5 too. Noted
+by eye 2026-09-09; `experiments/electrodes/three-radial.json` carries the
+per-channel zone field, still null until someone measures it.
 
 ## Measurements
 

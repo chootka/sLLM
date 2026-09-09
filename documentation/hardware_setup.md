@@ -28,7 +28,7 @@ electrode on the perf board.
 A0 ---- buffer ---- recording electrode 1  \
 A1 ---- buffer ---- recording electrode 2   >  each measured against A3
 A2 ---- buffer ---- recording electrode 3  /
-A3 ---- buffer ---- reference electrode       (central agar island, under zone 4)
+A3 ---- buffer ---- reference electrode       (2nd island from top, under zone 5)
 ADDR -- GND                                   address 0x48
 ```
 

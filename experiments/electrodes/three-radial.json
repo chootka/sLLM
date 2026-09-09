@@ -5,7 +5,7 @@
     "ads": "A3",
     "row": "r38R",
     "pair": "brown",
-    "note": "inoculation island, central, under LED zone 4. The plasmodium is placed here at the start"
+    "note": "inoculation island, second from the top, under LED zone 5. The plasmodium is placed here at the start"
   },
   "channels": [
     {
@@ -34,5 +34,5 @@
   "sample_hz": 8,
   "logged_hz": 1,
   "used_from": "2026-08-24",
-  "note": "Board A rows are the source of truth. Per-channel `zone` is the LED zone each recording island sits under: unmeasured, and required before a single-zone stimulus can be attributed to a channel. The barrier zone was removed 2026-09-08."
+  "note": "Board A rows are the source of truth. The reference island sits under LED zone 5. Whether each island falls cleanly inside one zone is NOT established -- the third island may overlap zone 5 as well, reported by eye 2026-09-09 and not measured. Per-channel `zone` stays null until it is: a single-zone stimulus cannot be attributed to one channel without it. The barrier zone was removed 2026-09-08."
 }

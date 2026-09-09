@@ -202,5 +202,7 @@ fields against each other. `av_instrument.md` and `av_instrument_build.md`.
   organism goes in before the first run.
 - Settled 2026-09-08: the barrier zone is gone from the code, the prompts and
   the docs. All nine zones are drivable and nothing is held lit. The plasmodium
-  starts on the central reference island, so zone 4 sits over the reference and
-  light there enters as common mode on all three channels.
+  starts on the reference island, second from the top, which sits under zone 5.
+  Light there enters as common mode on all three channels. Whether each island
+  falls cleanly inside one zone is not established; the third island may
+  overlap zone 5 as well. Reported by eye, not measured.

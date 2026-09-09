@@ -108,8 +108,9 @@ USB_CAMERA_FLUSH_FRAMES = 6
 CAMERA_FOCUS_DIOPTRES = None
 
 # --- stimulus ---------------------------------------------------------------
-# Zone the dashboard light button drives. 4 is the centre disc, over the
-# reference island. All nine zones are drivable.
+# Zone the dashboard light button drives. 4 is the centre disc of the dish.
+# The reference island sits under zone 5, not zone 4. All nine zones are
+# drivable.
 DEFAULT_STIMULUS_ZONE = 4
 MAX_STIMULUS_DURATION = 300    # seconds; a manual stimulus always self-cancels
 
