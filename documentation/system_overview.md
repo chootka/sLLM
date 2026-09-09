@@ -153,9 +153,8 @@ its own actuation and keeps acting. The second is the more likely first result.
 Brightness is fixed at `STIMULUS_INTENSITY` and is not offered to the model.
 METERED lights the whole dish rather than a zone, so duration is the only thing
 it varies at all; the other prompts still choose a zone. A rolling cap bounds cumulative
-exposure at 30 seconds of whole-dish light per hour for METERED, set low
-because the organism cannot move out of a whole-dish stimulus, and 300 seconds
-of single-zone light for the rest. Neither is a measured tolerance. Blue light moving the period is established
+exposure at 180 seconds of whole-dish light per hour for METERED, 5% duty, and
+300 seconds of single-zone light for the rest. Neither is a measured tolerance. Blue light moving the period is established
 in the literature, so a null result would be evidence about this rig's dose and
 resolution, not about the organism. It trims the duration rather than refusing
 the action, and logs both numbers.

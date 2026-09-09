@@ -312,7 +312,7 @@ Reply with JSON only:
   response, and with the whole dish lit a response has to show up
   physiologically rather than as relocation. It also means the organism cannot
   move out of the light, so METERED runs on a deliberately low
-  `MAX_DOSE_PER_HOUR_WHOLE_DISH` of 30 s/hour, 0.83% duty, rather than the
+  `MAX_DOSE_PER_HOUR_WHOLE_DISH` of 180 s/hour, 5% duty, rather than the
   single-zone `MAX_DOSE_PER_HOUR` of 300. Neither is a measured
   tolerance, and since blue light moving the period is established in the
   literature, a null result would be a statement about this rig's dose and
