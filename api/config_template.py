@@ -53,7 +53,7 @@ FAN_PWM_PIN = 12               # BCM, fan PWM line, held high while running
 
 # Run FAN_CYCLE_ON seconds in every FAN_CYCLE_PERIOD. 20% duty, a starting
 # point; the empty-chamber run tunes it.
-FAN_CYCLE_PERIOD = 300         # seconds, the air-exchange window
+FAN_CYCLE_PERIOD = 120         # seconds, the air-exchange window
 FAN_CYCLE_ON = 60              # seconds of run per window
 
 # Dwell times, to stop the contacts chattering. Keep FAN_MIN_ON below
@@ -65,6 +65,15 @@ FAN_MIN_OFF = 60               # seconds, minimum rest once stopped
 # below RH_ON. Only ever adds run time on top of the cycle.
 FAN_RH_ON = None               # e.g. 95.0
 FAN_RH_OFF = None              # e.g. 91.0
+
+# Over-temperature ventilation. Hold the fan on above FAN_TEMP_ON until the
+# chamber falls back under FAN_TEMP_OFF. Set 2026-09-09: the chamber reached
+# 27 C with the organism in, and temperature was observed to fall while the
+# fan ran, so this is a lever that works. The 0.5 C gap is the deadband that
+# stops the relay chattering on sensor noise. Like the humidity override it
+# can only add run time on top of the cycle, never take it away.
+FAN_TEMP_ON = 27.0             # C
+FAN_TEMP_OFF = 26.5            # C
 
 # --- camera -----------------------------------------------------------------
 # CSI or USB. Capture runs through the blank/flash sequence in gpio/leds.py
