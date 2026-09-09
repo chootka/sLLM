@@ -165,12 +165,22 @@ class FanController:
     there only if a run ever turns up a reason to move more air at saturation.
     When set, `rh_off` must sit below `rh_on`; the gap between them is what
     stops the fan chattering on sensor noise around a single threshold.
+
+    `temp_on`/`temp_off` are the same shape for temperature: hold the fan on
+    above `temp_on` until the chamber falls back under `temp_off`. Added
+    2026-09-09 because the chamber reached 27 C with the organism in. Like the
+    humidity override it can only add run time, never subtract it, so a failed
+    sensor still leaves the timed exchange running.
     """
 
     def __init__(self, relay, rh_on=None, rh_off=None,
-                 cycle_period=300, cycle_on=60):
+                 cycle_period=300, cycle_on=60,
+                 temp_on=None, temp_off=None):
         if rh_on is not None and (rh_off is None or rh_off >= rh_on):
             raise ValueError(f"rh_off {rh_off} must be below rh_on {rh_on}")
+        if temp_on is not None and (temp_off is None or temp_off >= temp_on):
+            raise ValueError(
+                f"temp_off {temp_off} must be below temp_on {temp_on}")
         if not 0 < cycle_on <= cycle_period:
             raise ValueError(
                 f"cycle_on {cycle_on} must be above 0 and within cycle_period {cycle_period}"
@@ -178,6 +188,8 @@ class FanController:
         self.relay = relay
         self.rh_on = rh_on
         self.rh_off = rh_off
+        self.temp_on = temp_on
+        self.temp_off = temp_off
         self.cycle_period = cycle_period
         self.cycle_on = cycle_on
         self._window_start = time.monotonic()
@@ -190,8 +202,8 @@ class FanController:
             self._window_start = now
             self._ran_this_window = 0.0
 
-    def tick(self, humidity):
-        """Decide the fan state. `humidity` may be None if the sensor failed."""
+    def tick(self, humidity, temperature=None):
+        """Decide the fan state. Either reading may be None if the sensor failed."""
         now = time.monotonic()
         if self.relay.is_on:
             self._ran_this_window += now - self._last_tick
@@ -214,6 +226,14 @@ class FanController:
             elif humidity > self.rh_off and self.relay.is_on:
                 want, reason = True, "humidity deadband hold"
 
+        # Over-temperature override, same shape. Checked after humidity so the
+        # reason string names the hotter problem when both are asserting.
+        if self.temp_on is not None and temperature is not None:
+            if temperature >= self.temp_on:
+                want, reason = True, f"temperature {temperature:.1f}C >= {self.temp_on}C"
+            elif temperature > self.temp_off and self.relay.is_on:
+                want, reason = True, "temperature deadband hold"
+
         self.reason = reason
         return self.relay.set(want)
 
@@ -225,6 +245,8 @@ class FanController:
             "window_runtime": round(self._ran_this_window, 1),
             "window_target": self.cycle_on,
             "window_period": self.cycle_period,
+            "temp_on": self.temp_on,
+            "temp_off": self.temp_off,
         }
 
 
@@ -273,6 +295,8 @@ class EnvironmentMonitor:
                     rh_off=getattr(config, 'FAN_RH_OFF', None),
                     cycle_period=getattr(config, 'FAN_CYCLE_PERIOD', 300),
                     cycle_on=getattr(config, 'FAN_CYCLE_ON', 60),
+                    temp_on=getattr(config, 'FAN_TEMP_ON', None),
+                    temp_off=getattr(config, 'FAN_TEMP_OFF', None),
                 )
                 pwm = getattr(config, 'FAN_PWM_PIN', None)
                 print(f"✓ fan relay on GPIO {config.FAN_PIN}"
@@ -307,7 +331,7 @@ class EnvironmentMonitor:
             "error": error,
         }
         if self.fan is not None:
-            self.fan.tick(humidity)
+            self.fan.tick(humidity, temperature)
             reading["fan"] = self.fan.status()
 
         with self._lock:
