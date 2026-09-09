@@ -15,7 +15,7 @@ current budget: `led_matrix.md`.
 | WS2812B 16×16 | BCM 18 via 74AHCT125 | blue stimulus, all nine zones drivable. Replacement panel fitted 2026-09-08, sealed in a zip-lock bag |
 | Camera Module 3 NoIR (IMX708) | CSI | stills, 2304×1296 |
 | 850nm IR flood | not GPIO-controlled | imaging illumination, always on. Confirmed fitted and running 2026-08-26 |
-| Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 300s |
+| Noctua NF-A6x25 5V | BCM 23 relay + BCM 12 PWM | air exchange, 60s in every 120s. Blows OUT of the chamber |
 
 Not present: GPIO 17 ring light, GPIO 27 exposure LED, DHT22.
 
@@ -331,7 +331,17 @@ UVC camera on USB supported as an alternative (`CAMERA_SOURCE`,
 ## Chamber fan
 
 Noctua NF-A6x25 5V on a relay. Runs on a timed cycle for mould prevention.
-Humidity and temperature are not setpoints and do not gate it.
+Humidity is not a setpoint and does not gate it. Temperature does, above a
+threshold -- see the cycle below.
+
+**Direction: the fan blows OUT of the chamber, noted 2026-09-09.** It is an
+extractor, not an intake, so the chamber sits slightly below room pressure
+while it runs and replacement air is drawn in through the seams rather than
+pushed in through the fan. It still exchanges air and it does cool: chamber
+temperature was watched falling while it ran on 2026-09-09. Blowing in would
+put the chamber slightly positive, so air would leave through the seams
+instead of entering through them, which is the usual preference around a
+culture. Not changed, and not urgent while it is cooling.
 
 ```
 relay IN  -> physical pin 16 = BCM 23, active-high (HIGH closes)
@@ -342,8 +352,16 @@ The PWM line is a held level, not a waveform. Without it the relay closes and
 the fan does not turn: the pin idles as an input with the pull-down on, and the
 fan reads 0% duty. See the `Relay` docstring in `gpio/sensor.py`.
 
-Cycle: 60s on in every 300s (20% duty), 30s minimum on, 60s minimum off.
-`FAN_RH_ON` / `FAN_RH_OFF` saturation ventilation is off by default.
+Cycle: 60s on in every 120s (50% duty), 30s minimum on, 60s minimum off.
+Halved from a 240s window on 2026-09-09, when the chamber reached 27 C with the
+organism in.
+
+`FAN_TEMP_ON` 27.0 C / `FAN_TEMP_OFF` 26.5 C hold the fan on above the
+threshold until the chamber falls back under, with the 0.5 C gap as the
+deadband against relay chatter. `FAN_RH_ON` / `FAN_RH_OFF` saturation
+ventilation is off by default. Both overrides can only add run time on top of
+the timed cycle, never take it away, so a failed sensor still leaves the
+chamber ventilated.
 
 ## Environment sensor
 
