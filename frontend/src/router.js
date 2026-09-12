@@ -13,6 +13,12 @@ export default createRouter({
       // Split out: the dashboard should not carry the audio engine's weight.
       component: () => import('./views/Drift.vue')
     },
+    {
+      path: '/deck',
+      name: 'deck',
+      // Split out: the dashboard should not carry the deck's media or styles.
+      component: () => import('./deck/Deck.vue')
+    },
     // /logs is a plain href in the dashboard and used to land here by way of
     // nginx's index.html fallback. Keep that: without it the router matches
     // nothing and renders a blank page where the dashboard used to be.

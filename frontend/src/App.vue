@@ -40,6 +40,24 @@
             <span class="env-figure">{{ humidity !== null ? humidity.toFixed(1) : '--' }}%</span>
             <span class="env-label">rh</span>
           </div>
+          <!-- Opens the residency deck over the dashboard so the talk can be
+               given from this screen. The deck is a static file, framed rather
+               than reimplemented, so it stays the same artefact that is
+               published elsewhere. -->
+          <button
+            class="deck-toggle"
+            @click="openDeck"
+            title="Slideshow"
+            aria-label="Open the slideshow"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15"
+                 fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4.3" width="18" height="12.6" rx="1.2" />
+              <path d="M12 16.9v3.1M9.2 20h5.6" />
+              <path d="M10.5 8.2l4 2.4-4 2.4z" />
+            </svg>
+          </button>
           <!-- Inline SVG rather than an emoji: the emoji renders as a colour
                glyph the palette cannot touch, and it is a different picture on
                every platform. Shows the theme it switches TO. -->
@@ -335,6 +353,22 @@
     </div>
 
     <AdminPanel :api-url="apiUrl" />
+
+    <!-- Framed rather than reimplemented: the deck is the same static file that
+         is published elsewhere, and it keeps its own keyboard handling. Same
+         origin, so arrow presses here can be forwarded into the frame. -->
+    <div v-if="deckOpen" class="deck-lightbox" @click.self="closeDeck">
+      <iframe
+        ref="deckFrame"
+        class="deck-frame"
+        src="/deck"
+        title="sLLM slides"
+        @load="onDeckLoad"
+      ></iframe>
+      <div class="deck-controls">
+        <button @click="closeDeck" title="Close" aria-label="Close slideshow">&times;</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -399,6 +433,7 @@ export default {
       isLogsRoute: window.location.pathname.replace(/\/+$/, '') === '/logs',
       isVizRoute: window.location.pathname.replace(/\/+$/, '') === '/viz',
       isRunsRoute: window.location.pathname.replace(/\/+$/, '') === '/runs',
+      deckOpen: false,
       socket: null,
       
       // Electrical readings
@@ -661,6 +696,9 @@ export default {
   },
   
   beforeUnmount() {
+    window.removeEventListener('keydown', this.onDeckKey, true)
+    document.body.style.overflow = ''
+
     window.removeEventListener('keydown', this.onLightboxKey)
     if (this.videoRefreshTimer) clearInterval(this.videoRefreshTimer)
     clearInterval(this._signalTimer)
@@ -683,6 +721,41 @@ export default {
   },
 
   methods: {
+    openDeck() {
+      this.deckOpen = true
+      document.body.style.overflow = 'hidden'
+      window.addEventListener('keydown', this.onDeckKey, true)
+    },
+    closeDeck() {
+      this.deckOpen = false
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', this.onDeckKey, true)
+    },
+    // The frame carries its own theme tokens. Handing it the dashboard's
+    // avoids a light deck opening over a dark page.
+    onDeckLoad() {
+      const doc = this.$refs.deckFrame && this.$refs.deckFrame.contentDocument
+      if (!doc) return
+      doc.documentElement.dataset.theme = this.theme
+      try { this.$refs.deckFrame.contentWindow.focus() } catch (e) { /* cross-origin, ignore */ }
+    },
+    // Synthetic keydown into the frame's document: the deck already listens
+    // there, so the on-screen buttons and the real keys take the same path.
+    deckNav(key) {
+      const doc = this.$refs.deckFrame && this.$refs.deckFrame.contentDocument
+      if (!doc) return
+      doc.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+      try { this.$refs.deckFrame.contentWindow.focus() } catch (e) { /* ignore */ }
+    },
+    // Only Escape is handled here. Everything else is the deck's, and
+    // forwarding it twice would advance two slides per press.
+    onDeckKey(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        this.closeDeck()
+      }
+    },
+
     openLightbox() {
       if (this.canZoom) this.lightboxOpen = true
     },
@@ -1151,6 +1224,10 @@ export default {
 
     applyTheme() {
       document.documentElement.dataset.theme = this.theme
+      if (this.deckOpen) {
+        const doc = this.$refs.deckFrame && this.$refs.deckFrame.contentDocument
+        if (doc) doc.documentElement.dataset.theme = this.theme
+      }
       if (!this.chart) return
       const ink = this.chartInk()
       const scales = this.chart.options.scales

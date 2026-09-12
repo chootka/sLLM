@@ -1,0 +1,298 @@
+/* Deck styles. Unscoped on purpose: the slide components use these classes
+   and scoping would require a data attribute on every element. */
+:root{
+  color-scheme: light;
+  --ground:#f2f1f4; --panel:#fbfbfc; --surface:#fbfbfc;
+  --ink:#141319; --ink-2:#3d3a47; --muted:#6b6878;
+  --rule:#d9d4e1; --rule-soft:#e7e3ec;
+  --accent:#2a78d6; --echo:rgba(42,120,214,.30);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --grid:#e6e2ec; --axis:#a9a4b6; --band:#f0edf5; --rule-mark:#eb6834;
+  --line:rgba(20,19,25,.40);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#0e0d12; --panel:#17161e; --surface:#17161e;
+    --ink:#f0eef5; --ink-2:#c5c1d2; --muted:#918da0;
+    --rule:#2b2934; --rule-soft:#21202b;
+    --accent:#6ea6ee; --echo:rgba(110,166,238,.32);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --grid:#24222d; --axis:#545063; --band:#1b1a23; --rule-mark:#d95926;
+    --line:rgba(240,238,245,.30);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0e0d12; --panel:#17161e; --surface:#17161e;
+  --ink:#f0eef5; --ink-2:#c5c1d2; --muted:#918da0;
+  --rule:#2b2934; --rule-soft:#21202b;
+  --accent:#6ea6ee; --echo:rgba(110,166,238,.32);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --grid:#24222d; --axis:#545063; --band:#1b1a23; --rule-mark:#d95926;
+  --line:rgba(240,238,245,.30);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
+  font-family:"Radio Canada",system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased}
+
+/* ---------- the two fields ---------- */
+#field{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+#focus{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse 58% 54% at var(--fx,50%) var(--fy,50%),
+    var(--ground) 0%, var(--ground) 40%, transparent 82%);
+}
+
+#stage{position:relative;z-index:2;width:100%;height:100svh}
+.slide{position:absolute;inset:0;overflow:hidden}
+.hold{position:absolute;display:flex;flex-direction:column;padding-top:.12em;
+  gap:clamp(.7rem,1.9vmin,1.5rem);max-height:88vh;overflow-y:auto;overflow-x:hidden}
+
+/* ---------- compositions: no two the same ---------- */
+.lay-open .hold{left:7vw;top:50%;transform:translateY(-50%);width:min(54ch,66vw)}
+.lay-left-low .hold{left:6.5vw;bottom:9vh;width:min(58ch,68vw)}
+.lay-right-high .hold{right:6vw;top:9vh;width:min(52ch,62vw)}
+.lay-wide .hold{left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(92ch,88vw);align-items:flex-start}
+.lay-figure-right .hold{left:6vw;top:50%;transform:translateY(-50%);width:min(38ch,42vw)}
+
+video.tl{display:block;width:100%;height:auto;background:#0b0b0e;border:1px solid var(--rule)}
+.lay-figure-right figure.off{position:absolute;right:3.5vw;top:9vh;
+  width:min(46vw,40rem);transform:rotate(-1.3deg);z-index:1}
+.lay-plate .hold{left:5vw;right:5vw;top:6vh;bottom:5vh;width:auto;max-height:none;
+  overflow:visible}
+.lay-split-offset .hold{left:5.5vw;right:5.5vw;top:50%;transform:translateY(-50%);
+  width:auto;max-width:none}
+
+/* ---------- type ---------- */
+h1{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
+  font-size:clamp(2.4rem,8.4vmin,6rem);line-height:1.12;letter-spacing:-.004em}
+h2{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
+  font-size:clamp(1.6rem,5.2vmin,3.5rem);line-height:1.18;letter-spacing:-.002em}
+h2.huge{font-size:clamp(2rem,7.4vmin,5rem)}
+h2.oneline{max-width:none;white-space:nowrap;font-size:clamp(1rem,2.8vw,2.4rem)}
+h2.tuck.oneline{max-width:none;font-size:clamp(1.1rem,2.6vw,2.4rem)}
+h2.tuck{position:absolute;left:0;top:0;z-index:3;max-width:14ch;
+  text-shadow:0 0 1.2rem var(--ground),0 0 .5rem var(--ground)}
+.reg{text-shadow:calc(var(--regpx,0)*1px) calc(var(--regpx,0)*.62px) 0 var(--echo)}
+p{margin:0;color:var(--ink-2);font-size:clamp(.95rem,2.05vmin,1.4rem);
+  line-height:1.55;max-width:62ch;font-weight:300}
+b{color:var(--ink);font-weight:600}
+em{font-style:italic}
+.say{color:var(--ink);font-size:clamp(1.05rem,2.5vmin,1.7rem);line-height:1.4;
+  max-width:50ch;font-weight:300}
+.standfirst{font-size:clamp(1.02rem,2.6vmin,1.7rem);line-height:1.42;
+  color:var(--ink-2);max-width:44ch;font-weight:300}
+.eyebrow,.k,.mark,.lockline,.gn,.chip{
+  font-family:"Kode Mono",ui-monospace,monospace;
+  font-size:clamp(.62rem,1.35vmin,.86rem);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);margin:0;font-weight:400}
+.lockline{color:var(--ink-2)}
+.lockline{letter-spacing:.3em;margin-top:clamp(.8rem,2.4vmin,1.8rem)}
+
+ul.big{list-style:none;padding:0;margin:0;display:grid;
+  gap:clamp(.55rem,1.5vmin,1.05rem);max-width:62ch}
+ul.big li{display:grid;grid-template-columns:.5em 1fr;gap:.55rem;align-items:start;
+  color:var(--ink-2);font-size:clamp(.95rem,2.05vmin,1.4rem);line-height:1.46;font-weight:300}
+/* A fixed column and a top offset rather than baseline alignment: an empty box
+   has no baseline, so the browser synthesizes one and the marker wanders. */
+ul.big li::before{content:"";width:.4em;height:.4em;background:var(--ink);
+  margin-top:.52em;transform:rotate(45deg)}
+.points{list-style:none;padding:0;margin:0;display:grid;max-width:72ch}
+.points li{display:grid;grid-template-columns:minmax(4.4rem,auto) 1fr;gap:1.1rem;
+  align-items:baseline;padding:clamp(.42rem,1.2vmin,.8rem) 0;
+  border-top:1px solid var(--rule-soft);color:var(--ink-2);font-weight:300;
+  font-size:clamp(.88rem,1.92vmin,1.28rem);line-height:1.45}
+.points li:first-child{border-top:0}
+.points .mark{color:var(--ink);letter-spacing:.1em}
+.points.bad .mark{color:var(--ink)}
+
+.pull{font-family:"Amarante",Georgia,serif;font-weight:400;
+  font-size:clamp(1.05rem,2.6vmin,1.75rem);line-height:1.3;color:var(--ink);
+  border-left:1px solid var(--accent);padding-left:clamp(.9rem,2vmin,1.4rem);max-width:40ch}
+.limit-line{border-left:1px solid var(--rule-mark);padding-left:clamp(.9rem,2vmin,1.4rem);
+  color:var(--ink);font-size:clamp(1rem,2.2vmin,1.45rem)}
+.foot-note{color:var(--muted);font-size:clamp(.78rem,1.7vmin,1.1rem);line-height:1.48;
+  max-width:74ch;margin-top:auto;padding-top:clamp(.5rem,1.4vmin,1rem)}
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.2rem,3.6vmin,3.2rem);
+  align-items:start}
+.cols>div{display:flex;flex-direction:column;gap:clamp(.6rem,1.7vmin,1.2rem);min-width:0}
+.drift-col{padding-top:clamp(1.4rem,5vmin,4rem)}
+
+
+.prompts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);width:100%}
+.prompts>div{background:var(--ground);padding:clamp(.6rem,1.5vmin,1rem);
+  display:flex;flex-direction:column;gap:.3rem}
+.prompts .pn{font-family:"Kode Mono",ui-monospace,monospace;
+  font-size:clamp(.62rem,1.3vmin,.82rem);letter-spacing:.16em;color:var(--ink)}
+.prompts p{font-size:clamp(.72rem,1.5vmin,.98rem);line-height:1.4;color:var(--muted);
+  max-width:none;margin:0}
+.xfer{display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(1rem,3vmin,2.4rem);
+  align-items:center;width:100%}
+.xfer .side{display:flex;flex-direction:column;gap:.45rem;
+  background:var(--panel);border:1px solid var(--rule);
+  padding:clamp(.9rem,2.4vmin,1.7rem)}
+.xfer .mid{width:clamp(2rem,7vmin,5rem);height:1px;background:var(--accent);position:relative}
+.xfer .mid::before,.xfer .mid::after{content:"";position:absolute;top:-3px;
+  border:3px solid transparent;border-left-color:var(--accent)}
+.xfer .mid::before{right:0}
+.xfer .mid::after{left:0;transform:rotate(180deg)}
+.big-n{font-family:"Amarante",Georgia,serif;font-size:clamp(1.8rem,5.4vmin,3.4rem);
+  line-height:1.05;color:var(--accent);font-variant-numeric:tabular-nums;font-weight:400}
+.xfer .cap{color:var(--ink-2);font-size:clamp(.8rem,1.7vmin,1.1rem);line-height:1.42}
+
+figure{margin:0;display:flex;flex-direction:column;gap:.6rem}
+figure.off img,figure.off video.tl{display:block;width:100%;height:auto;max-height:74vh;object-fit:contain;
+  background:#0b0b0e;border:1px solid var(--rule)}
+figcaption{color:var(--muted);font-size:clamp(.74rem,1.55vmin,1rem);line-height:1.4}
+figcaption b{color:var(--ink-2)}
+.frame{background:var(--panel);border:1px solid var(--rule);
+  padding:clamp(.7rem,1.8vmin,1.3rem);overflow:hidden}
+.frame.tall{flex:1;min-height:0;display:flex;margin-top:clamp(3.2rem,8vmin,6rem)}
+.frame svg{width:100%;height:100%;display:block}
+.fig text,.diag text{font-family:"Kode Mono",ui-monospace,monospace}
+.fig .lab{font-size:11px;fill:var(--muted)}
+.fig .axlab{font-size:11.5px;fill:var(--ink-2)}
+.fig .note{font-size:11px;fill:var(--muted)}
+.fig .grp{font-size:12.5px;fill:var(--ink)}
+.fig .dir{font-size:12px}
+.diag .bt{font-size:11px;fill:var(--ink);letter-spacing:.09em}
+.diag .bl{font-size:11.5px;fill:var(--ink-2)}
+.diag .al{font-size:10.5px;fill:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:.3rem 1.4rem;flex:none;
+  font-family:"Kode Mono",ui-monospace,monospace;
+  font-size:clamp(.64rem,1.35vmin,.88rem);color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:.45rem}
+.sw{width:.7em;height:.7em;border-radius:50%;flex:none}
+.sw.hollow{background:var(--surface)!important;box-shadow:inset 0 0 0 1.8px currentColor}
+
+/* ---------- chrome ---------- */
+#bar{position:fixed;left:0;bottom:0;height:1px;background:var(--accent);width:0;z-index:6}
+#hud{position:fixed;right:clamp(1rem,2.6vmin,2.2rem);bottom:clamp(3.2rem,6vmin,4rem);
+  display:flex;gap:1.2rem;align-items:baseline;z-index:7;pointer-events:none;
+  font-family:"Kode Mono",ui-monospace,monospace;
+  font-size:clamp(.64rem,1.3vmin,.86rem);color:var(--muted);font-variant-numeric:tabular-nums}
+#clock b{color:var(--ink);font-weight:500}
+#nav{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:clamp(.55rem,1.5vmin,1.15rem);display:flex;gap:.35rem;z-index:7}
+#nav button{font-family:"Kode Mono",ui-monospace,monospace;
+  font-size:clamp(.68rem,1.35vmin,.88rem);line-height:1;padding:.42rem .62rem;
+  background:var(--panel);color:var(--muted);border:1px solid var(--rule);
+  border-radius:0;cursor:pointer}
+#nav button:hover{color:var(--ink);border-color:var(--accent)}
+#nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#grid{position:fixed;inset:0;background:var(--ground);z-index:20;overflow-y:auto;
+  padding:clamp(1.4rem,4vmin,3rem);display:grid;align-content:start;
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,13rem),1fr));gap:.9rem}
+#grid button{font:inherit;text-align:left;cursor:pointer;background:transparent;
+  border:1px solid var(--rule);padding:.85rem .95rem;color:var(--ink-2);
+  display:flex;flex-direction:column;gap:.4rem;min-height:6rem}
+#grid button:hover,#grid button[data-cur="1"]{border-color:var(--accent);color:var(--ink)}
+#grid .gn{color:var(--accent)}
+#grid .gt{font-family:"Amarante",Georgia,serif;font-size:1rem;line-height:1.22;
+  text-transform:none;letter-spacing:0}
+#grid button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+
+/* The recording belongs to the place it was made, so the player sits on the
+   photograph of that place rather than on a slide of its own. */
+.night{position:relative;display:inline-block;line-height:0;max-width:100%}
+.listen-on{position:absolute;left:0;right:0;bottom:0;line-height:1.4;
+  display:flex;flex-direction:column;gap:.3rem;
+  padding:clamp(1.6rem,4vmin,2.6rem) clamp(.6rem,1.6vmin,1rem) clamp(.5rem,1.3vmin,.8rem);
+  background:linear-gradient(to top,rgba(0,0,0,.88) 0%,rgba(0,0,0,.6) 55%,rgba(0,0,0,0) 100%)}
+.listen-on .eyebrow{color:rgba(255,255,255,.72)}
+.listen-on audio{width:100%;height:2.2rem}
+/* ---------- side quest: radio ---------- */
+.rig{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-start;
+  overflow-x:auto;overflow-y:hidden;padding-bottom:.4rem;
+  gap:clamp(1rem,3vmin,2.8rem);margin-top:clamp(3.2rem,8vmin,6rem)}
+.rig figure{flex:0 0 auto;gap:.5rem;min-width:0}
+.rig img,.rig video{display:block;height:54vh;width:auto;max-width:100%;
+  object-fit:contain;
+  background:#0b0b0e;border:1px solid var(--rule)}
+/* widths driven by viewport height so nothing letterboxes */
+.v916,.v34,.v43{width:auto;max-width:40rem}
+.lay-figure-right figure.off.v34{width:min(40rem,46vw);top:8vh}
+.listen{display:flex;flex-direction:column;gap:clamp(.5rem,1.4vmin,.9rem);
+  flex:0 0 24rem}
+.listen audio{width:100%;height:2.4rem}
+
+
+/* A photograph of the dish on every slide. Side alternates so the deck does not
+   settle into one template; the plate slides take a narrower band so the chart
+   keeps its width. */
+.slide .dish{position:absolute;top:0;bottom:0;width:44%;overflow:hidden;
+  z-index:0;margin:0;display:block}
+.slide .dish img{width:100%;height:100%;object-fit:cover;display:block}
+.slide .dish::after{content:"";position:absolute;inset:0;pointer-events:none}
+.slide.dish-right .dish{right:0}
+.slide.dish-left .dish{left:0}
+.slide.dish-right .dish::after{background:linear-gradient(90deg,var(--ground) 0%,
+  rgba(0,0,0,0) 30%)}
+.slide.dish-left .dish::after{background:linear-gradient(270deg,var(--ground) 0%,
+  rgba(0,0,0,0) 30%)}
+.slide .hold{z-index:2}
+
+.slide.dish-right .hold{left:5vw;right:auto;width:min(46ch,48vw)}
+.slide.dish-left .hold{left:auto;right:5vw;width:min(46ch,48vw)}
+.slide.dish-right.lay-wide .hold{transform:translateY(-50%)}
+.slide.dish-left.lay-wide .hold{transform:translateY(-50%)}
+.slide.lay-plate .dish{width:32%}
+.slide.dish-left.lay-plate .hold{left:35%;right:4vw;width:auto}
+.slide.dish-right.lay-plate .hold{left:4vw;right:35%;width:auto}
+
+/* ---------- the closing slide runs /drift behind the text ---------- */
+/* The frame stays interactive so the piece's own sound button works. The deck's
+   controls move clear of it: /drift puts sound top-right, about top-left and a
+   back link bottom-left, which leaves the bottom center and right free. */
+.drift-bg{position:absolute;inset:0;z-index:0;overflow:hidden;background:#07070a}
+.drift-bg iframe{width:100%;height:100%;border:0;display:block}
+
+/* A panel dark enough to read on, whatever the piece is doing underneath.
+   Colors are literal here rather than tokens: the ground is the artwork, not
+   the theme. */
+.on-drift .hold{left:6vw;right:auto;width:min(52ch,56vw);
+  background:rgba(8,8,12,.62);
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+  border:1px solid rgba(255,255,255,.14);
+  padding:clamp(1.1rem,2.8vmin,2.1rem) clamp(1.2rem,3vmin,2.3rem)}
+.on-drift .hold h2,.on-drift .hold b{color:#ffffff}
+.on-drift .hold p,.on-drift .hold li,.on-drift .hold .say{color:#dedbe6}
+.on-drift .points li{border-top-color:rgba(255,255,255,.16)}
+.on-drift .points .mark{color:#ffffff}
+@media (max-width:820px),(max-height:520px){
+  .on-drift .hold{left:auto;right:auto;width:auto;margin:4vh 5vw;
+    background:rgba(8,8,12,.72)}
+
+  .slide .dish{position:static;width:auto;height:auto;margin:1.2rem 6vw 0}
+  .slide .dish img{height:auto;max-height:42vh;object-fit:contain}
+  .slide .dish::after{display:none}
+  .slide.dish-right .hold,.slide.dish-left .hold,
+  .slide.dish-left.lay-plate .hold,.slide.dish-right.lay-plate .hold{
+    left:auto;right:auto;width:auto}
+
+  .slide{overflow-y:auto}
+  .hold,.lay-open .hold,.lay-left-low .hold,.lay-right-high .hold,.lay-wide .hold,
+  .lay-figure-right .hold,.lay-plate .hold,.lay-split-offset .hold{
+    position:static;transform:none;width:auto;max-width:none;max-height:none;
+    padding:4.5vh 6vw 9vh;inset:auto}
+  .lay-figure-right figure.off{position:static;transform:none;width:auto;margin:1rem 6vw 0}
+  .cols,.xfer{grid-template-columns:1fr}
+  .rig{margin-top:1rem}
+  .v916,.v34,.v43,.lay-figure-right figure.off.v34{width:100%;max-width:none}
+  .rig{flex-wrap:wrap;overflow-x:visible}
+  .rig img,.rig video{height:auto;width:100%;max-height:none}
+  .listen{flex:1 1 auto}
+  h2.tuck{position:static;max-width:none}
+  h2.oneline{white-space:normal}
+  .frame.tall{margin-top:1rem;min-height:44vh}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* The slides are switched with the hidden attribute; keep it authoritative. */
+[hidden]{display:none!important}

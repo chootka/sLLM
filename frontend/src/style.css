@@ -170,7 +170,8 @@ body {
 }
 
 /* Ghost square in the masthead, same inversion the buttons use. */
-.theme-toggle {
+.theme-toggle,
+.deck-toggle {
     background: transparent;
     color: var(--ink);
     border: 1px solid var(--rule-strong);
@@ -184,11 +185,13 @@ body {
     transition: background 0.15s linear, color 0.15s linear;
 }
 
-.theme-toggle svg {
+.theme-toggle svg,
+.deck-toggle svg {
     display: block;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.deck-toggle:hover {
     background: var(--ink);
     color: var(--paper);
 }
@@ -943,4 +946,55 @@ body.bare {
     .capture-button {
         width: 100%;
     }
+}
+
+/* The deck over the dashboard. Full bleed: it is being presented from, so
+   nothing of the page underneath should compete with it. */
+.deck-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: var(--paper);
+    display: flex;
+}
+
+.deck-frame {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+}
+
+/* Sits over the deck's own bottom-left controls, on the opposite side. */
+/* Bottom right, clear of the deck's own controls at bottom centre and of
+   anything an embedded piece puts in its top corners. */
+.deck-controls {
+    position: fixed;
+    bottom: 12px;
+    right: 14px;
+    z-index: 901;
+    display: flex;
+    gap: 6px;
+}
+
+.deck-controls button {
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--rule-strong);
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s linear, color 0.15s linear;
+}
+
+.deck-controls button:hover {
+    background: var(--ink);
+    color: var(--paper);
 }
