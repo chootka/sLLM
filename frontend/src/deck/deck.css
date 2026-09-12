@@ -82,7 +82,7 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 /* One slide breaks the two columns: the media is lifted out of the grid, made
    larger, and slid left so the text column sits over its edge. */
 .split.overlap .media{position:absolute;right:clamp(1.4rem,5vw,4.4rem);
-  top:50%;transform:translateY(-50%);width:56%;z-index:0}
+  top:50%;transform:translateY(-50%);width:42%;z-index:0}
 .split.overlap .media img{max-height:80vh}
 .split.overlap .content{position:relative;z-index:2}
 .split .media{order:2}
@@ -103,7 +103,7 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 /* Stacked rather than side by side, at half the slide width. */
 .gallery .row.stack{flex-direction:column;align-items:center;gap:clamp(1rem,2.6vh,2rem);
   overflow-y:auto;max-height:82vh}
-.gallery .row.stack figure{width:50%}
+.gallery .row.stack figure{width:25%}
 .gallery figure{display:flex;flex-direction:column;gap:.55rem;min-width:0}
 .gallery img,.gallery video{display:block;width:auto;height:auto;
   max-height:58vh;max-width:100%;margin:0 auto;
