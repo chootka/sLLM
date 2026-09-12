@@ -1,6 +1,6 @@
 <template>
 <div class="content">
-<h2>Every interface is a filter</h2>
+<h2>Every prompt describes an interface</h2>
 
 <div class="exchange">
   <div>
