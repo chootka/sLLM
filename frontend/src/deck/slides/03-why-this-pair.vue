@@ -16,7 +16,7 @@ is working toward.</p></div><figure class="media"><img src="/deck-media/the-orga
 
 <script>
 export default {
-  name: '04_why_this_pair',
+  name: '03_why_this_pair',
   meta: {
     classes: 'split media-first',
     section: 'The question',
