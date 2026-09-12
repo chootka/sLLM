@@ -4,8 +4,13 @@
 
   <ul class="points"><li><span class="mark">CAMERA</span>
 <span><b>Livestream</b> and <b>timelapse</b> recordings of the dish</span></li><li><span class="mark">DATA</span><span>Graphs of the <b>raw electrode signal</b> and the reduced slime-mould signal</span></li><li><span class="mark">LOG</span><span>The <b>model's logs</b>: what it asked for, what was applied</span></li><li><span class="mark">ADMIN</span><span>Remote control of the experiment parameters</span></li><li><span class="mark">ARCHIVE</span><span>Every past run, browsable</span></li></ul>
-  
-    </div>
+<p class="label">/drift takes three parameters</p>
+<ul class="points">
+<li><span class="mark">from</span><span>A unix timestamp. Without it, /drift follows the live dish.</span></li>
+<li><span class="mark">mins</span><span>How long a stretch to play, 1 to 240 minutes.</span></li>
+<li><span class="mark">speed</span><span>Playback rate, 1 to 240 times real time.</span></li>
+</ul>
+</div>
 <figure class="media"><img src="/deck-media/the-organism-spread-between-islands-5.jpg" alt="The organism spread between islands, 5 September"></figure>
 </template>
 
