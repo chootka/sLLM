@@ -178,7 +178,7 @@ with the dish empty.</b></p>
 
 <script>
 export default {
-  name: '08_same_dish_with_and',
+  name: '09_same_dish_with_and',
   meta: {
     classes: 'gallery centered',
     section: 'What worked',

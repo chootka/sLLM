@@ -82,6 +82,8 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .split.media-first .media{order:-1}
 
 .gallery{grid-template-rows:auto 1fr;align-content:start;align-items:start}
+/* One column of text, no media. */
+.solo{grid-template-columns:minmax(0,78ch);justify-content:center}
 /* One figure, centred, taking whatever height the heading leaves. */
 .centered{justify-items:center;text-align:center}
 .centered h2{white-space:nowrap}

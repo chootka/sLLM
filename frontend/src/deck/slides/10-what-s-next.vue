@@ -12,7 +12,7 @@ of other slime mould explorations sometime in 2028.</p>
 
 <script>
 export default {
-  name: '09_what_s_next',
+  name: '10_what_s_next',
   meta: {
     classes: 'overlay',
     section: 'What’s next?',

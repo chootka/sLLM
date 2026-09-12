@@ -9,7 +9,7 @@
 
 <script>
 export default {
-  name: '11_building_the_antennas',
+  name: '12_building_the_antennas',
   meta: {
     classes: 'gallery',
     section: 'Side quest',
