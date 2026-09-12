@@ -1,5 +1,5 @@
 <template>
-<h2>The CMOS stage</h2>
+<h2>Schematic</h2>
 <div class="row">
   <figure>
     <img src="/deck-media/schematic-oscillator-bank.png" alt="Schematic: the coupled oscillator bank and passive mixer">

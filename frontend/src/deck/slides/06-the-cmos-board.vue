@@ -1,6 +1,6 @@
 <template>
 <div class="content">
-<h2>The CMOS board</h2>
+<h2>The CMOS circuit</h2>
 <p class="lead">The audio engine is a model of a physical circuit.</p>
 <ul class="points">
 <li><span class="mark">RING</span><span>Three 40106 Schmitt trigger oscillators at
