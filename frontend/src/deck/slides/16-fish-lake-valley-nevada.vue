@@ -12,7 +12,7 @@
 
 <script>
 export default {
-  name: '14_fish_lake_valley_nevada',
+  name: '16_fish_lake_valley_nevada',
   meta: {
     classes: 'gallery',
     section: 'Side quest',

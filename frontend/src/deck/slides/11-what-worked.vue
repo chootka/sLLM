@@ -26,7 +26,7 @@ the control data was read</li>
 
 <script>
 export default {
-  name: '09_what_worked',
+  name: '11_what_worked',
   meta: {
     classes: 'split',
     section: 'What worked',

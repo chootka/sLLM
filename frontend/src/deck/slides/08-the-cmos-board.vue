@@ -30,7 +30,7 @@ when a timestamp is passed in.</p>
 
 <script>
 export default {
-  name: '06_the_cmos_board',
+  name: '08_the_cmos_board',
   meta: {
     classes: 'split content-wide',
     section: 'What was built',
