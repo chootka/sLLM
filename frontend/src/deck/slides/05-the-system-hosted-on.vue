@@ -28,7 +28,7 @@
 <line x1="416" y1="93" x2="466" y2="93" stroke="var(--axis)" stroke-width="1.5" marker-end="url(#ah)"/>
 <line x1="646" y1="93" x2="696" y2="93" stroke="var(--axis)" stroke-width="1.5" marker-end="url(#ah)"/>
 <path d="M785,148 L785,196 L96,196 L96,148" fill="none" stroke="var(--axis)" stroke-width="1.5" marker-end="url(#ah)"/>
-<text x="440" y="189" class="al" text-anchor="middle">blue light on the chamber — the only thing the model can change</text>
+<text x="440" y="189" class="al" text-anchor="middle">blue light on the chamber, the only thing the model can change</text>
 <rect x="238" y="236" width="406" height="90" rx="3" fill="var(--panel)" stroke="var(--rule)" stroke-width="1"/>
 <text x="252" y="258" class="bt">WEB, ON THE PI</text>
 <text x="252" y="278" class="bl">livestream · raw electrode graphs · reduced signal</text>

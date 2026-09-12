@@ -9,8 +9,8 @@ timing.</li>
 <li><b>A language model</b> has no single place where meaning is stored. It is a large set
 of numbers, and every word it produces comes from all of them at once.</li>
 </ul>
-<p>The project is trying to find out whether the two can entrain each other &mdash; settle
-into a shared rhythm &mdash; without either one representing the other. The moon does this
+<p>The project is trying to find out whether the two can entrain each other,
+meaning settle into a shared rhythm, without either one representing the other. The moon does this
 to the tides.</p>
 </div>
 <figure class="media"><img src="/deck-media/the-organism-early-in-run-6.jpg" alt="The organism early in run 6, still compact on the reference island"></figure>

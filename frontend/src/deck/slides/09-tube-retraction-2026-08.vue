@@ -23,7 +23,7 @@
 <circle cx="523.0" cy="176.0" r="3.6" fill="var(--surface)" stroke="var(--s2)" stroke-width="1.8"><title>ch1 2026-08-25 20:00 PDT  +1.14 dex, p=0.075</title></circle>
 <circle cx="585.8" cy="193.0" r="3.6" fill="var(--surface)" stroke="var(--s2)" stroke-width="1.8"><title>ch1 2026-08-25 21:00 PDT  +0.93 dex, p=0.358</title></circle>
 <circle cx="648.6" cy="214.8" r="3.6" fill="var(--surface)" stroke="var(--s2)" stroke-width="1.8"><title>ch1 2026-08-25 22:00 PDT  +0.66 dex, p=0.900</title></circle>
-<text x="656.6" y="218.8" text-anchor="start" class="dir" fill="var(--s2)">ch1 — tube retracted</text>
+<text x="656.6" y="218.8" text-anchor="start" class="dir" fill="var(--s2)">ch1, tube retracted</text>
 <path d="M83.4,51.8 L146.2,111.5 L209.0,89.7 L271.8,103.4 L334.6,74.4 L397.4,115.5 L460.2,152.6 L523.0,139.7 L585.8,107.5 L648.6,118.8" fill="none" stroke="var(--s3)" stroke-width="2"/>
 <circle cx="83.4" cy="51.8" r="4.6" fill="var(--s3)" stroke="var(--s3)" stroke-width="1.8"><title>ch2 2026-08-25 13:00 PDT  +2.68 dex, p=0.005</title></circle>
 <circle cx="146.2" cy="111.5" r="4.6" fill="var(--s3)" stroke="var(--s3)" stroke-width="1.8"><title>ch2 2026-08-25 14:00 PDT  +1.94 dex, p=0.005</title></circle>
@@ -35,7 +35,7 @@
 <circle cx="523.0" cy="139.7" r="4.6" fill="var(--s3)" stroke="var(--s3)" stroke-width="1.8"><title>ch2 2026-08-25 20:00 PDT  +1.59 dex, p=0.005</title></circle>
 <circle cx="585.8" cy="107.5" r="4.6" fill="var(--s3)" stroke="var(--s3)" stroke-width="1.8"><title>ch2 2026-08-25 21:00 PDT  +1.99 dex, p=0.005</title></circle>
 <circle cx="648.6" cy="118.8" r="4.6" fill="var(--s3)" stroke="var(--s3)" stroke-width="1.8"><title>ch2 2026-08-25 22:00 PDT  +1.85 dex, p=0.005</title></circle>
-<text x="656.6" y="122.8" text-anchor="start" class="dir" fill="var(--s3)">ch2 — tube held</text>
+<text x="656.6" y="122.8" text-anchor="start" class="dir" fill="var(--s3)">ch2, tube held</text>
 <text x="83.4" y="286.0" text-anchor="middle" class="lab" >13:00</text>
 <text x="209.0" y="286.0" text-anchor="middle" class="lab" >15:00</text>
 <text x="334.6" y="286.0" text-anchor="middle" class="lab" >17:00</text>
