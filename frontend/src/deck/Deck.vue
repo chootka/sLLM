@@ -83,6 +83,12 @@ export default {
     this.media = matchMedia('(prefers-color-scheme: dark)')
     this.media.addEventListener('change', this.onScheme)
     this.tick = setInterval(() => { this.now = Date.now() }, 1000)
+    // Redraw whenever the canvas box actually changes, which covers the
+    // stylesheet landing, fullscreen, and the dashboard's lightbox opening.
+    if (window.ResizeObserver) {
+      this.boxWatcher = new ResizeObserver(() => this.draw())
+      this.boxWatcher.observe(this.$refs.field)
+    }
     this.show(0)
     this.$nextTick(this.readHeadings)
   },
@@ -91,6 +97,7 @@ export default {
     window.removeEventListener('resize', this.onResize)
     window.removeEventListener('blur', this.refocus)
     if (this.themeWatcher) this.themeWatcher.disconnect()
+    if (this.boxWatcher) this.boxWatcher.disconnect()
     if (this.media) this.media.removeEventListener('change', this.onScheme)
     clearInterval(this.tick)
   },
@@ -166,7 +173,12 @@ export default {
       if (!cv) return
       const ctx = cv.getContext('2d')
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      const w = cv.clientWidth, h = cv.clientHeight
+      // The stylesheet can arrive after the first draw, and an unstyled canvas
+      // reports its default 300x150. The viewport is the honest measure.
+      const r = cv.getBoundingClientRect()
+      const w = Math.round(r.width) || window.innerWidth
+      const h = Math.round(r.height) || window.innerHeight
+      if (!w || !h) return
       if (cv.width !== w * dpr || cv.height !== h * dpr) {
         cv.width = w * dpr; cv.height = h * dpr
       }
