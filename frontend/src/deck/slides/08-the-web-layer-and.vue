@@ -11,7 +11,10 @@
 <li><span class="mark">speed</span><span>Playback rate, 1 to 240 times real time.</span></li>
 </ul>
 </div>
-<figure class="media"><img src="/deck-media/the-organism-spread-between-islands-5.jpg" alt="The organism spread between islands, 5 September"></figure>
+<figure class="media">
+<img class="only-light" src="/deck-media/dashboard-light.jpg" alt="The dashboard in light mode: livestream, electrode graphs and the model log">
+<img class="only-dark" src="/deck-media/dashboard-dark.jpg" alt="The dashboard in dark mode: livestream, electrode graphs and the model log">
+</figure>
 </template>
 
 <script>

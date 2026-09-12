@@ -142,6 +142,19 @@ figcaption::before{
 figcaption::before{inset:-1.6rem -2.2rem;filter:blur(28px)}
 .overlay .content::before{display:none}
 
+
+/* One screenshot per theme. Three states, same as the tokens: no stamp means
+   the OS setting decides, and an explicit stamp wins either way. */
+.only-dark{display:none}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .only-light{display:none}
+  :root:not([data-theme="light"]) .only-dark{display:block}
+}
+:root[data-theme="dark"] .only-light{display:none}
+:root[data-theme="dark"] .only-dark{display:block}
+:root[data-theme="light"] .only-light{display:block}
+:root[data-theme="light"] .only-dark{display:none}
+
 /* ---------- type ---------- */
 h1{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
   font-size:clamp(2.2rem,7vmin,5rem);line-height:1.12}
