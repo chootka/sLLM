@@ -78,9 +78,7 @@ coupled to.</p>
     <circle cx="12" cy="12" r="8.5"/><path d="M6 18 18 6"/>
   </symbol>
 </svg>
-<figure class="media">
-<img src="/deck-media/the-organism-massed-around-the-central.jpg" alt="The organism massed around the central island, 6 September">
-</figure>
+<figure class="media"><img src="/deck-media/model-logs.jpg" alt="The model log: each turn's state, reply and applied action"></figure>
 </template>
 
 <script>
