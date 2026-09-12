@@ -69,10 +69,12 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
       var(--line) 0 1px, rgba(0,0,0,0) 1px var(--p2,7.4px))}
 #stage{position:relative;z-index:2;width:100%;height:100svh}
 
+/* Nothing clips: the wash behind the text is a blurred pseudo-element that has
+   to bleed well past its own box, and any overflow rule on an ancestor cuts it
+   off square. The viewport clips instead, through body. */
 .slide{position:absolute;inset:0;display:grid;align-content:center;align-items:center;
   gap:clamp(1.4rem,3.4vw,3.4rem);
-  padding:clamp(1.8rem,5vh,3.6rem) clamp(1.4rem,5vw,4.4rem);
-  overflow:hidden}
+  padding:clamp(1.8rem,5vh,3.6rem) clamp(1.4rem,5vw,4.4rem)}
 
 .split{grid-template-columns:1fr 1fr}
 .split.content-wide{grid-template-columns:1.6fr 1fr}
@@ -110,7 +112,7 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .overlay .points .mark,.overlay .eyebrow{color:rgba(255,255,255,.72)}
 
 .content{min-width:0;display:flex;flex-direction:column;
-  gap:clamp(.6rem,1.7vmin,1.3rem);max-height:86vh;overflow:auto}
+  gap:clamp(.6rem,1.7vmin,1.3rem)}
 .media{margin:0;min-width:0;display:flex;flex-direction:column;gap:.6rem}
 .media img,.media video{display:block;width:100%;height:auto;max-height:76vh;
   object-fit:contain;background:#0b0b0e;border:1px solid var(--rule)}
