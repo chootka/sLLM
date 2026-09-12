@@ -167,7 +167,10 @@ figcaption b{color:var(--ink-2)}
 /* The project's name set at title size. Inline, not floated: it shares the
    baseline of the first line rather than running down the side of three. */
 .drop{font-family:"Amarante",Georgia,serif;font-weight:400;color:var(--ink);
-  font-size:clamp(2.6rem,8vmin,5.4rem);line-height:.9;margin-right:.1em}
+  font-size:clamp(2.6rem,8vmin,5.4rem);line-height:.9;
+  /* Negative, because the word space after it is set at the display size and
+     Amarante carries a wide sidebearing on the final M. */
+  margin-right:-.05em}
 .opening{font-size:clamp(1.05rem,2.5vmin,1.7rem);line-height:1.45}
 
 /* ---------- lists ---------- */
