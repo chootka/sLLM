@@ -175,6 +175,7 @@ ul li::before{content:"";width:.4em;height:.4em;background:var(--ink);
 .prompts > div{background:var(--ground);display:flex;flex-direction:column;gap:.25rem;
   padding:clamp(.5rem,1.4vmin,.9rem)}
 .prompts p{color:var(--muted);line-height:1.4;font-size:clamp(.68rem,1.45vmin,.92rem)}
+.prompts .label{color:var(--accent)}
 
 /* ---------- audio over a photograph ---------- */
 .media .with-audio{position:relative;display:block;line-height:0}

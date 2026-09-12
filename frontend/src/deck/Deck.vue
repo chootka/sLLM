@@ -175,9 +175,9 @@ export default {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       // The stylesheet can arrive after the first draw, and an unstyled canvas
       // reports its default 300x150. The viewport is the honest measure.
-      const r = cv.getBoundingClientRect()
-      const w = Math.round(r.width) || window.innerWidth
-      const h = Math.round(r.height) || window.innerHeight
+      const box = cv.getBoundingClientRect()
+      const w = Math.round(box.width) || window.innerWidth
+      const h = Math.round(box.height) || window.innerHeight
       if (!w || !h) return
       if (cv.width !== w * dpr || cv.height !== h * dpr) {
         cv.width = w * dpr; cv.height = h * dpr
