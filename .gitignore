@@ -15,7 +15,3 @@ data/logs/
 # Build output and ad-hoc bench scripts
 exhibit/object*/
 /scratch/
-
-# Deck media: the timelapses are large and are deployed, not versioned.
-# Regenerate or copy them from ~/residency/deck/media/ on the box.
-frontend/public/deck-media/*.mp4
