@@ -1,11 +1,14 @@
-/* IBM Plex Sans for buttons and labels. One variable file per subset covers
-   400-600, so the weight range is declared rather than two static faces. */
+/* Radio Canada for interface chrome and body text, Kode Mono for labels and
+   readings. Self-hosted like Amarante: the exhibit ships as a sealed player,
+   and a webfont fetched over the network is blank text the moment it has none.
+   One variable file per subset covers the weight range, so the range is
+   declared rather than several static faces. */
 @font-face {
-    font-family: 'IBM Plex Sans';
+    font-family: 'Radio Canada';
     font-style: normal;
-    font-weight: 400 600;
+    font-weight: 300 700;
     font-display: swap;
-    src: url('/fonts/ibmplexsans-latin-ext.woff2') format('woff2');
+    src: url('/fonts/radiocanada-latin-ext.woff2') format('woff2');
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
         U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
         U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
@@ -13,11 +16,34 @@
 }
 
 @font-face {
-    font-family: 'IBM Plex Sans';
+    font-family: 'Radio Canada';
     font-style: normal;
-    font-weight: 400 600;
+    font-weight: 300 700;
     font-display: swap;
-    src: url('/fonts/ibmplexsans-latin.woff2') format('woff2');
+    src: url('/fonts/radiocanada-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'Kode Mono';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('/fonts/kodemono-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+        U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Kode Mono';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('/fonts/kodemono-latin.woff2') format('woff2');
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
         U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
         U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -82,7 +108,7 @@
     /* Interface chrome: anything the reader operates or that names a control.
        Readings, timestamps and the model's text stay on --mono, where the
        tabular figures are. */
-    --ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --ui: 'Radio Canada', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 /* Every heading, including the ones inside scoped components: a scoped style
