@@ -254,8 +254,11 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
 .prompts .tbd .label,.prompts .tbd .ico{color:var(--muted)}
 
 /* ---------- audio over a photograph ---------- */
-.media .with-audio{position:relative;display:block;line-height:0}
-.media .with-audio img{width:100%}
+/* Not scoped to .media: this figure also appears in a gallery row. Shrinks to
+   the picture so the bar is the picture's width, and does not stretch in the
+   column. */
+.with-audio{position:relative;display:inline-block;line-height:0;max-width:100%;
+  align-self:center}
 .audio-bar{position:absolute;left:0;right:0;bottom:0;line-height:1.4;
   display:flex;flex-direction:column;gap:.3rem;
   padding:clamp(1.4rem,3.6vmin,2.4rem) clamp(.6rem,1.5vmin,1rem) clamp(.5rem,1.2vmin,.8rem);
