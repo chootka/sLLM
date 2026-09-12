@@ -72,6 +72,8 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .centered h2{white-space:nowrap}
 .centered .chart{width:100%;height:100%;min-height:0;display:flex}
 .centered .chart svg{width:100%;height:100%;max-height:none}
+/* justify-items:center shrinks items to max-content, so give prose a measure. */
+.centered .note,.centered p{max-width:72ch}
 .gallery .row{display:flex;gap:clamp(.9rem,2.4vw,2.4rem);justify-content:center;
   align-items:flex-start;min-height:0;width:100%}
 .gallery figure{display:flex;flex-direction:column;gap:.55rem;min-width:0}

@@ -1,5 +1,4 @@
 <template>
-<div class="content">
 <h2>Same dish, with and without the organism</h2>
 <div class="chart"><svg viewBox="0 0 900 330" class="fig" role="img" aria-label="Band peak per hour across the blank, organism and removal windows">
 <line x1="52" y1="274.0" x2="886" y2="274.0" stroke="var(--grid)" stroke-width="1"/>
@@ -174,14 +173,14 @@
 <div class="legend"><span><i class="swatch" style="background:var(--s1)"></i> ch0</span><span><i class="swatch" style="background:var(--s2)"></i> ch1</span><span><i class="swatch" style="background:var(--s3)"></i> ch2</span><span><i class="swatch hollow" style="color:var(--muted)"></i> hollow = indistinguishable from noise</span></div>
 <p class="note">A day empty, the organism returned to the same blocks, then removed
 again. Each dot is one hour scored on its own. <b>Nothing crossed the artifact threshold
-with the dish empty.</b></p></div><figure class="media"><img src="/deck-media/the-blank-dish-during-run-7.jpg" alt="The blank dish during run 7: fresh agar, same electrodes, no organism"></figure>
+with the dish empty.</b></p>
 </template>
 
 <script>
 export default {
   name: '08_same_dish_with_and',
   meta: {
-    classes: 'split media-first content-wide',
+    classes: 'gallery centered',
     section: 'What worked',
     reg: 0.16, fx: 50, fy: 50
   }
