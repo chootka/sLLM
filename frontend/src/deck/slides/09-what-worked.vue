@@ -8,7 +8,7 @@ cycle. Probes it never reached did not.</p>
 
 <script>
 export default {
-  name: '08_what_worked',
+  name: '09_what_worked',
   meta: {
     classes: 'split',
     section: 'What worked',
