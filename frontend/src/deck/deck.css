@@ -200,8 +200,8 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
   font-size:clamp(.62rem,1.35vmin,.86rem);letter-spacing:.1em;white-space:nowrap}
 
 /* ---------- charts ---------- */
-/* Drawn in dark ink on paper, so it keeps its own ground in either theme. */
-.schematic{background:#fff}
+/* Drawn in dark ink on paper, so they keep their own ground in either theme. */
+.gallery img[src$=".png"]{background:#fff}
 .chart{background:var(--panel);border:1px solid var(--rule);
   padding:clamp(.5rem,1.5vmin,1rem);overflow:hidden}
 .chart svg{display:block;width:100%;height:auto;max-height:58vh}
