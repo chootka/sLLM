@@ -100,13 +100,13 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .overlay .backdrop{position:absolute;inset:0;background:#07070a}
 .overlay .backdrop iframe{width:100%;height:100%;border:0;display:block}
 .overlay .content{position:relative;z-index:1;
-  margin-left:clamp(1.4rem,6vw,5rem);max-width:min(62ch,66vw);
+  margin-left:clamp(1.4rem,6vw,5rem);max-width:min(48rem,74vw);
   background:rgba(8,8,12,.62);
   -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
   border:1px solid rgba(255,255,255,.14);
   padding:clamp(1.1rem,2.8vmin,2.1rem) clamp(1.2rem,3vmin,2.3rem)}
 .overlay h1,.overlay h2,.overlay b{color:#fff}
-.overlay h1{white-space:nowrap}
+.overlay h1{white-space:nowrap;font-size:clamp(2rem,6vmin,4.4rem)}
 .overlay p,.overlay li{color:#dedbe6}
 .overlay .points li{border-top-color:rgba(255,255,255,.16)}
 .overlay .points .mark,.overlay .eyebrow{color:rgba(255,255,255,.72)}
