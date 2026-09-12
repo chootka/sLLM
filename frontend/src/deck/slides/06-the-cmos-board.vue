@@ -25,7 +25,7 @@ not been observed on the hardware.</p>
 
 <script>
 export default {
-  name: '07_the_cmos_board',
+  name: '06_the_cmos_board',
   meta: {
     classes: 'solo',
     section: 'What was built',

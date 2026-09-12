@@ -16,7 +16,7 @@
 
 <script>
 export default {
-  name: '06_the_web_layer_and',
+  name: '07_the_web_layer_and',
   meta: {
     classes: 'split',
     section: 'What was built',
