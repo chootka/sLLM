@@ -2,7 +2,7 @@
   <!-- Two overlaid line fields. Identical spacing and angle means they sit on
        top of each other and there is no beat; separating them produces one.
        Registration is per slide, and it is drawn once, never animated. -->
-  <canvas ref="field" id="field" aria-hidden="true"></canvas>
+  <div id="field" aria-hidden="true"></div>
 
   <main id="stage" @click="onStageClick">
     <section
@@ -75,33 +75,16 @@ export default {
   mounted() {
     document.title = 'sLLM Slides'
     window.addEventListener('keydown', this.onKey)
-    window.addEventListener('resize', this.onResize)
     // Clicking an embedded piece moves focus into its frame and the deck stops
     // hearing arrow keys. Take focus back once the click has landed.
     window.addEventListener('blur', this.refocus)
-    this.themeWatcher = new MutationObserver(this.draw)
-    this.themeWatcher.observe(document.documentElement, {
-      attributes: true, attributeFilter: ['data-theme']
-    })
-    this.media = matchMedia('(prefers-color-scheme: dark)')
-    this.media.addEventListener('change', this.onScheme)
     this.tick = setInterval(() => { this.now = Date.now() }, 1000)
-    // Redraw whenever the canvas box actually changes, which covers the
-    // stylesheet landing, fullscreen, and the dashboard's lightbox opening.
-    if (window.ResizeObserver) {
-      this.boxWatcher = new ResizeObserver(() => this.draw())
-      this.boxWatcher.observe(this.$refs.field)
-    }
     this.show(0)
     this.$nextTick(this.readHeadings)
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.onKey)
-    window.removeEventListener('resize', this.onResize)
     window.removeEventListener('blur', this.refocus)
-    if (this.themeWatcher) this.themeWatcher.disconnect()
-    if (this.boxWatcher) this.boxWatcher.disconnect()
-    if (this.media) this.media.removeEventListener('change', this.onScheme)
     clearInterval(this.tick)
   },
   methods: {
@@ -175,43 +158,14 @@ export default {
         if (h) this.headings[i] = h.textContent
       })
     },
-    onScheme() { setTimeout(this.draw, 30) },
-    onResize() { this.draw() },
+    // Registration is the offset between the two fields: identical spacing and
+    // angle means they sit on top of each other and there is no beat.
     draw() {
-      const cv = this.$refs.field
-      if (!cv) return
-      const ctx = cv.getContext('2d')
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      // The stylesheet can arrive after the first draw, and an unstyled canvas
-      // reports its default 300x150. The viewport is the honest measure.
-      const box = cv.getBoundingClientRect()
-      const w = Math.round(box.width) || window.innerWidth
-      const h = Math.round(box.height) || window.innerHeight
-      if (!w || !h) return
-      if (cv.width !== w * dpr || cv.height !== h * dpr) {
-        cv.width = w * dpr; cv.height = h * dpr
-      }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.clearRect(0, 0, w, h)
-      const col = getComputedStyle(document.documentElement)
-        .getPropertyValue('--line').trim() || 'rgba(0,0,0,.35)'
       const r = this.slide.meta.reg
-      const diag = Math.hypot(w, h), p = 7.4, a = -7 * Math.PI / 180
-
-      const field = (spacing, angle) => {
-        ctx.save()
-        ctx.translate(w / 2, h / 2)
-        ctx.rotate(angle)
-        ctx.beginPath()
-        for (let x = -diag; x <= diag; x += spacing) {
-          ctx.moveTo(x, -diag); ctx.lineTo(x, diag)
-        }
-        ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke()
-        ctx.restore()
-      }
-      field(p, a)
-      field(p * (1 + r * 0.052), a + r * 2.7 * Math.PI / 180)
-      document.documentElement.style.setProperty('--regpx', (r * 7).toFixed(2))
+      const root = document.documentElement.style
+      root.setProperty('--p2', (7.4 * (1 + r * 0.052)).toFixed(3) + 'px')
+      root.setProperty('--a2', (97 + r * 2.7).toFixed(3) + 'deg')
+      root.setProperty('--regpx', (r * 7).toFixed(2))
     }
   }
 }
