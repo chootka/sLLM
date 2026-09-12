@@ -2,7 +2,7 @@
    and scoping would require a data attribute on every element. */
 :root{
   color-scheme: light;
-  --ground:#f2f1f4; --panel:#fbfbfc; --surface:#fbfbfc;
+  --ground:#f2f1f4; --ground-clear:rgba(242,241,244,0); --panel:#fbfbfc; --surface:#fbfbfc;
   --ink:#141319; --ink-2:#3d3a47; --muted:#6b6878;
   --rule:#d9d4e1; --rule-soft:#e7e3ec;
   --accent:#2a78d6; --echo:rgba(42,120,214,.30);
@@ -13,7 +13,7 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme: dark;
-    --ground:#0e0d12; --panel:#17161e; --surface:#17161e;
+    --ground:#0e0d12; --ground-clear:rgba(14,13,18,0); --panel:#17161e; --surface:#17161e;
     --ink:#f0eef5; --ink-2:#c5c1d2; --muted:#918da0;
     --rule:#2b2934; --rule-soft:#21202b;
     --accent:#6ea6ee; --echo:rgba(110,166,238,.32);
@@ -24,7 +24,7 @@
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
-  --ground:#0e0d12; --panel:#17161e; --surface:#17161e;
+  --ground:#0e0d12; --ground-clear:rgba(14,13,18,0); --panel:#17161e; --surface:#17161e;
   --ink:#f0eef5; --ink-2:#c5c1d2; --muted:#918da0;
   --rule:#2b2934; --rule-soft:#21202b;
   --accent:#6ea6ee; --echo:rgba(110,166,238,.32);
@@ -105,6 +105,21 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .media{margin:0;min-width:0;display:flex;flex-direction:column;gap:.6rem}
 .media img,.media video{display:block;width:100%;height:auto;max-height:76vh;
   object-fit:contain;background:#0b0b0e;border:1px solid var(--rule)}
+
+
+/* A soft cloud of the page color behind anything that has to be read, so the
+   line fields stay visible everywhere else without competing with the type. */
+.content,.gallery > h2,.gallery > .note,.gallery > .legend,figcaption{position:relative}
+.content::before,
+.gallery > h2::before,
+.gallery > .note::before,
+.gallery > .legend::before,
+figcaption::before{
+  content:"";position:absolute;z-index:-1;pointer-events:none;
+  inset:-1.8rem -2.4rem;
+  background:radial-gradient(ellipse 78% 70% at 50% 50%,
+    var(--ground) 0%,var(--ground) 48%,var(--ground-clear) 82%)}
+.overlay .content::before{display:none}
 
 /* ---------- type ---------- */
 h1{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
