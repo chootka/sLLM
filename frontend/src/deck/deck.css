@@ -110,15 +110,23 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 /* A soft cloud of the page color behind anything that has to be read, so the
    line fields stay visible everywhere else without competing with the type. */
 .content,.gallery > h2,.gallery > .note,.gallery > .legend,figcaption{position:relative}
+/* Blurred solid rather than a gradient: a gradient fades linearly and the end
+   of it reads as an edge. This has no edge to find. */
 .content::before,
 .gallery > h2::before,
 .gallery > .note::before,
 .gallery > .legend::before,
 figcaption::before{
   content:"";position:absolute;z-index:-1;pointer-events:none;
-  inset:-1.8rem -2.4rem;
-  background:radial-gradient(ellipse 78% 70% at 50% 50%,
-    var(--ground) 0%,var(--ground) 48%,var(--ground-clear) 82%)}
+  inset:-1.2rem -1.8rem;
+  background:var(--ground);
+  border-radius:2rem;
+  filter:blur(30px)}
+
+/* Small blocks would be washed out by the full radius. */
+.gallery > .note::before,
+.gallery > .legend::before,
+figcaption::before{inset:-.5rem -1rem;border-radius:1rem;filter:blur(14px)}
 .overlay .content::before{display:none}
 
 /* ---------- type ---------- */
