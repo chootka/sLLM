@@ -82,13 +82,13 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 /* One slide breaks the two columns: the media is lifted out of the grid, made
    larger, and slid left so the text column sits over its edge. */
 .split.overlap .media{position:absolute;right:clamp(1.4rem,5vw,4.4rem);
-  top:50%;transform:translateY(-50%);width:42%;z-index:0}
+  top:50%;transform:translateY(-50%);width:31%;z-index:0}
 .split.overlap .media img{max-height:80vh}
 .split.overlap .content{position:relative;z-index:2}
 .split .media{order:2}
 .split.media-first .media{order:-1}
 
-.gallery{grid-template-rows:auto 1fr;align-content:start;align-items:start}
+.gallery{grid-template-rows:auto minmax(0,1fr);align-content:start;align-items:start}
 /* One column of text, no media. */
 .solo{grid-template-columns:minmax(0,78ch);justify-content:center}
 /* One figure, centred, taking whatever height the heading leaves. */
@@ -103,10 +103,11 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 /* Stacked rather than side by side, at half the slide width. */
 /* No scroll container: the two drawings are sized to the height the slide
    leaves, so neither can be clipped. */
-.gallery .row.stack{flex-direction:column;align-items:center;gap:clamp(.8rem,2vh,1.6rem);
-  overflow:visible;max-height:none;min-height:0}
-.gallery .row.stack figure{width:50%;min-height:0}
-.gallery .row.stack .sch{max-height:32vh}
+.gallery .row.stack{flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:clamp(.8rem,2vh,1.6rem);overflow:visible;max-height:none;min-height:0;
+  padding-top:.75rem}
+.gallery .row.stack figure{width:50%;min-height:0;flex:0 0 auto}
+.gallery .row.stack .sch{max-height:28vh}
 .gallery figure{display:flex;flex-direction:column;gap:.55rem;min-width:0}
 .gallery img,.gallery video{display:block;width:auto;height:auto;
   max-height:58vh;max-width:100%;margin:0 auto;
