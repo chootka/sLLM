@@ -231,7 +231,7 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
 .exchange .arrow::after{right:-1px;border-left-color:var(--accent)}
 
 /* ---------- the prompt grid ---------- */
-.prompts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));
+.prompts{display:grid;grid-template-columns:repeat(4,1fr);
   gap:1px;background:var(--rule);border:1px solid var(--rule)}
 .prompts button{font:inherit;text-align:left;cursor:pointer;
   background:var(--ground);border:0;color:var(--muted);
@@ -309,6 +309,7 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
     align-content:start;overflow-y:auto;gap:1.1rem}
   .content{max-height:none;overflow:visible}
   .split .media,.split.media-first .media{order:0}
+  .prompts{grid-template-columns:repeat(2,1fr)}
   .gallery .row{flex-wrap:wrap}
   .gallery img,.gallery video{max-height:40vh}
   .chart svg{max-height:none}
