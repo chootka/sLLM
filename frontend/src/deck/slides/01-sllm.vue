@@ -1,9 +1,10 @@
 <template>
 <div class="content">
-<p class="eyebrow">Stochastic 2026</p>
-<h1>sLLM</h1>
-<p class="lead">A study in interface design between disparate systems. Built around a
-slime mould and a language model, and not really about either of them.</p></div><figure class="media"><img src="/deck-media/the-plasmodium-spread-in-veins-across.jpg" alt="The plasmodium spread in veins across the dish, 25 August"></figure>
+<p class="lead opening"><span class="drop">sLLM</span> pairs a slime mould with a language
+model, although this project is not really about either of them. It is a study in how to
+interface two very different kinds of systems.</p>
+</div>
+<figure class="media"><img src="/deck-media/the-plasmodium-spread-in-veins-across.jpg" alt="The plasmodium spread in veins across the dish, 25 August"></figure>
 </template>
 
 <script>

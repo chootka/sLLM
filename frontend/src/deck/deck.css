@@ -117,6 +117,12 @@ figcaption{color:var(--muted);line-height:1.4;
   font-size:clamp(.72rem,1.5vmin,.98rem)}
 figcaption b{color:var(--ink-2)}
 
+
+/* The project's name set at title size, with the sentence running on beside it. */
+.drop{float:left;font-family:"Amarante",Georgia,serif;font-weight:400;color:var(--ink);
+  font-size:clamp(2.6rem,8vmin,5.4rem);line-height:.88;margin:0 .12em -.04em 0}
+.opening{display:flow-root;font-size:clamp(1.05rem,2.5vmin,1.7rem);line-height:1.45}
+
 /* ---------- lists ---------- */
 ul{list-style:none;padding:0;margin:0;display:grid;gap:clamp(.5rem,1.4vmin,1rem)}
 ul li{display:grid;grid-template-columns:.5em 1fr;gap:.55rem;align-items:start;
