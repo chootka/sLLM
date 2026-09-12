@@ -13,7 +13,10 @@ of numbers, and every word it produces comes from all of them at once.</li>
 meaning settle into a shared rhythm, without either one representing the other. The moon does this
 to the tides.</p>
 </div>
-<figure class="media"><img src="/deck-media/the-organism-early-in-run-6.jpg" alt="The organism early in run 6, still compact on the reference island"></figure>
+<figure class="media">
+<video src="/deck-media/run8-timelapse.mp4" autoplay loop muted playsinline controls preload="metadata" aria-label="Timelapse of the organism across the dish during run 8"></video>
+<figcaption><b>2026-08-27, 15:37 PDT onward.</b> 500 frames, run 8.</figcaption>
+</figure>
 </template>
 
 <script>
