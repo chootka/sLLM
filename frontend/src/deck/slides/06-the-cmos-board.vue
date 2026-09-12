@@ -6,8 +6,9 @@
 <li><span class="mark">RING</span><span>Three 40106 Schmitt trigger oscillators at
 roughly 200, 204 and 209 Hz. Each output drives a vactrol LED whose LDR sits in the next
 oscillator's timing node. 3 into 1, 1 into 2, 2 into 3.</span></li>
-<li><span class="mark">DRIVE</span><span>An MCP4728 DAC, over I2C from the Pi, sets each
-vactrol's LED current through a 2N3904. Low, the three beat. High, they lock.</span></li>
+<li><span class="mark">DRIVE</span><span>The organism sets how brightly each vactrol LED
+shines. Low, the three beat against each other. High, they lock. The bank is trimmed to
+sit just below locking, so small changes tip it in and out.</span></li>
 <li><span class="mark">MIXER</span><span>Three 100k resistors into one node, 10&micro; to
 block the Vdd/2 offset, 10k and 10n to round the edges.</span></li>
 <li><span class="mark">MUX</span><span>A 4051 fed the three oscillators, &divide;2 and
@@ -19,7 +20,8 @@ reference, then holds. VCO on one channel, phase error on the other.</span></li>
 which clocks a 4040 and re-points the mux. Lock clamps it silent.</span></li>
 </ul>
 <p>The worklet at /drift is the same RC integrator against the same Schmitt threshold,
-with the datasheet's hysteresis.</p>
+with the datasheet's hysteresis. It runs on the live electrodes, or on a stored stretch
+when a timestamp is passed in.</p>
 </div>
 <figure class="media">
 <img src="/deck-media/cmos-breadboard.jpg" alt="The CMOS circuit on a breadboard: chips, trimmers, vactrols and jumper wires">
