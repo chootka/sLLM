@@ -8,7 +8,7 @@
   --accent:#2a78d6; --echo:rgba(42,120,214,.30);
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
   --grid:#e6e2ec; --axis:#a9a4b6; --band:#f0edf5; --rule-mark:#eb6834;
-  --line:rgba(20,19,25,.40);
+  --line:rgba(20,19,25,.20);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -19,7 +19,7 @@
     --accent:#6ea6ee; --echo:rgba(110,166,238,.32);
     --s1:#3987e5; --s2:#d95926; --s3:#199e70;
     --grid:#24222d; --axis:#545063; --band:#1b1a23; --rule-mark:#d95926;
-    --line:rgba(240,238,245,.30);
+    --line:rgba(240,238,245,.15);
   }
 }
 :root[data-theme="dark"]{
@@ -30,7 +30,7 @@
   --accent:#6ea6ee; --echo:rgba(110,166,238,.32);
   --s1:#3987e5; --s2:#d95926; --s3:#199e70;
   --grid:#24222d; --axis:#545063; --band:#1b1a23; --rule-mark:#d95926;
-  --line:rgba(240,238,245,.30);
+  --line:rgba(240,238,245,.15);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -51,9 +51,6 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
    ============================================================ */
 
 #field{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
-#focus{position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:radial-gradient(ellipse 58% 54% at var(--fx,50%) var(--fy,50%),
-    var(--ground) 0%,var(--ground) 40%,transparent 82%)}
 #stage{position:relative;z-index:2;width:100%;height:100svh}
 
 .slide{position:absolute;inset:0;display:grid;align-content:center;align-items:center;

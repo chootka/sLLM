@@ -3,7 +3,6 @@
        top of each other and there is no beat; separating them produces one.
        Registration is per slide, and it is drawn once, never animated. -->
   <canvas ref="field" id="field" aria-hidden="true"></canvas>
-  <div id="focus" :style="{ '--fx': slide.meta.fx + '%', '--fy': slide.meta.fy + '%' }"></div>
 
   <main id="stage" @click="onStageClick">
     <section
