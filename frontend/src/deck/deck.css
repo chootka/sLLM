@@ -214,7 +214,17 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
 
 /* ---------- charts ---------- */
 /* Drawn in dark ink on paper, so they keep their own ground in either theme. */
-.gallery img[src$=".png"]{background:#fff}
+
+/* Drawn schematics: they use the theme's ink, so no white ground needed. */
+.sch{display:block;width:100%;height:auto;max-height:56vh}
+.sch text{font-family:"Kode Mono",ui-monospace,monospace;fill:var(--ink)}
+.sch .v{font-size:13px;fill:var(--muted)}
+.sch .n{font-size:14px;letter-spacing:.06em}
+.sch .c{font-size:16px;letter-spacing:.06em}
+.sch .t{font-size:12px}
+.sch .h{font-size:12px;letter-spacing:.16em}
+.sch .l{font-size:13px}
+
 .chart{background:var(--panel);border:1px solid var(--rule);
   padding:clamp(.5rem,1.5vmin,1rem);overflow:hidden}
 .chart svg{display:block;width:100%;height:auto;max-height:58vh}
