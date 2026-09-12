@@ -1,10 +1,10 @@
 <template>
 <div class="content">
-<h2>The web layer, and /drift</h2>
+<h2>The live dashboard</h2>
 
   <ul class="points"><li><span class="mark">CAMERA</span>
 <span><b>Livestream</b> and <b>timelapse</b> recordings of the dish</span></li><li><span class="mark">DATA</span><span>Graphs of the <b>raw electrode signal</b> and the reduced slime-mould signal</span></li><li><span class="mark">LOG</span><span>The <b>model's logs</b>: what it asked for, what was applied</span></li><li><span class="mark">ADMIN</span><span>Remote control of the experiment parameters</span></li><li><span class="mark">ARCHIVE</span><span>Every past run, browsable</span></li></ul>
-<p class="label">/drift takes three parameters</p>
+<h3>The presentation layer at /drift</h3>
 <ul class="points">
 <li><span class="mark">from</span><span>A unix timestamp. Without it, /drift follows the live dish.</span></li>
 <li><span class="mark">mins</span><span>How long a stretch to play, 1 to 240 minutes.</span></li>

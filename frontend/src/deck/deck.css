@@ -145,6 +145,8 @@ h1{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
   font-size:clamp(2.2rem,7vmin,5rem);line-height:1.12}
 h2{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
   font-size:clamp(1.5rem,4.2vmin,2.9rem);line-height:1.18;text-wrap:balance}
+h3{font-family:"Amarante",Georgia,serif;font-weight:400;margin:0;
+  font-size:clamp(1.1rem,2.6vmin,1.7rem);line-height:1.25;color:var(--ink)}
 p{margin:0;color:var(--ink-2);font-weight:300;line-height:1.55;
   font-size:clamp(.92rem,1.95vmin,1.32rem)}
 b{color:var(--ink);font-weight:600}
