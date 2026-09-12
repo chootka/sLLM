@@ -1,7 +1,7 @@
 <template>
-<div class="hold">
-<h2 class="tuck oneline">Same dish, with and without the organism</h2>
-<div class="frame tall"><svg viewBox="0 0 900 330" class="fig" role="img" aria-label="Band peak per hour across the blank, organism and removal windows">
+<div class="content">
+<h2>Same dish, with and without the organism</h2>
+<div class="chart"><svg viewBox="0 0 900 330" class="fig" role="img" aria-label="Band peak per hour across the blank, organism and removal windows">
 <line x1="52" y1="274.0" x2="886" y2="274.0" stroke="var(--grid)" stroke-width="1"/>
 <text x="44.0" y="278.0" text-anchor="end" class="lab" >+0.0</text>
 <line x1="52" y1="202.2" x2="886" y2="202.2" stroke="var(--grid)" stroke-width="1"/>
@@ -171,17 +171,17 @@
 <circle cx="871.1" cy="218.0" r="3.6" fill="var(--surface)" stroke="var(--s1)" stroke-width="1.8"><title>ch0 2026-08-29 06:00 PDT  +0.78 dex, p=0.547, 144 s</title></circle>
 <line x1="52.0" y1="30.0" x2="52.0" y2="274.0" stroke="var(--axis)" stroke-width="1"/>
 </svg></div>
-<div class="legend"><span><i class="sw" style="background:var(--s1)"></i> ch0</span><span><i class="sw" style="background:var(--s2)"></i> ch1</span><span><i class="sw" style="background:var(--s3)"></i> ch2</span><span><i class="sw hollow" style="color:var(--muted)"></i> hollow = indistinguishable from noise</span></div>
-<p class="foot-note">A day empty, the organism returned to the same blocks, then removed
+<div class="legend"><span><i class="swatch" style="background:var(--s1)"></i> ch0</span><span><i class="swatch" style="background:var(--s2)"></i> ch1</span><span><i class="swatch" style="background:var(--s3)"></i> ch2</span><span><i class="swatch hollow" style="color:var(--muted)"></i> hollow = indistinguishable from noise</span></div>
+<p class="note">A day empty, the organism returned to the same blocks, then removed
 again. Each dot is one hour scored on its own. <b>Nothing crossed the artifact threshold
-with the dish empty.</b></p></div><figure class="dish"><img src="/deck-media/the-blank-dish-during-run-7.jpg" alt="The blank dish during run 7: fresh agar, same electrodes, no organism"></figure>
+with the dish empty.</b></p></div><figure class="media"><img src="/deck-media/the-blank-dish-during-run-7.jpg" alt="The blank dish during run 7: fresh agar, same electrodes, no organism"></figure>
 </template>
 
 <script>
 export default {
   name: '09_same_dish_with_and',
   meta: {
-    classes: 'dish-left lay-plate',
+    classes: 'split media-first content-wide',
     section: 'What worked',
     reg: 0.16, fx: 50, fy: 50
   }

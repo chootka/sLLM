@@ -1,7 +1,7 @@
 <template>
-<div class="hold">
-<h2 class="tuck oneline">The system hosted on a Raspberry Pi</h2>
-<div class="frame tall"><svg viewBox="0 0 880 400" class="fig diag" role="img" aria-label="System diagram: the dish is sensed by electrodes and a climate sensor, a Raspberry Pi records and decides, actuators act back on the dish, and a web layer serves the livestream, graphs, admin panel, archive and the audiovisual piece">
+<div class="content">
+<h2>The system hosted on a Raspberry Pi</h2>
+<div class="chart"><svg viewBox="0 0 880 400" class="fig diag" role="img" aria-label="System diagram: the dish is sensed by electrodes and a climate sensor, a Raspberry Pi records and decides, actuators act back on the dish, and a web layer serves the livestream, graphs, admin panel, archive and the audiovisual piece">
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--axis)"/></marker></defs>
 <rect x="8" y="40" width="176" height="106" rx="3" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.6"/>
 <text x="22" y="62" class="bt">THE DISH</text>
@@ -42,15 +42,15 @@
 
 <text x="8" y="378" class="al">Everything above sits on three files: the electrode record, the climate record, the images.</text>
 </svg></div>
-<p class="foot-note">Everything sits on three files: the electrode record, the climate
-record, the images. None of the rest is required in order to record.</p></div><figure class="dish"><img src="/deck-media/the-dish-before-inoculation-four-electrodes.jpg" alt="The dish before inoculation: four electrodes, agar islands and oat flakes"></figure>
+<p class="note">Everything sits on three files: the electrode record, the climate
+record, the images. None of the rest is required in order to record.</p></div><figure class="media"><img src="/deck-media/the-dish-before-inoculation-four-electrodes.jpg" alt="The dish before inoculation: four electrodes, agar islands and oat flakes"></figure>
 </template>
 
 <script>
 export default {
   name: '06_the_system_hosted_on',
   meta: {
-    classes: 'dish-left lay-plate',
+    classes: 'split media-first content-wide',
     section: 'What was built',
     reg: 0.48, fx: 50, fy: 50
   }

@@ -1,7 +1,7 @@
 <template>
-<div class="hold">
-<h2 class="tuck oneline">Tube retraction, 2026-08-25</h2>
-<div class="frame tall"><svg viewBox="0 0 780 320" class="fig" role="img" aria-label="Band peak per hour on ch1 and ch2 across the tube retraction">
+<div class="content">
+<h2>Tube retraction, 2026-08-25</h2>
+<div class="chart"><svg viewBox="0 0 780 320" class="fig" role="img" aria-label="Band peak per hour on ch1 and ch2 across the tube retraction">
 <line x1="52" y1="268.0" x2="680" y2="268.0" stroke="var(--grid)" stroke-width="1"/>
 <text x="44.0" y="272.0" text-anchor="end" class="lab" >+0.0</text>
 <line x1="52" y1="187.3" x2="680" y2="187.3" stroke="var(--grid)" stroke-width="1"/>
@@ -45,15 +45,15 @@
 <line x1="52.0" y1="26.0" x2="52.0" y2="268.0" stroke="var(--axis)" stroke-width="1"/>
 <line x1="52.0" y1="268.0" x2="680.0" y2="268.0" stroke="var(--axis)" stroke-width="1"/>
 </svg></div>
-<p class="foot-note">One tube released its electrode at 19:05 PDT while the other held, giving an on/off at one
-site with a simultaneous control at the other. <b>p = 0.012.</b></p></div><figure class="dish"><img src="/deck-media/the-dish-on-26-august-the.jpg" alt="The dish on 26 August, the day one tube retracted"></figure>
+<p class="note">One tube released its electrode at 19:05 PDT while the other held, giving an on/off at one
+site with a simultaneous control at the other. <b>p = 0.012.</b></p></div><figure class="media"><img src="/deck-media/the-dish-on-26-august-the.jpg" alt="The dish on 26 August, the day one tube retracted"></figure>
 </template>
 
 <script>
 export default {
   name: '10_tube_retraction_2026_08',
   meta: {
-    classes: 'dish-right lay-plate',
+    classes: 'split content-wide',
     section: 'What worked',
     reg: 0.1, fx: 50, fy: 50
   }

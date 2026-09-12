@@ -1,7 +1,7 @@
 <template>
-<div class="drift-bg" aria-hidden="true"><iframe data-src="https://sllm.visceral.systems/drift?from=1787695200&amp;mins=24&amp;speed=12" title="The /drift audiovisual piece, playing a 24 minute window at 12x" referrerpolicy="no-referrer"></iframe></div>
-<div class="hold">
-<h1 class="reg">Thank you &lt;3</h1>
+<div class="backdrop" aria-hidden="true"><iframe data-src="https://sllm.visceral.systems/drift?from=1787695200&amp;mins=24&amp;speed=12" title="The /drift audiovisual piece, playing a 24 minute window at 12x" referrerpolicy="no-referrer"></iframe></div>
+<div class="content">
+<h1>Thank you &lt;3</h1>
 <dl class="contact">
   <dt>Instagram</dt>
   <dd>
@@ -24,7 +24,7 @@
 export default {
   name: '15_thank_you',
   meta: {
-    classes: 'on-drift lay-open',
+    classes: 'overlay',
     section: '',
     reg: 0, fx: 34, fy: 50
   }

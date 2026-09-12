@@ -1,7 +1,7 @@
 <template>
-<div class="drift-bg" aria-hidden="true"><iframe data-src="https://sllm.visceral.systems/drift?from=1787695200&amp;mins=24&amp;speed=12" title="The /drift audiovisual piece, playing a 24 minute window at 12x" referrerpolicy="no-referrer"></iframe></div><div class="hold">
+<div class="backdrop" aria-hidden="true"><iframe data-src="https://sllm.visceral.systems/drift?from=1787695200&amp;mins=24&amp;speed=12" title="The /drift audiovisual piece, playing a 24 minute window at 12x" referrerpolicy="no-referrer"></iframe></div><div class="content">
 <h2>What&rsquo;s next?</h2>
-<p class="say">The organism's architecture as a design for signal processing.</p>
+<p class="lead">The organism's architecture as a design for signal processing.</p>
 <p>Further experimentation with different prompts, giving the model a way to reward
 the slime with food, and developing software and hardware based patches and effects for
 music.</p>
@@ -14,7 +14,7 @@ of other slime mould explorations sometime in 2028.</p>
 export default {
   name: '11_what_s_next',
   meta: {
-    classes: 'on-drift lay-split-offset',
+    classes: 'overlay',
     section: 'What’s next?',
     reg: 0.3, fx: 46, fy: 56
   }
