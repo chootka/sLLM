@@ -212,11 +212,13 @@ figcaption b{color:var(--ink-2)}
   overflow-x:auto;overflow-y:hidden;padding-bottom:.4rem;
   gap:clamp(1rem,3vmin,2.8rem);margin-top:clamp(3.2rem,8vmin,6rem)}
 .rig figure{flex:0 0 auto;gap:.5rem;min-width:0}
-.rig img,.rig video{display:block;height:54vh;width:auto;max-width:100%;
+.rig img,.rig video{display:block;width:100%;height:auto;
   object-fit:contain;
   background:#0b0b0e;border:1px solid var(--rule)}
 /* widths driven by viewport height so nothing letterboxes */
-.v916,.v34,.v43{width:auto;max-width:40rem}
+.v34{width:min(calc(54vh * 0.750),40rem)}
+.v916{width:min(calc(54vh * 0.5625),40rem)}
+.v43{width:min(calc(54vh * 1.381),40rem)}
 .lay-figure-right figure.off.v34{width:min(40rem,46vw);top:8vh}
 .listen{display:flex;flex-direction:column;gap:clamp(.5rem,1.4vmin,.9rem);
   flex:0 0 24rem}

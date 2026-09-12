@@ -1,6 +1,6 @@
 <template>
 <div class="hold">
-<h2 class="tuck oneline">Fish Lake Valley, Nevada site</h2>
+<h2 class="tuck oneline">Fish Lake Valley, Nevada</h2>
 <div class="rig">
 <figure class="v34"><img src="/deck-media/raising-the-20-ft-mast-by.jpg" alt="Raising the 20 ft mast by hand in flat sagebrush country under a clear sky"><figcaption><b>The mast.</b> 20 ft, guyed, with the long wire up it.</figcaption></figure>
 <figure class="v916"><video src="/deck-media/timelapse-of-the-mast-and-antennas.mp4" autoplay loop muted playsinline controls preload="metadata" aria-label="Timelapse of the mast and antennas going up at the site as the light goes"></video><figcaption><b>Going up.</b> Two minutes of timelapse, before dark.</figcaption></figure>
