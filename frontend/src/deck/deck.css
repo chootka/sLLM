@@ -126,13 +126,19 @@ figcaption b{color:var(--ink-2)}
 
 /* ---------- lists ---------- */
 ul{list-style:none;padding:0;margin:0;display:grid;gap:clamp(.5rem,1.4vmin,1rem)}
-ul li{display:grid;grid-template-columns:.5em 1fr;gap:.55rem;align-items:start;
+/* The marker is positioned, not a grid column: a grid li would make every
+   inline child its own item, so a <b> at the start of a sentence would take
+   the text column and the rest of the sentence would wrap under the bullet. */
+ul li{position:relative;padding-left:1.1em;
   color:var(--ink-2);font-weight:300;line-height:1.46;
   font-size:clamp(.92rem,1.95vmin,1.32rem)}
-ul li::before{content:"";width:.4em;height:.4em;background:var(--ink);
-  margin-top:.52em;transform:rotate(45deg)}
+ul li::before{content:"";position:absolute;left:0;top:.6em;
+  width:.4em;height:.4em;background:var(--ink);transform:rotate(45deg)}
+
 .points{gap:0}
-.points li{grid-template-columns:minmax(4.2rem,auto) 1fr;gap:1rem;
+.points li{position:static;padding-left:0;
+  display:grid;grid-template-columns:minmax(4.2rem,auto) 1fr;gap:1rem;
+  align-items:start;
   padding:clamp(.4rem,1.1vmin,.75rem) 0;border-top:1px solid var(--rule-soft);
   font-size:clamp(.86rem,1.85vmin,1.22rem)}
 .points li:first-child{border-top:0}
