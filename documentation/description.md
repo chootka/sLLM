@@ -4,11 +4,13 @@
 
 A *Physarum polycephalum* plasmodium grows across agar islands in a sealed
 chamber. Electrodes under the islands record its extracellular potential at one
-sample per second against a common reference. Every fifteen minutes a reduction
-layer turns half an hour of that recording into four quantities: oscillation
-period, amplitude, the phase lag between electrodes, and baseline drift. Those
-go to a language model running locally. The model has one action. It can
-illuminate one of eight regions of the chamber. It is never told whether the
+sample per second against a common reference. A reduction layer turns the preceding
+half hour of that recording into four quantities: oscillation period, amplitude,
+the phase lag between electrodes, and baseline drift. Those go to a language
+model running locally. They do not arrive on a schedule. One reaches the model
+when the state has changed by more than the measurement can resolve, or when the
+delay the model last asked for has passed. The model has one action. It can
+illuminate one of nine regions of the chamber. It is never told whether the
 action had any effect.
 
 The organism reconfigures over the following minutes to hours, which change the 
@@ -16,8 +18,9 @@ readings that influence what the model does next.
 
 Everything is written to a log. The piece is rendered from the log afterwards
 rather than live. The sound is the organism's phase relationships driving a bank
-of coupled CMOS oscillators. The image is the model's per-token uncertainty
-driving the registration of two line fields against each other.
+of coupled CMOS oscillators. The image is to be driven by the model's
+per-token uncertainty, registering two line fields against each other. The loop
+records those probabilities. Nothing reads them yet.
 
 ## What it refuses
 
@@ -47,15 +50,15 @@ science. I do, however, borrow scientific practice where it is needed for design
 
 ## Why these two systems
 
-Neither has a controller anywhere inside it. Physarum has no nervous system and
-no site where a decision happens. Every patch of the body contracts on its own
-rhythm and behavior falls out of the phase relations between patches. A
-transformer has no site where meaning happens. Both are standard examples of
-coherence without a center, which is why I put these two together and not some
-other pair.
+Neither system has a part inside it that is in charge. Physarum is one cell with
+no nervous system. Different parts of it contract slightly out of step with each
+other, and the direction it moves is a consequence of that timing. A language
+model has no single place where meaning is stored. It is a large set of numbers,
+and every word it produces comes from all of them at once. That is why I put
+these two together.
 
 Where they differ is what the relations hold between. The organism's exist in the
-physical world and are between places: a network of tubes, food, the lag across twenty-five millimeters. The model's are held within the digital space of memory, a collection
+physical world and are between places: a network of tubes, food, the lag from one electrode to the next. The model's are held within the digital space of memory, a collection
 of vectors. So the electrodes flatten a spatial arrangement into a sequence of numbers, and
 the light array turns a sequence back into an arrangement in space.
 
@@ -78,8 +81,8 @@ comparison with one another.
 ## Sound and image
 
 Sound carries the organism and image carries the model. Neither is a readout.
-Nothing maps to magnitude, because any magnitude mapping is a code a viewer
-learns in thirty seconds. What both map to is whether things stay in register:
+Nothing maps to magnitude. A magnitude mapping is a code a viewer learns in
+thirty seconds. What both map to is whether things stay in register:
 whether the oscillators hold their lock, whether the two line fields sit still
 against each other.
 
@@ -88,30 +91,26 @@ between oscillators rather than their pitches. When the organism is coherent the
 bank locks and holds nearly still. When lags drift or reverse it comes apart
 into beating before re-locking somewhere new. I have been building oscillators
 from CMOS chips for years and this work started there, so the bank is CMOS
-because that is what I build with. It holds up for a second reason: a
-Schmitt-trigger relaxation oscillator is the same kind of object as a Physarum
-tube, with slow charge, a threshold and fast discharge. The hardware is another
-instance of the same class rather than an illustration of it. A CD4046 phase-locked loop is included as a listener in its own right, a circuit whose whole function is to stay in step with
+because that is what I build with. A CD4046 phase-locked loop is included as a listener in its own right, a circuit whose whole function is to stay in step with
 something, and which audibly strains, loses its grip and catches again.
 
 I tuned the bank in just intonation. It suits what the circuit already does.
 Coupled nonlinear oscillators mode-lock at small-integer ratios, and the locking
-region narrows as the integers grow, so simple ratios hold and complicated ones
-barely do. Digital dividers produce rational ratios and nothing else, so just
+region narrows as the integers grow. This is the Arnold tongue structure. Simple
+ratios hold. Complicated ones barely do. Digital dividers produce rational ratios and nothing else, so just
 intervals come out of the hardware directly and equal temperament would have to
 be worked around it.
 
 The image is two overlaid gratings whose relative spacing is driven by the
-model's token-level entropy. One parameter, not ten. Beating is interference
-between temporal frequencies and moiré is interference between spatial ones, the
-same phenomenon in two senses. The discipline is inspired by Josef Albers' classroom
+model's token-level entropy. Beating is interference between temporal
+frequencies. Moiré is interference between spatial ones. The discipline is inspired by Josef Albers' classroom
 exercise asking his students to recreate the texture of newsprint using only vertical 
 lines. I am also drawing from another one of Albers' exercises called Daffodility, the 
 practice of rendering the essence of a thing without a literal representation of it.
 
 I also use the test that Albers' specified for testing success in the newsprint exercise.
 He had students paste their drawing of the newsprint back into the newspaper to see whether it vanished. The equivalent here is to render the empty-chamber control runs through the identical pipeline and ask whether anyone can sort them from the occupied ones. Then the harder beech-against-oak version: two sessions of the same organism, one rhythmic and
-one drying. If those can be told apart, the material carries the organism's condition and not only my hand.
+one drying. If those can be told apart, the material is carrying the organism's condition and not only my hand.
 
 ## Form
 
@@ -125,20 +124,18 @@ behind itself and nothing about it is visible. They do not coincide in the data
 either. A listener is the only place the two are ever present at the same time,
 so if nobody is there the encounter does not happen anywhere. Lamb's clang
 already covers memory mixing with the present moment, which is how a coupling
-this slow can register as form at all. It is held across a gap rather than
-displayed.
+this slow can register as form at all.
 
 So I treat playback rate as a compositional decision rather than a setting. At
 real time the causal link between image and sound is imperceptible. Compressed
-too far, the two collapse into simultaneity and the asymmetry is lost. Somewhere
-between, the lag is felt as lag.
+too far, the two collapse into simultaneity and the asymmetry is lost.
 
 Most of it is silence. Via Mani Kaul, quoted in the same lecture: the absent
 notes impinge on those present, and absence is felt as a real experience of
 space whose purpose is to unfold an ultimate quality in attention. Without hours
 of nothing, a phase slip is just a sound. Max Neuhaus' *Times Square* is the
-precedent for the frame. Unmarked, permanent, on a traffic island, running
-because it runs, and most people who cross it never learn it is there.
+precedent for the frame. Unmarked, permanent, on a traffic island. Most people who cross it
+never learn it is there.
 
 ## References
 
