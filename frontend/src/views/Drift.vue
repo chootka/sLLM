@@ -751,13 +751,13 @@ export default {
 
       // The PLL reads as a fourth, tighter set of rings centred on whichever
       // source the mux has selected -- present only while it holds lock.
-      g.fillStyle = 'rgba(198,186,166,0.42)'
+      g.fillStyle = 'rgba(140,140,140,0.42)'
       for (let r = 0; r < rows; r++) g.fillText(dim[r], 0, r * ch)
-      g.fillStyle = `rgba(255,242,220,${(0.62 + 0.3 * lock).toFixed(3)})`
+      g.fillStyle = `rgba(225,225,225,${(0.62 + 0.3 * lock).toFixed(3)})`
       for (let r = 0; r < rows; r++) g.fillText(hot[r], 0, r * ch)
       if (flash) {
         // A wavefront rather than three fixed bands: each band peaks as the
-        // front passes through it, so the yellow leaves the pin and travels
+        // front passes through it, so the flash leaves the pin and travels
         // out to the far rings over the length of the flash.
         const mid = [0.17, 0.5, 0.84]
         const peak = [1.0, 0.72, 0.42]
@@ -766,7 +766,7 @@ export default {
           if (w <= 0) continue
           const alpha = flash.env * peak[b] * w
           if (alpha < 0.01) continue
-          g.fillStyle = `rgba(255,206,64,${alpha.toFixed(3)})`
+          g.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`
           for (let r = 0; r < rows; r++) g.fillText(fl[b][r], 0, r * ch)
         }
       }
