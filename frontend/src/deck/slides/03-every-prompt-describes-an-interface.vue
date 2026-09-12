@@ -2,6 +2,19 @@
 <div class="content">
 <h2>Every prompt describes an interface</h2>
 
+<div class="prompts">
+  <button
+    v-for="(p, i) in prompts"
+    :key="p.name"
+    type="button"
+    :aria-pressed="i === current"
+    @click="current = i"
+  >
+    <span class="label">{{ p.name }}</span>
+    <svg class="ico" aria-hidden="true"><use :href="'#ico-' + p.icon" /></svg>
+  </button>
+</div>
+
 <div class="exchange">
   <div>
     <p class="label">Slime &rarr; model</p>
@@ -14,20 +27,8 @@
   </div>
 </div>
 
-<p class="lead">The seven prompt variants differ only in what the model is told it is
+<p class="note">The seven prompt variants differ only in what the model is told it is
 coupled to.</p>
-
-<div class="prompts">
-  <button
-    v-for="(p, i) in prompts"
-    :key="p.name"
-    type="button"
-    :aria-pressed="i === current"
-    @click="current = i"
-  >
-    <span class="label">{{ p.name }}</span>
-    <svg class="ico" aria-hidden="true"><use :href="'#ico-' + p.icon" /></svg>
-  </button>
 </div>
 <svg class="sprite" aria-hidden="true" focusable="false">
   <!-- coupled to something it is not shown -->
@@ -68,9 +69,6 @@ coupled to.</p>
     <circle cx="12" cy="12" r="8.5"/><path d="M6 18 18 6"/>
   </symbol>
 </svg>
-
-</div>
-
 <figure class="media">
 <img src="/deck-media/the-organism-massed-around-the-central.jpg" alt="The organism massed around the central island, 6 September">
 </figure>
