@@ -126,15 +126,15 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .gallery > .legend::before,
 figcaption::before{
   content:"";position:absolute;z-index:-1;pointer-events:none;
-  inset:-1.2rem -1.8rem;
+  inset:-3.5rem -4.5rem;
   background:var(--ground);
-  border-radius:2rem;
-  filter:blur(30px)}
+  border-radius:50%;
+  filter:blur(70px)}
 
-/* Small blocks would be washed out by the full radius. */
+/* Small blocks would lose their middle to the full radius. */
 .gallery > .note::before,
 .gallery > .legend::before,
-figcaption::before{inset:-.5rem -1rem;border-radius:1rem;filter:blur(14px)}
+figcaption::before{inset:-1.6rem -2.2rem;filter:blur(28px)}
 .overlay .content::before{display:none}
 
 /* ---------- type ---------- */
