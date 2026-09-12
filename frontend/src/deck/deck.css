@@ -93,6 +93,10 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .centered .note,.centered p{max-width:72ch}
 .gallery .row{display:flex;gap:clamp(.9rem,2.4vw,2.4rem);justify-content:center;
   align-items:flex-start;min-height:0;width:100%}
+/* Schematics need the width, so they stack and scroll rather than sit side by side. */
+.gallery .row.stack{flex-direction:column;align-items:stretch;gap:clamp(1rem,2.6vh,2rem);
+  overflow-y:auto;max-height:82vh}
+.gallery .row.stack figure{width:100%}
 .gallery figure{display:flex;flex-direction:column;gap:.55rem;min-width:0}
 .gallery img,.gallery video{display:block;width:auto;height:auto;
   max-height:58vh;max-width:100%;margin:0 auto;
@@ -216,7 +220,7 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
 /* Drawn in dark ink on paper, so they keep their own ground in either theme. */
 
 /* Drawn schematics: they use the theme's ink, so no white ground needed. */
-.sch{display:block;width:100%;height:auto;max-height:56vh}
+.sch{display:block;width:100%;height:auto;max-height:none}
 /* Drawn schematics sit on the same cloud as the text. */
 .gallery figure{position:relative}
 .gallery figure::before{content:"";position:absolute;z-index:-1;pointer-events:none;
