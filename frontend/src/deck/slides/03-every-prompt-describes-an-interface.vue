@@ -86,7 +86,7 @@ coupled to.</p>
 export default {
   name: '03_every_prompt_describes_an_interface',
   meta: {
-    classes: 'split content-wide',
+    classes: 'split content-wide overlap',
     section: 'The question',
     reg: 0.55, fx: 50, fy: 52
   },

@@ -78,6 +78,13 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 
 .split{grid-template-columns:1fr 1fr}
 .split.content-wide{grid-template-columns:1.6fr 1fr}
+
+/* One slide breaks the two columns: the media is lifted out of the grid, made
+   larger, and slid left so the text column sits over its edge. */
+.split.overlap .media{position:absolute;right:clamp(1.4rem,5vw,4.4rem);
+  top:50%;transform:translateY(-50%);width:56%;z-index:0}
+.split.overlap .media img{max-height:80vh}
+.split.overlap .content{position:relative;z-index:2}
 .split .media{order:2}
 .split.media-first .media{order:-1}
 
