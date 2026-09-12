@@ -103,11 +103,12 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 /* Stacked rather than side by side, at half the slide width. */
 /* No scroll container: the two drawings are sized to the height the slide
    leaves, so neither can be clipped. */
-.gallery .row.stack{flex-direction:column;align-items:center;justify-content:flex-start;
-  gap:clamp(.8rem,2vh,1.6rem);overflow:visible;max-height:none;min-height:0;
-  padding-top:.75rem}
-.gallery .row.stack figure{width:50%;min-height:0;flex:0 0 auto}
-.gallery .row.stack .sch{max-height:28vh}
+/* Side by side, so the slide's width sets the size rather than its height. */
+.gallery .row.stack{align-items:flex-start;justify-content:center;
+  gap:clamp(.8rem,2vw,2rem);overflow:visible;max-height:none;min-height:0;
+  padding-top:.5rem}
+.gallery .row.stack figure{flex:1 1 0;min-width:0}
+.gallery .row.stack .sch{width:100%;max-height:70vh}
 .gallery figure{display:flex;flex-direction:column;gap:.55rem;min-width:0}
 .gallery img,.gallery video{display:block;width:auto;height:auto;
   max-height:58vh;max-width:100%;margin:0 auto;
