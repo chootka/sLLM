@@ -256,11 +256,11 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
 
 /* ---------- deck chrome ---------- */
 #bar{position:fixed;left:0;bottom:0;height:1px;background:var(--accent);width:0;z-index:6}
-#hud{position:fixed;right:clamp(1rem,2.6vmin,2.2rem);bottom:clamp(3.2rem,6vmin,4rem);
+#hud{position:fixed;left:clamp(1rem,2.6vmin,2.2rem);bottom:clamp(3.2rem,6vmin,4rem);
   z-index:7;pointer-events:none;font-family:"Kode Mono",ui-monospace,monospace;
   font-size:clamp(.64rem,1.3vmin,.86rem);color:var(--muted);font-variant-numeric:tabular-nums}
 #clock b{color:var(--ink);font-weight:500}
-#nav{position:fixed;left:50%;transform:translateX(-50%);
+#nav{position:fixed;left:clamp(1rem,2.6vmin,2.2rem);
   bottom:clamp(.55rem,1.5vmin,1.15rem);display:flex;gap:.35rem;z-index:7}
 #nav button{font-family:"Kode Mono",ui-monospace,monospace;
   font-size:clamp(.68rem,1.35vmin,.88rem);line-height:1;padding:.42rem .62rem;
