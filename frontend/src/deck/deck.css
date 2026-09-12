@@ -56,7 +56,7 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 .lay-right-high .hold{right:6vw;top:9vh;width:min(52ch,62vw)}
 .lay-wide .hold{left:50%;top:50%;transform:translate(-50%,-50%);
   width:min(92ch,88vw);align-items:flex-start}
-.lay-figure-right .hold{left:6vw;top:50%;transform:translateY(-50%);width:min(38ch,42vw)}
+.lay-figure-right .hold{left:6vw;top:50%;transform:translateY(-50%);width:min(66ch,44vw)}
 
 video.tl{display:block;width:100%;height:auto;background:#0b0b0e;border:1px solid var(--rule)}
 .lay-figure-right figure.off{position:absolute;right:3.5vw;top:9vh;
