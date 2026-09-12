@@ -139,6 +139,10 @@ export default {
       live: { drives: [FREE_RUN, FREE_RUN, FREE_RUN], gates: [0, 0, 0], period: [0, 0, 0], seen: [false, false, false] }
     }
   },
+  watch: {
+    isObject: { immediate: true, handler(v) { this.markKiosk(v) } }
+  },
+
   computed: {
     // ?from=<unix seconds>&mins=<window>&speed=<multiplier>
     // Replays a stored stretch instead of following the live dish. Without
@@ -409,6 +413,27 @@ export default {
 
     // The synth publishes state over Server-Sent Events. If it is there, it
     // owns the audio and this page only draws.
+    // The document element carries the kiosk class, because hiding the pointer
+    // has to happen above the component's own markup. isObject is false until
+    // replay.json has loaded, so this is a watcher rather than a mounted hook.
+    markKiosk(on) {
+      // Inline, not a class. The stylesheet rule was reaching the object and
+      // doing nothing, which means the class was not landing where the rule
+      // expected it; an inline style on the elements themselves cannot miss.
+      // The touch panel enumerates as a mouse (Handlers=mouse0), so the
+      // compositor genuinely has a pointer to draw and there is no way to
+      // remove it without removing touch as well -- it can only be made
+      // invisible.
+      const blank = 'url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP//' +
+                    '/yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") 0 0, none'
+      for (const el of [document.documentElement, document.body]) {
+        if (el) el.style.cursor = on ? blank : ''
+      }
+      if (document.documentElement) {
+        document.documentElement.classList.toggle('kiosk', !!on)
+      }
+    },
+
     connectSynth() {
       let es
       try { es = new EventSource(SYNTH_URL + '/state') } catch (e) { return }
@@ -749,6 +774,21 @@ export default {
   }
 }
 </script>
+
+<style>
+/* Not scoped: the pointer has to be hidden on the document itself, and a
+   scoped rule cannot reach <html>. The in-page `cursor: none` only covers
+   elements the page owns, so the compositor still had a pointer to draw
+   whenever it sat outside them -- and because the page is rotated 180 and the
+   pointer is drawn on top, unrotated, it appeared upside down on the object. */
+/* A 1x1 transparent GIF rather than `none`. cage draws a hardware cursor and
+   a client asking for no cursor at all is not always honoured; giving it a
+   real cursor surface with nothing in it leaves nothing to draw. `none` stays
+   as the fallback for anywhere that does honour it. */
+html.kiosk, html.kiosk body, html.kiosk * {
+  cursor: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") 0 0, none !important;
+}
+</style>
 
 <style scoped>
 .field {
