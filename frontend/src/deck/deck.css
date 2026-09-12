@@ -50,6 +50,14 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
    the overlay backdrop.
    ============================================================ */
 
+/* Registered so they can be interpolated: an unregistered custom property is
+   a string to the engine and jumps rather than animating. */
+@property --p2 { syntax: "<length>"; inherits: true; initial-value: 7.4px }
+@property --a2 { syntax: "<angle>";  inherits: true; initial-value: 97deg }
+
+/* The fields move only between slides. Nothing animates while one is up. */
+:root{transition:--p2 .7s cubic-bezier(.4,0,.2,1),--a2 .7s cubic-bezier(.4,0,.2,1)}
+
 /* Two line fields, as CSS. A fixed element with repeating gradients fills the
    viewport by definition, so there is nothing to measure and nothing to get
    wrong. Registration is the second field's spacing and angle, set per slide. */
