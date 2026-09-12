@@ -108,7 +108,7 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
   gap:clamp(.8rem,2vw,2rem);overflow:visible;max-height:none;min-height:0;
   padding-top:.5rem}
 .gallery .row.stack figure{flex:1 1 0;min-width:0}
-.gallery .row.stack .sch{width:100%;max-height:70vh}
+.gallery .row.stack .sch{width:140%;max-height:70vh}
 .gallery figure{display:flex;flex-direction:column;gap:.55rem;min-width:0}
 .gallery img,.gallery video{display:block;width:auto;height:auto;
   max-height:58vh;max-width:100%;margin:0 auto;
