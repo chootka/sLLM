@@ -13,6 +13,10 @@
     <span class="label">{{ p.name }}</span>
     <svg class="ico" aria-hidden="true"><use :href="'#ico-' + p.icon" /></svg>
   </button>
+  <div class="tbd">
+    <span class="label">MORE TBD&hellip;</span>
+    <svg class="ico" aria-hidden="true"><use href="#ico-tbd" /></svg>
+  </div>
 </div>
 
 <div class="exchange">
@@ -63,6 +67,11 @@ coupled to.</p>
     <circle cx="13.5" cy="12" r="2.1" fill="currentColor" stroke="none" opacity=".6"/>
     <circle cx="8.2" cy="12" r="1.7" fill="currentColor" stroke="none" opacity=".35"/>
     <circle cx="3.6" cy="12" r="1.3" fill="currentColor" stroke="none" opacity=".16"/>
+  </symbol>
+  <!-- variants not written yet -->
+  <symbol id="ico-tbd" viewBox="0 0 24 24">
+    <path d="M8.8 9.2a3.2 3.2 0 1 1 3.9 3.1c-1 .2-1.7 1-1.7 2v.6"/>
+    <circle cx="12" cy="18.6" r="1.1" fill="currentColor" stroke="none"/>
   </symbol>
   <!-- nothing crosses -->
   <symbol id="ico-null" viewBox="0 0 24 24">

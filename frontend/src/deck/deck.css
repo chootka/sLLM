@@ -200,6 +200,12 @@ ul li::before{content:"";position:absolute;left:0;top:.6em;
 .prompts button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .prompts button[aria-pressed="true"] .label{color:#fff}
 .prompts button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* Placeholder cell: not a variant yet, so it is not selectable. */
+.prompts .tbd{background:var(--rule-soft);color:var(--muted);
+  display:flex;flex-direction:column;gap:clamp(.4rem,1.1vmin,.7rem);
+  line-height:1.4;font-size:clamp(.68rem,1.45vmin,.92rem);
+  padding:clamp(.6rem,1.6vmin,1rem)}
+.prompts .tbd .label,.prompts .tbd .ico{color:var(--muted)}
 
 /* ---------- audio over a photograph ---------- */
 .media .with-audio{position:relative;display:block;line-height:0}
