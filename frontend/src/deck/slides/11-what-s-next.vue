@@ -5,17 +5,14 @@
 <p>Further experimentation with different prompts, giving the model a way to reward
 the slime with food, and developing software and hardware based patches and effects for
 music.</p>
-<p>No central clock. Behavior falls out of the phase relations between patches that each
-contract on their own rhythm &mdash; a bank of coupled oscillators with no master.</p>
-<p>Coupling strength is the control, not pitch. Coherent, and the bank locks and holds
-nearly still; lags drift, and it comes apart into beating before re-locking somewhere
-new.</p>
+<p>The summer&rsquo;s work will also be written up as a paper, to be published in a book
+of other slime mould explorations sometime in 2028.</p>
 </div>
 </template>
 
 <script>
 export default {
-  name: '14_what_s_next',
+  name: '11_what_s_next',
   meta: {
     classes: 'on-drift lay-split-offset',
     section: 'What’s next?',

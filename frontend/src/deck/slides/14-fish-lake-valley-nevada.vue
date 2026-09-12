@@ -13,7 +13,7 @@
 
 <script>
 export default {
-  name: '13_fish_lake_valley_nevada',
+  name: '14_fish_lake_valley_nevada',
   meta: {
     classes: 'lay-plate',
     section: 'Side quest',
