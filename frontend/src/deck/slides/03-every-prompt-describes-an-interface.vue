@@ -79,7 +79,7 @@ coupled to.</p>
 <script>
 // Both directions are taken from llm/filters/prompts.md, one entry per variant.
 export default {
-  name: '04_every_prompt_describes_an_interface',
+  name: '03_every_prompt_describes_an_interface',
   meta: {
     classes: 'split content-wide',
     section: 'The question',

@@ -16,7 +16,7 @@ of a vein contracting and expanding. That cycling is found throughout life itsel
 
 <script>
 export default {
-  name: '07_the_web_layer_and',
+  name: '06_the_web_layer_and',
   meta: {
     classes: 'split',
     section: 'What was built',

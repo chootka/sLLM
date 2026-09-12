@@ -51,7 +51,7 @@ site with a simultaneous control at the other. <b>p = 0.012.</b></p></div><figur
 
 <script>
 export default {
-  name: '10_tube_retraction_2026_08',
+  name: '09_tube_retraction_2026_08',
   meta: {
     classes: 'split content-wide',
     section: 'What worked',

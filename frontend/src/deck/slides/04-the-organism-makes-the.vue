@@ -11,7 +11,7 @@ there anything to measure.</p>
 
 <script>
 export default {
-  name: '05_the_organism_makes_the',
+  name: '04_the_organism_makes_the',
   meta: {
     classes: 'split',
     section: 'What was built',

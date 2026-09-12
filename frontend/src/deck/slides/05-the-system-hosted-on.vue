@@ -48,7 +48,7 @@ record, the images. None of the rest is required in order to record.</p></div><f
 
 <script>
 export default {
-  name: '06_the_system_hosted_on',
+  name: '05_the_system_hosted_on',
   meta: {
     classes: 'split media-first content-wide',
     section: 'What was built',

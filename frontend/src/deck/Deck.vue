@@ -50,10 +50,14 @@ const slides = Object.keys(modules).sort().map(k => modules[k].default)
 
 export default {
   name: 'Deck',
+  // Slides that reveal in stages read deck.step. Provided rather than passed as
+  // a prop so the other slides are not handed an attribute they never declared.
+  provide() { return { deck: this } },
   data() {
     return {
       slides,
       cur: 0,
+      step: 0,
       gridOpen: false,
       showClock: false,
       startedAt: null,
@@ -102,8 +106,10 @@ export default {
     clearInterval(this.tick)
   },
   methods: {
-    show(i) {
+    steps(i) { return (this.slides[i] && this.slides[i].meta.steps) || 0 },
+    show(i, step = 0) {
       this.cur = Math.max(0, Math.min(this.slides.length - 1, i))
+      this.step = step
       this.$nextTick(() => {
         this.draw()
         this.frameSync()
@@ -113,7 +119,11 @@ export default {
     },
     go(d) {
       if (this.startedAt === null && d > 0) this.startedAt = Date.now()
-      this.show(this.cur + d)
+      if (d > 0 && this.step < this.steps(this.cur)) { this.step += 1; return }
+      if (d < 0 && this.step > 0) { this.step -= 1; return }
+      // Stepping back into a slide shows it already revealed.
+      const next = this.cur + d
+      this.show(next, d < 0 ? this.steps(next) : 0)
     },
     onStageClick(e) {
       if (e.target.closest('a,button,audio,video,iframe')) return

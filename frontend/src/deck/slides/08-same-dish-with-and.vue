@@ -179,7 +179,7 @@ with the dish empty.</b></p></div><figure class="media"><img src="/deck-media/th
 
 <script>
 export default {
-  name: '09_same_dish_with_and',
+  name: '08_same_dish_with_and',
   meta: {
     classes: 'split media-first content-wide',
     section: 'What worked',
