@@ -525,7 +525,7 @@ h1 {
     background: #ffffff;
 }
 
-.lightbox .preload-status {
+.lightbox .timeline-status {
     color: rgba(255, 255, 255, 0.6);
 }
 
@@ -623,7 +623,7 @@ h1 {
     cursor: default;
 }
 
-.preload-status {
+.timeline-status {
     margin-top: 8px;
     font-size: 0.7rem;
     color: var(--ink-faint);
@@ -851,6 +851,34 @@ body.bare {
     justify-content: space-between;
     gap: 12px;
 }
+
+.log-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink-faint);
+}
+
+.log-status-pixel {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    background: var(--ink-faint);
+}
+
+.log-status-text {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+}
+
+/* Live is the real record. Dry and the bench modes are not, and read as one
+   group. Hues match the electrode traces so the dashboard stays one palette. */
+.log-status-pixel.status-live { background: #5ecb6e; }
+.log-status-pixel.status-dry { background: #ef9040; }
+.log-status-pixel.status-test,
+.log-status-pixel.status-dev,
+.log-status-pixel.status-demo,
+.log-status-pixel.status-experiment { background: #5aa9e6; }
 
 /* Slime field. Square, because the dish is round and a letterboxed circle wastes
    the panel. The canvas paints its own black, so no background is set here. */

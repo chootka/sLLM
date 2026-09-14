@@ -1028,6 +1028,16 @@ def get_turns():
             turn['applied'] = record.get('applied')
         turns.append(turn)
 
+    # Mode of the run that is recording, for the status pixel on the log panel.
+    # Browsing an archived run still reports the current mode; the archive view
+    # carries its own run id and does not read this.
+    try:
+        import run as run_state
+
+        run_mode = run_state.current(config).get('mode') or ''
+    except Exception:
+        run_mode = ''
+
     return jsonify({
         'turns': turns[-limit:],
         'privileged': privileged,
@@ -1035,6 +1045,7 @@ def get_turns():
         'source': 'replay' if dry else 'live',
         'dry_run': dry,
         'run': want_run,
+        'mode': run_mode,
     })
 
 

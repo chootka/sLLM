@@ -3,6 +3,10 @@
     <header v-if="!embedded" class="turnlog-head">
       <h1>Model log</h1>
       <div class="turnlog-meta">
+        <span class="status-pixel-wrap" :title="statusTitle">
+          <span :class="['status-pixel', statusClass]"></span>
+          <span class="status-pixel-text">{{ statusLabel }}</span>
+        </span>
         <span :class="loopRunning ? 'run on' : 'run off'">
           {{ loopRunning ? 'loop running' : 'loop stopped' }}
         </span>
@@ -19,14 +23,6 @@
         <a href="/">← dashboard</a>
       </div>
     </header>
-
-    <!-- Dry and replay turns are read from logs/replay/ and never mixed with
-         the real record, so the page has to say which one it is showing. -->
-    <p v-if="dryRun" class="turnlog-dry">
-      {{ embedded
-        ? 'Dry run — no action reaches the panel; not part of the record.'
-        : 'Dry run — the model is taking real turns on live readings, but no action reaches the panel. These turns are not part of the experimental record.' }}
-    </p>
 
     <p v-if="error" class="turnlog-error">{{ error }}</p>
     <p v-if="!visible.length && !error" class="turnlog-empty">
@@ -68,6 +64,12 @@
         </div>
       </article>
     </div>
+
+    <!-- The panel head is now the status pixel's, so the way out of the panel
+         sits under the log instead. -->
+    <div v-if="embedded" class="turnlog-foot">
+      <a href="/logs" class="logs-link">full log &rarr;</a>
+    </div>
   </div>
 </template>
 
@@ -87,9 +89,11 @@ export default {
     // the current one from the server.
     run: { type: String, default: '' },
   },
+  emits: ['status'],
   data() {
     return {
       turns: [],
+      runMode: '',
       dryRun: false,
       sourcePicked: false,
       allRuns: false,
@@ -117,6 +121,22 @@ export default {
     // The server filters to one run, so there is nothing left to slice here.
     visible() {
       return this.turns
+    },
+    // Dry beats the run mode: a dry turn is read from logs/replay/ and is not
+    // part of the record whatever mode the rig is recording in.
+    statusLabel() {
+      if (this.dryRun) return 'DRY'
+      return (this.runMode || 'live').toUpperCase()
+    },
+    statusClass() {
+      return 'status-' + this.statusLabel.toLowerCase()
+    },
+    statusTitle() {
+      if (this.dryRun) {
+        return 'Dry run: real turns on live readings, but no action reaches '
+          + 'the panel. Not part of the experimental record.'
+      }
+      return `Run mode: ${this.runMode || 'live'}`
     },
     runParam() {
       if (this.run) return `&run=${encodeURIComponent(this.run)}`
@@ -163,6 +183,12 @@ export default {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
         this.loopRunning = data.loop_running
+        this.runMode = data.mode || ''
+        this.$emit('status', {
+          label: this.statusLabel,
+          cls: this.statusClass,
+          title: this.statusTitle,
+        })
         if (data.turns.length) {
           this.turns = this.turns.concat(data.turns).slice(-500)
           if (this.follow) this.$nextTick(this.toBottom)
@@ -265,13 +291,22 @@ export default {
   border-left: 2px dashed var(--rule-strong); padding-left: 0.5rem; }
 .turn-state { display: flex; flex-wrap: wrap; gap: 0.9rem;
   font-size: 0.68rem; color: var(--ink-faint); margin-top: 0.35rem; }
-.turnlog-dry {
-  font-size: .85rem;
-  opacity: .75;
-  border-left: 2px solid currentColor;
-  padding-left: .6rem;
-  margin: .5rem 0;
-}
+.status-pixel-wrap { display: inline-flex; align-items: center; gap: 0.4rem; }
+.status-pixel { width: 7px; height: 7px; flex: none; background: var(--ink-faint); }
+.status-pixel-text { font-size: 0.68rem; letter-spacing: 0.14em; }
+/* Live is the only state that is the real record. Dry and the bench modes read
+   as "not the record" and share one colour. */
+.status-pixel.status-live { background: #5ecb6e; }
+.status-pixel.status-dry { background: #ef9040; }
+.status-pixel.status-test,
+.status-pixel.status-dev,
+.status-pixel.status-demo,
+.status-pixel.status-experiment { background: #5aa9e6; }
+
+.turnlog-foot { display: flex; justify-content: flex-end; padding-top: 0.4rem; }
+.turnlog-foot .logs-link { font-size: 0.68rem; color: var(--ink-dim);
+  text-decoration: none; border-bottom: 1px solid var(--rule); }
+.turnlog-foot .logs-link:hover { color: var(--ink); }
 .turnlog-error { color: var(--ink); border-left: 2px solid var(--ink);
   padding-left: 0.5rem; }
 .turnlog-empty { color: var(--ink-faint); }

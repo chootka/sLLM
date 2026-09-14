@@ -91,9 +91,16 @@
         <div class="panel log-panel">
           <div class="log-panel-head">
             <h2>Model Log</h2>
-            <a href="/logs" class="logs-link" style="position: static;">full log &rarr;</a>
+            <!-- Same read as the timelapse indicator: one pixel and a word.
+                 TurnLog owns the state, so it reports it up rather than the
+                 panel fetching the run a second time. The way to /logs moved
+                 to the foot of the log. -->
+            <span class="log-status" :title="logStatus.title">
+              <span :class="['log-status-pixel', logStatus.cls]"></span>
+              <span class="log-status-text">{{ logStatus.label }}</span>
+            </span>
           </div>
-          <TurnLog :api-url="apiUrl" embedded />
+          <TurnLog :api-url="apiUrl" embedded @status="logStatus = $event" />
         </div>
 
         <!-- Live Stream / Timelapse Panel -->
@@ -155,15 +162,15 @@
               @pause="isPlaying = false"
               @error="onVideoError"
             ></video>
-            <!-- Timelapse View, frames. Fallback for before the first encode
-                 runs, or if it fails. -->
-            <!-- Keyed on the frame URL, not imageKey. Both branches here are
+            <!-- Timelapse View, stills. Shown before the first encode runs or
+                 if it fails. Scrubbable, not playable -- playback is the
+                 <video> element's alone.
+                 Keyed on the frame URL, not imageKey. Both branches here are
                  <img>, so Vue patched one long-lived element -- and the
                  livestream branch is an MJPEG multipart response, which keeps
                  painting into the element it owns even after src is reassigned.
-                 Playback moved the src and the picture never followed. A key
+                 Scrubbing moved the src and the picture never followed. A key
                  that changes per frame forces a fresh element each time.
-                 Frames are preloaded so the swap is a cache hit, and
                  .timelapse-container reserves a 16:9 box so nothing collapses
                  while a new element mounts. -->
             <img
@@ -196,19 +203,22 @@
               <span v-else class="frame-env frame-env-missing">no chamber data</span>
             </div>
           </div>
-          <!-- Timeline Scrubber + playback (only shown in timelapse mode) -->
+          <!-- Timeline scrubber (only shown in timelapse mode). Playback is the
+               <video> element's; without an encode the strip still scrubs, it
+               just does not play. -->
           <div
             v-if="viewMode === 'timelapse' && frameCount > 0"
             class="timeline-controls"
           >
             <button
+              v-if="useVideo"
               @click="togglePlayback"
               class="play-button"
               :disabled="frameCount < 2"
               :title="playButtonLabel"
               :aria-label="playButtonLabel"
             >
-              {{ isPreloading ? '■' : (isPlaying ? '❚❚' : '▶') }}
+              {{ isVideoBuffering ? '⋯' : (isPlaying ? '❚❚' : '▶') }}
             </button>
             <input
               type="range"
@@ -220,10 +230,10 @@
             >
           </div>
           <div
-            v-if="viewMode === 'timelapse' && (isPreloading || isPlaying || lightboxOpen)"
-            class="preload-status"
+            v-if="viewMode === 'timelapse' && (isVideoBuffering || isPlaying || lightboxOpen)"
+            class="timeline-status"
           >
-            <span v-if="isPreloading">Loading frames… {{ preloadLoaded }} / {{ preloadTotal }}</span>
+            <span v-if="isVideoBuffering">Loading video…</span>
             <span v-else>Frame {{ timelinePosition + 1 }} / {{ frameCount }}</span>
           </div>
           </div>
@@ -505,17 +515,10 @@ export default {
       video: null,
       videoUrl: null,
       videoRefreshMs: 600000, // recent.mp4 is rebuilt hourly; look every 10 min
-      isPlaying: false, // Timelapse playback, advances the scrubber on a timer
-      playbackTimer: null,
-      playbackIntervalMs: 200, // 5 frames/sec -- slow enough to read growth
-      // Frames are ~135KB each, so at 200ms the browser cannot fetch them as
-      // fast as the timer advances and playback sits on whatever is decoded.
-      // They are warmed into the browser cache before play starts.
-      loadedUrls: markRaw(new Set()),
-      isPreloading: false,
-      preloadCancelled: false,
-      preloadLoaded: 0,
-      preloadTotal: 0,
+      isPlaying: false, // Mirrors the <video> element's play/pause
+      isVideoBuffering: false, // Waiting on a seek or decode before play starts
+      // Reported by TurnLog. 'live' until the first poll answers.
+      logStatus: { label: 'LIVE', cls: 'status-live', title: 'Run mode: live' },
 
       // System status
       isOnline: false,
@@ -626,7 +629,7 @@ export default {
       return this.useVideo ? this.video.frames : this.images.length
     },
     playButtonLabel() {
-      if (this.isPreloading) return 'Cancel loading'
+      if (this.isVideoBuffering) return 'Loading video'
       return this.isPlaying ? 'Pause' : 'Play timelapse'
     },
     currentImageTime() {
@@ -1115,6 +1118,32 @@ export default {
       this.videoUrl = null
       this.isPlaying = false
       this.loadImages()
+    },
+
+    waitForVideoData(el) {
+      // Play once the seek has landed and enough is decoded to run, so the
+      // scrubber does not walk while the browser is still fetching. The
+      // timeout is a floor, not a target: a stalled network must not wedge
+      // the button.
+      const ready = () => el.readyState >= 3 && !el.seeking
+      if (ready()) return Promise.resolve()
+      this.isVideoBuffering = true
+      return new Promise((resolve) => {
+        let settled = false
+        const finish = () => {
+          if (settled) return
+          settled = true
+          this.isVideoBuffering = false
+          el.removeEventListener('canplay', check)
+          el.removeEventListener('seeked', check)
+          clearTimeout(timer)
+          resolve()
+        }
+        const check = () => { if (ready()) finish() }
+        const timer = setTimeout(finish, 5000)
+        el.addEventListener('canplay', check)
+        el.addEventListener('seeked', check)
+      })
     },
 
     syncFramePosition() {
@@ -1876,109 +1905,34 @@ export default {
       }
     },
     
-    preloadFrame(url) {
-      // Resolves once the browser holds the frame, so the <img> swap during
-      // playback is a cache hit. An error resolves too: one unreachable frame
-      // must not wedge the whole preload.
-      if (this.loadedUrls.has(url)) return Promise.resolve()
-      return new Promise((resolve) => {
-        const img = new Image()
-        img.onload = () => { this.loadedUrls.add(url); resolve() }
-        img.onerror = () => resolve()
-        img.src = url
+    togglePlayback() {
+      // One player. The <video> element owns playback; the scrubber follows it
+      // through timeupdate/requestVideoFrameCallback.
+      const el = this.$refs.timelapseVideo
+      if (!el || !this.video) return
+      if (!el.paused) {
+        el.pause()
+        return
+      }
+      // The playhead parks on the newest frame, (frames-1)/fps, which is one
+      // frame short of duration -- 71.9 s of 72.0 at 10 fps. A fixed 0.05 s
+      // epsilon never matched, so play resumed on the final frame and ran
+      // straight to the end. Slack has to be a frame.
+      const frame = 1 / this.video.fps
+      if (!el.duration || el.currentTime >= el.duration - frame - 1e-3) {
+        el.currentTime = 0
+        this.timelinePosition = 0
+      }
+      this.waitForVideoData(el).then(() => {
+        if (this.viewMode !== 'timelapse' || !this.useVideo) return
+        el.play().catch(error => console.warn('Playback refused:', error.message))
       })
     },
 
-    async preloadAll(urls) {
-      // Browsers cap concurrent connections per host at around six anyway;
-      // firing all 100 at once just queues them somewhere less visible.
-      const CONCURRENCY = 6
-      let cursor = 0
-      const worker = async () => {
-        while (cursor < urls.length && !this.preloadCancelled) {
-          await this.preloadFrame(urls[cursor++])
-          this.preloadLoaded++
-        }
-      }
-      const workers = Array.from(
-        { length: Math.min(CONCURRENCY, urls.length) }, () => worker()
-      )
-      await Promise.all(workers)
-    },
-
-    async togglePlayback() {
-      if (this.useVideo) {
-        const el = this.$refs.timelapseVideo
-        if (!el) return
-        if (el.paused) {
-          // Pressing play parked on the last frame replays from the start.
-          if (el.duration && el.currentTime >= el.duration - 0.05) el.currentTime = 0
-          el.play().catch(error => console.warn('Playback refused:', error.message))
-        } else {
-          el.pause()
-        }
-        return
-      }
-      // A press during either preload or playback means stop.
-      if (this.isPlaying || this.isPreloading) {
-        this.stopPlayback()
-        return
-      }
-      if (this.images.length < 2) return
-
-      // Pressing play while parked on the last frame replays from the start,
-      // rather than appearing to do nothing.
-      if (this.timelinePosition >= this.images.length - 1) {
-        this.timelinePosition = 0
-        this.onTimelineScrub()
-      }
-
-      const urls = this.images.map(image => image.url)
-      if (urls.some(url => !this.loadedUrls.has(url))) {
-        this.preloadCancelled = false
-        this.isPreloading = true
-        this.preloadLoaded = 0
-        this.preloadTotal = urls.length
-        await this.preloadAll(urls)
-        this.isPreloading = false
-        // Stopped by a second press, or the view moved on while we waited.
-        if (this.preloadCancelled || this.viewMode !== 'timelapse') return
-      }
-
-      this.isPlaying = true
-      this.playbackTimer = setInterval(() => {
-        const next = this.timelinePosition + 1
-        if (next > this.images.length - 1) {
-          this.stopPlayback()
-          return
-        }
-        const frame = this.images[next]
-        if (!frame) {
-          this.stopPlayback()
-          return
-        }
-        // Assigned here rather than through onTimelineScrub. The position was
-        // advancing while the frame stayed put, which is what it looks like
-        // when the helper throws inside the timer: setInterval swallows the
-        // error, so the counter moves and the <img> never hears about it.
-        this.timelinePosition = next
-        this.currentImage = frame.url
-        this.imageError = false
-      }, this.playbackIntervalMs)
-    },
-
     stopPlayback() {
-      if (this.useVideo) {
-        const el = this.$refs.timelapseVideo
-        if (el && !el.paused) el.pause()
-      }
-      this.preloadCancelled = true
-      this.isPreloading = false
+      const el = this.$refs.timelapseVideo
+      if (el && !el.paused) el.pause()
       this.isPlaying = false
-      if (this.playbackTimer) {
-        clearInterval(this.playbackTimer)
-        this.playbackTimer = null
-      }
     },
 
     toggleViewMode() {
