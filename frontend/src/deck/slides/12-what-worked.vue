@@ -1,7 +1,7 @@
 <template>
 <div class="content">
 <h2>What worked</h2>
-<p class="lead">Successfully recorded a distinct signal against the noise.</p>
+<p class="lead">Successfully captured a distinct bio-signal.</p>
 <ul>
 <li>An instrument that can tell a signal from its own noise. <b>0.02&ndash;0.10 mV</b>
 per sample, down from 0.7&ndash;2.8</li>
