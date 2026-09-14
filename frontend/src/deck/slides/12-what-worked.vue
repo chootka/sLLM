@@ -27,10 +27,10 @@ only</li>
 <h2>What&rsquo;s next</h2>
 <p class="lead">Immediate next steps.</p>
 <ul>
+<li>VST and Eurorack module development</li>
 <li>Build a way for the model to reward the slime mould</li>
 <li>Create a PCB in order to run parallel experiments</li>
 <li>Refine the measurements, prompts, audio/visual output</li>
-<li>VST and Eurorack module development</li>
 <li>Write all the findings up in a paper, to be published in 2028</li>
 </ul>
 </div>
