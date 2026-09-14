@@ -18,8 +18,7 @@ only</li>
 <h2>What didn&rsquo;t</h2>
 <p class="lead">Environmental challenges.</p>
 <ul>
-<li>Couldn&rsquo;t use light as a lever as frequently as needed because it triggered
-sporangia</li>
+<li>Light as a lever triggered sporangia every time</li>
 <li>Slime starved itself, rejecting the oats</li>
 <li>Despite maintaining humidity, agar blobs drying up too soon</li>
 </ul>
