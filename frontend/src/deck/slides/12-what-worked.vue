@@ -16,7 +16,7 @@ only</li>
 </div>
 <div class="content">
 <h2>What didn&rsquo;t</h2>
-<p class="lead">The model needs better levers.</p>
+<p class="lead">Environmental challenges.</p>
 <ul>
 <li>Couldn&rsquo;t use light as a lever as frequently as needed because it triggered
 sporangia</li>
