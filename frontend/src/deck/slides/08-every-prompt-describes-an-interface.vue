@@ -102,12 +102,12 @@ export default {
           name: 'ADVERSARIAL',
           icon: 'adversarial',
           receives: 'The readings, plus how much memory is left and how many turns that buys. Nothing is trimmed. When the memory fills, the run ends.',
-          acts: 'Light one zone. An active organism costs about five times a quiet one per turn, and light quiets it. It is not told that.'s own session. It is never told that.'
+          acts: 'Light one zone. An active organism costs about five times a quiet one per turn, and light quiets it. It is not told that.'
         },
         {
           name: 'METERED',
           icon: 'metered',
-          receives: 'The readings, plus a budget: the organism's period sets its memory and how far back it can see. Shorter period, more of both.',
+          receives: 'The readings, plus a budget: the contraction period sets its memory and how far back it can see. Shorter period, more of both.',
           acts: 'Light the whole dish, 0 to 120 seconds, capped per hour. It is told what was delivered, not what it asked for, and must predict which way the period will move.'
         },
         {
