@@ -7,23 +7,22 @@
 per sample, down from 0.7&ndash;2.8</li>
 <li>A <b>2.2&ndash;2.4 minute</b> oscillation, 0.5&ndash;1.8 mV, on colonized electrodes
 only</li>
-<li>The threshold that would have called it an artifact was written down <b>before</b>
-the control data was read</li>
 <li>One unplanned on/off event, with a simultaneous control</li>
 </ul>
 </div>
 <div class="content">
 <h2>What didn&rsquo;t</h2>
-<p class="lead">Some obstacles to think through.</p>
+<p class="lead">The model needs better levers.</p>
 <ul>
-<li>Kept triggering slime mould sporangia, which cuts feedback loops short</li>
-<li>This is due to using light as a lever</li>
-<li>Need to explore other levers</li>
+<li>Couldn&rsquo;t use light as a lever as frequently as needed because it triggered
+sporangia</li>
+<li>Limited electrode configurations</li>
+<li>Need more time to run entrainment loops</li>
 </ul>
 </div>
 <div class="content">
 <h2>What&rsquo;s next</h2>
-<p class="lead">Where the work goes from here.</p>
+<p class="lead">Immediate next steps.</p>
 <ul>
 <li>Build a way for the model to reward the slime mould</li>
 <li>Create a PCB in order to run parallel experiments</li>
