@@ -404,37 +404,6 @@ def measured_period(state):
     return (periods[middle - 1] + periods[middle]) / 2.0
 
 
-def cycle_error(gap_s, believed_period_s, measured_period_s):
-    """How far the model's estimate of the tempo put it out over one gap.
-
-    A period that is wrong by a little slips by a lot once a gap is several
-    cycles long, which is what makes this worth telling the model rather than
-    the period itself. Returns None where either period is missing.
-    """
-    if not gap_s or not believed_period_s or not measured_period_s:
-        return None
-    expected = gap_s / believed_period_s
-    actual = gap_s / measured_period_s
-    return {
-        "gap_s": round(gap_s, 1),
-        "cycles_expected": round(expected, 2),
-        "cycles_actual": round(actual, 2),
-        "error_cycles": round(actual - expected, 2),
-    }
-
-
-def believed_period(reply):
-    """The model's own estimate of the rhythm, or None if it gave none."""
-    value = reply.get('believed_period_s')
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return None
-    # A period outside this cannot be a contraction cycle and would make a
-    # duration in cycles either instant or hours long.
-    return value if 10.0 <= value <= 1800.0 else None
-
-
 def validate_action(reply, zones, max_duration, intensity, period_s=None,
                     whole_dish=False):
     """Pull a usable light action out of the reply, or None.
@@ -827,11 +796,6 @@ def main():
     # happening.
     adversarial = args.prompt == 'adversarial'
     mimic = args.prompt == 'mimic'
-    # CYCLES withholds the measured period and scores the model's own estimate
-    # of it. Everything the model expresses in cycles is converted with its
-    # estimate rather than with the measurement.
-    cycles_mode = args.prompt == 'cycles'
-
     # METERED lights the whole dish, not a zone. The budget it meters is the
     # median period across the three electrodes, and a median is the statistic
     # that discards the odd one out -- so a single lit zone, reaching at most
@@ -840,8 +804,6 @@ def main():
     # response, and with the whole dish lit a response has to appear
     # physiologically rather than as relocation.
     whole_dish = args.prompt == 'metered'
-    believed_s = None      # the model's period from the previous turn
-    last_turn_at = None
     num_ctx = args.num_ctx or getattr(config, 'LLM_NUM_CTX', None)
     compact_state = adversarial
 
@@ -1000,18 +962,6 @@ def main():
                                          ["nothing measurable changed"]),
                     "trail": trail.view(),
                 }
-            if cycles_mode:
-                # The period is the answer, so it cannot be in the question.
-                for value in sending.values():
-                    if isinstance(value, dict):
-                        value.pop('period_s', None)
-                sending.pop('reference_period_s', None)
-                drift = cycle_error(
-                    (time.time() - last_turn_at) if last_turn_at else None,
-                    believed_s, measured_period(state))
-                if drift:
-                    sending['since_last_turn'] = drift
-
             # What the last stimulus actually came to, not what was asked
             # for. METERED only: its task is to infer the effect of light from
             # its own history, and a trimmed action makes that history false.
@@ -1127,19 +1077,7 @@ def main():
             if metered_info:
                 record["metered"] = metered_info
 
-            if cycles_mode:
-                # Its estimate, not ours: a wrong belief makes a wrong-length
-                # stimulus, which is the point.
-                stated = believed_period(reply)
-                record["believed_period_s"] = stated
-                record["cycle_error"] = cycle_error(
-                    (time.time() - last_turn_at) if last_turn_at else None,
-                    believed_s, period_s)
-                believed_s = stated
-                last_turn_at = time.time()
-                conversion_period = stated
-            else:
-                conversion_period = period_s
+            conversion_period = period_s
 
             # Last turn's prediction, now that the period it was about has
             # been measured. Scored here rather than in analysis so the run is

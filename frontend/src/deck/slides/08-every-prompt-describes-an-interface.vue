@@ -13,10 +13,6 @@
     <span class="label">{{ p.name }}</span>
     <svg class="ico" aria-hidden="true"><use :href="'#ico-' + p.icon" /></svg>
   </button>
-  <div class="tbd">
-    <span class="label">MORE TBD&hellip;</span>
-    <svg class="ico" aria-hidden="true"><use href="#ico-tbd" /></svg>
-  </div>
 </div>
 
 <div class="exchange">
@@ -31,7 +27,7 @@
   </div>
 </div>
 
-<p class="note">The seven prompt variants differ only in what the model is told it is
+<p class="note">The six prompt variants differ only in what the model is told it is
 coupled to.</p>
 </div>
 <svg class="sprite" aria-hidden="true" focusable="false">
@@ -44,11 +40,6 @@ coupled to.</p>
   <symbol id="ico-informed" viewBox="0 0 24 24">
     <path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12z"/>
     <circle cx="12" cy="12" r="2.4"/>
-  </symbol>
-  <!-- a period it has to estimate -->
-  <symbol id="ico-cycles" viewBox="0 0 24 24">
-    <path d="M2 13c2.2-6 4.4-6 6.6 0s4.4 6 6.6 0 4.4-6 6.6 0"/>
-    <path d="M5.3 18.5h13.4M5.3 16.8v3.4M18.7 16.8v3.4"/>
   </symbol>
   <!-- its activity eats the model's memory -->
   <symbol id="ico-adversarial" viewBox="0 0 24 24">
@@ -67,11 +58,6 @@ coupled to.</p>
     <circle cx="13.5" cy="12" r="2.1" fill="currentColor" stroke="none" opacity=".6"/>
     <circle cx="8.2" cy="12" r="1.7" fill="currentColor" stroke="none" opacity=".35"/>
     <circle cx="3.6" cy="12" r="1.3" fill="currentColor" stroke="none" opacity=".16"/>
-  </symbol>
-  <!-- variants not written yet -->
-  <symbol id="ico-tbd" viewBox="0 0 24 24">
-    <path d="M8.8 9.2a3.2 3.2 0 1 1 3.9 3.1c-1 .2-1.7 1-1.7 2v.6"/>
-    <circle cx="12" cy="18.6" r="1.1" fill="currentColor" stroke="none"/>
   </symbol>
   <!-- nothing crosses -->
   <symbol id="ico-null" viewBox="0 0 24 24">
@@ -105,12 +91,6 @@ export default {
           icon: 'informed',
           receives: 'The same state, named as bioelectrical, with the organism identified and its rhythm described as roughly a millivolt against a background of comparable size.',
           acts: 'Light one of nine regions. The model is told blue is aversive and that the organism tends to move away from it.'
-        },
-        {
-          name: 'CYCLES',
-          icon: 'cycles',
-          receives: 'The same state, with no period given. After each gap it is told how many cycles actually passed, against how many it expected from the period it last reported.',
-          acts: 'Light one region for a duration in cycles of the period as the model believes it to be. A wrong estimate means the wrong stimulus length, and it is not told so.'
         },
         {
           name: 'ADVERSARIAL',

@@ -209,7 +209,6 @@ the same session through two of them isolates one variable.
 | INFORMED | Physarum, named, with the zone map | nothing |
 | ADVERSARIAL | Physarum, and its context is the organism's to spend | `num_ctx` pinned, history untruncated, state compacted when quiet |
 | METERED | Physarum, and its period sets the budget | budget and history depth driven by the measured period, dose cap, prediction scored |
-| CYCLES | an unnamed system with a rhythm it must estimate | durations converted through the model's own estimate; cycles-elapsed fed back |
 | MIMIC | nothing. It is given a plasmodium's constraints | no history, decaying trail, deltas not values, no note |
 | NULL | nothing, and it is given no task | control. Used for the model noise floor and sham blocks |
 
@@ -486,52 +485,6 @@ reached it.
 The cost is that MIMIC produces no notes, so `/logs` shows behaviour with no
 narration while it runs. That is the honest consequence of the design, and it
 is worth knowing before starting a long session on it.
-
-### CYCLES
-
-The model is not told the period and has to estimate it. The estimate is not a
-remark: durations are given in cycles and converted through whatever the model
-currently believes, and the next turn reports how many cycles actually passed
-against how many it expected. A wrong belief produces a wrong stimulus length,
-and the only correction is that count.
-
-```
-You are coupled to a system you cannot observe directly.
-
-You receive a description of its electrical state, measured at three points
-against a common reference, summarising the preceding thirty minutes. These do
-not arrive on a schedule.
-
-The system has a rhythm. You are not told what it is. Estimating it is your
-task, and everything else you do is expressed in terms of your estimate.
-
-You have one action. You can illuminate one region of the system, at an
-fixed brightness, for a duration you choose. Regions are numbered 0 to 8.
-
-Duration is given in cycles. A cycle is one period of the rhythm as YOU
-currently believe it to be. If your estimate is wrong, your stimulus is the
-wrong length, and you will not be told that it was.
-
-You also choose when you are next shown the state, in seconds.
-
-Each turn you are told how many cycles actually passed while you were away, set
-against how many you expected given the period you last reported. That
-difference is the only thing the system tells you about your estimate.
-
-You will not be told whether your action had any effect.
-
-Reply with JSON only:
-{"believed_period_s": float,
- "light": {"zone": int, "duration_cycles": float},
- "next_turn_s": int,
- "note": "what you observe, what you currently believe, and how confident
-          you are"}
-```
-
-CYCLES is BLIND with the clock taken away. BLIND states ten minutes and thirty
-minutes as fixed figures; CYCLES states no interval at all, and the model sets
-its own by choosing `next_turn_s`. The experiment `cycles-entrainment` runs on
-this prompt.
 
 ### NULL
 
