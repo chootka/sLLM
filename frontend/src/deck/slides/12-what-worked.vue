@@ -1,4 +1,8 @@
 <template>
+<!-- Three columns, revealed one at a time. The row is always three tracks
+     wide; what changes is how far it is pushed right so the revealed columns
+     land centred. -->
+<div class="reveal-row" :data-step="deck.step">
 <div class="content">
 <h2>What worked</h2>
 <p class="lead">Successfully captured a distinct bio-signal.</p>
@@ -31,14 +35,17 @@ sporangia</li>
 <li>Write all the findings up in a paper, to be published in 2028</li>
 </ul>
 </div>
+</div>
 </template>
 
 <script>
 export default {
   name: '12_what_worked',
+  inject: ['deck'],
   meta: {
-    classes: 'split thirds',
+    classes: 'reveal',
     section: 'What worked',
+    steps: 2,
     reg: 0.24, fx: 32, fy: 60
   }
 }

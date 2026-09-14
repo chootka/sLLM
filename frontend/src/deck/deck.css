@@ -78,9 +78,21 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 
 .split{grid-template-columns:1fr 1fr}
 .split.content-wide{grid-template-columns:1.6fr 1fr}
-/* Three columns of unequal length: line the headings up rather than
-   centring each column against the others. */
-.split.thirds{grid-template-columns:1fr 1fr 1fr;align-items:start}
+/* Three columns revealed one at a time. The row always holds three tracks;
+   the shift puts the revealed ones over the middle of the slide. One column
+   is c = (100% - 2g)/3 wide, so centring the first needs c + g and centring
+   the first two needs half of that. */
+.reveal-row{--g:clamp(1.4rem,3.4vw,3.4rem);
+  display:grid;grid-template-columns:repeat(3,1fr);gap:var(--g);
+  align-items:start;
+  transition:transform .55s cubic-bezier(.4,0,.2,1)}
+.reveal-row[data-step="0"]{transform:translateX(calc(33.3333% + var(--g) / 3))}
+.reveal-row[data-step="1"]{transform:translateX(calc(16.6667% + var(--g) / 6))}
+.reveal-row[data-step="2"]{transform:none}
+.reveal-row .content{transition:opacity .45s cubic-bezier(.4,0,.2,1)}
+/* Not yet revealed. They keep their track so nothing reflows on the way in. */
+.reveal-row[data-step="0"] .content:nth-child(n+2),
+.reveal-row[data-step="1"] .content:nth-child(n+3){opacity:0}
 
 /* One slide breaks the two columns: the media is lifted out of the grid, made
    larger, and slid left so the text column sits over its edge. */
