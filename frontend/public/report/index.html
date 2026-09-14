@@ -254,14 +254,15 @@ figure.vid{margin:2.2rem 0 0}
     <p>There is a reason for this pair. Neither system has a part inside it that is in
     charge. Physarum is one cell with no nervous system: different parts of it contract
     slightly out of step with each other, and the direction it moves is a consequence of
-    that timing. A language model has no single place where meaning is stored. It is a
-    large set of numbers, and every word it produces comes from all of them at once.</p>
+    that timing. A language model has no single place where meaning is stored. Different
+    parts of it pull toward different next words, and the word that comes out is a
+    consequence of how those pulls settle against each other.</p>
     <p>Whether the model and the organism can entrain one another is what the whole
     project is working toward.</p>
     <h3>The six prompt variants</h3>
     <p>They differ only in what the model is told it is coupled to. The loop, the action
     and the state format are the same in all six.</p>
-    <div class="prompts"><div><span class="pn">BLIND</span><p>The default. The model is given the interface and nothing else, and is never told what it is coupled to.</p></div><div><span class="pn">INFORMED</span><p>The same interface, plus the name of the organism. The difference from BLIND is what the model's priors about Physarum contribute.</p></div><div><span class="pn">ADVERSARIAL</span><p>The organism's activity consumes the model's context. Quiet turns cost less, and blue light quiets the organism.</p></div><div><span class="pn">METERED</span><p>The organism's period sets the model's memory budget. Shorter period, more context. What light does to the period is not stated.</p></div><div><span class="pn">MIMIC</span><p>Physarum's architecture rather than its vocabulary. No history, a decaying trail on the surface instead, changes rather than values, no note.</p></div><div><span class="pn">NULL</span><p>BLIND with the task removed. If the notes still claim influence, the claim is coming from the format and not from the data.</p></div></div>
+    <div class="prompts"><div><span class="pn">NULL</span><p>BLIND with the task removed. No light. If the notes still claim influence, the claim comes from the prompt format, not the data.</p></div><div><span class="pn">BLIND</span><p>The model gets the readings and nothing else. It is not told what they come from, so whatever it concludes it took from the signal.</p></div><div><span class="pn">INFORMED</span><p>The same readings with the organism named, plus the zone map and that blue is aversive. The difference from BLIND is what the model already knew about Physarum.</p></div><div><span class="pn">ADVERSARIAL</span><p>Every state and reply stays in the model's memory until it fills and the run ends. An active organism costs about five times a quiet one per turn, and light quiets it. The model is not told that.</p></div><div><span class="pn">METERED</span><p>The organism's period sets the model's memory and how far back it can see. What light does to the period is withheld, and each turn the model must predict which way it will move.</p></div><div><span class="pn">MIMIC</span><p>No history. A fading trail on the surface in its place, changes rather than values, and no note.</p></div></div>
   </div>
 </section>
 

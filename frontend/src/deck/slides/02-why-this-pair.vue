@@ -6,8 +6,9 @@
 <li><b>Physarum</b> is one cell with no nervous system. Different parts of it contract
 slightly out of step with each other, and the direction it moves is a consequence of that
 timing.</li>
-<li><b>A language model</b> has no single place where meaning is stored. It is a large set
-of numbers, and every word it produces comes from all of them at once.</li>
+<li><b>A language model</b> has no single place where meaning is stored. Different parts of
+it pull toward different next words, and the word that comes out is a consequence of how
+those pulls settle against each other.</li>
 </ul>
 <p>The project is trying to find out whether the two can entrain each other,
 meaning settle into a shared rhythm, without either one representing the other. The moon does this

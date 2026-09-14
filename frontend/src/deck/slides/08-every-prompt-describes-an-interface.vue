@@ -81,40 +81,40 @@ export default {
       current: 0,
       prompts: [
         {
+          name: 'NULL',
+          icon: 'null',
+          receives: 'The same readings as BLIND, with no task. It is asked to describe what it sees and not to guess at causes.',
+          acts: 'Nothing. No light. Any claim of influence in its notes comes from the prompt format, not the dish.'
+        },
+        {
           name: 'BLIND',
           icon: 'blind',
-          receives: 'Electrical state at three points against a common reference, over the last thirty minutes. It arrives when the state has changed by more than the measurement can be sure of, or when the delay the model asked for has passed.',
-          acts: 'Light one of nine regions, fixed brightness, for a duration the model chooses. It is never told whether the action had any effect.'
+          receives: 'Three electrode readings over the last thirty minutes. It is not told what they come from.',
+          acts: 'Light one of nine zones, for a duration it picks. It is not told whether the light did anything.'
         },
         {
           name: 'INFORMED',
           icon: 'informed',
-          receives: 'The same state, named as bioelectrical, with the organism identified and its rhythm described as roughly a millivolt against a background of comparable size.',
-          acts: 'Light one of nine regions. The model is told blue is aversive and that the organism tends to move away from it.'
+          receives: 'The same readings, with the organism named: Physarum, about a millivolt, blue light aversive, plus the zone map. The period is withheld.',
+          acts: 'Light one of nine zones. Any difference from BLIND comes from what it already knew about slime moulds.'
         },
         {
           name: 'ADVERSARIAL',
           icon: 'adversarial',
-          receives: 'The state, plus how much working memory remains. Quiet turns are described in fewer words and cost less of it.',
-          acts: 'Light one region. Blue quiets the organism, a quiet organism costs less memory, and the model is never told that this is a lever.'
+          receives: 'The readings, plus how much memory is left and how many turns that buys. Nothing is trimmed. When the memory fills, the run ends.',
+          acts: 'Light one zone. An active organism costs about five times a quiet one per turn, and light quiets it. It is not told that.'s own session. It is never told that.'
         },
         {
           name: 'METERED',
           icon: 'metered',
-          receives: 'The state, and a budget: the current period sets how much memory and how many past turns the model gets. Shorter period, more of both.',
-          acts: 'Light the whole dish, 0 to 120 seconds, capped per hour. It is told what was actually delivered, which is not always what it asked for.'
+          receives: 'The readings, plus a budget: the organism's period sets its memory and how far back it can see. Shorter period, more of both.',
+          acts: 'Light the whole dish, 0 to 120 seconds, capped per hour. It is told what was delivered, not what it asked for, and must predict which way the period will move.'
         },
         {
           name: 'MIMIC',
           icon: 'mimic',
-          receives: 'No conversation history. The trail, a record on the surface of where it has already been, which fades. And what changed beneath the surface, not what the values are.',
-          acts: 'Extend into one region per turn. Extending marks it. There is no goal and nothing tells it whether it was right.'
-        },
-        {
-          name: 'NULL',
-          icon: 'null',
-          receives: 'The same state, with no task attached. It is asked to describe what it sees and not to speculate about causes.',
-          acts: 'Nothing. There is no action, so any claim of influence in its notes comes from the format rather than the data.'
+          receives: 'No history. Nine cells marking where it has been, fading 15% a turn, and what changed in the readings rather than the values.',
+          acts: 'Light one zone per turn. Acting lays the mark. No goal and no feedback.'
         }
       ]
     }

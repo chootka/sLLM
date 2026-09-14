@@ -53,9 +53,9 @@ science. I do, however, borrow scientific practice where it is needed for design
 Neither system has a part inside it that is in charge. Physarum is one cell with
 no nervous system. Different parts of it contract slightly out of step with each
 other, and the direction it moves is a consequence of that timing. A language
-model has no single place where meaning is stored. It is a large set of numbers,
-and every word it produces comes from all of them at once. That is why I put
-these two together.
+model has no single place where meaning is stored. Different parts of it pull
+toward different next words, and the word that comes out is a consequence of how
+those pulls settle against each other. That is why I put these two together.
 
 Where they differ is what the relations hold between. The organism's exist in the
 physical world and are between places: a network of tubes, food, the lag from one electrode to the next. The model's are held within the digital space of memory, a collection
