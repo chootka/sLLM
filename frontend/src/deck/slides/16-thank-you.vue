@@ -22,7 +22,7 @@
 
 <script>
 export default {
-  name: '17_thank_you',
+  name: '16_thank_you',
   meta: {
     classes: 'overlay',
     section: '',

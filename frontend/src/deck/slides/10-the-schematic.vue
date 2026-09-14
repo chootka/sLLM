@@ -14,7 +14,7 @@
 
 <script>
 export default {
-  name: '09_the_schematic',
+  name: '10_the_schematic',
   meta: {
     classes: 'gallery centered',
     section: 'What was built',

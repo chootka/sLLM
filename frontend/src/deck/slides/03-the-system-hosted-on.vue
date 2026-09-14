@@ -45,7 +45,7 @@
 
 <script>
 export default {
-  name: '06_the_system_hosted_on',
+  name: '03_the_system_hosted_on',
   meta: {
     classes: 'gallery centered',
     section: 'What was built',

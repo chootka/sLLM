@@ -18,7 +18,7 @@
 
 <script>
 export default {
-  name: '05_making_the_electrodes',
+  name: '04_making_the_electrodes',
   meta: {
     classes: 'gallery centered',
     section: 'What was built',

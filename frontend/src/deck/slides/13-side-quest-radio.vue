@@ -14,7 +14,7 @@ PVC pipe</li>
 
 <script>
 export default {
-  name: '14_side_quest_radio',
+  name: '13_side_quest_radio',
   meta: {
     classes: 'split',
     section: 'Side quest',

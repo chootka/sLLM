@@ -16,19 +16,29 @@ the control data was read</li>
 <h2>What didn&rsquo;t</h2>
 <p class="lead">Some obstacles to think through.</p>
 <ul>
-<li>TBD</li>
-<li>TBD</li>
-<li>TBD</li>
-<li>TBD</li>
+<li>Kept triggering slime mould sporangia, which cuts feedback loops short</li>
+<li>This is due to using light as a lever</li>
+<li>Need to explore other levers</li>
+</ul>
+</div>
+<div class="content">
+<h2>What&rsquo;s next</h2>
+<p class="lead">Where the work goes from here.</p>
+<ul>
+<li>Build a way for the model to reward the slime mould</li>
+<li>Create a PCB in order to run parallel experiments</li>
+<li>Refine the measurements, prompts, audio/visual output</li>
+<li>VST and Eurorack module development</li>
+<li>Write all the findings up in a paper, to be published in 2028</li>
 </ul>
 </div>
 </template>
 
 <script>
 export default {
-  name: '11_what_worked',
+  name: '12_what_worked',
   meta: {
-    classes: 'split',
+    classes: 'split thirds',
     section: 'What worked',
     reg: 0.24, fx: 32, fy: 60
   }
