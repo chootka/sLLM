@@ -78,7 +78,9 @@ body{background:var(--ground);color:var(--ink);margin:0;overflow:hidden;
 
 .split{grid-template-columns:1fr 1fr}
 .split.content-wide{grid-template-columns:1.6fr 1fr}
-.split.thirds{grid-template-columns:1fr 1fr 1fr}
+/* Three columns of unequal length: line the headings up rather than
+   centring each column against the others. */
+.split.thirds{grid-template-columns:1fr 1fr 1fr;align-items:start}
 
 /* One slide breaks the two columns: the media is lifted out of the grid, made
    larger, and slid left so the text column sits over its edge. */
