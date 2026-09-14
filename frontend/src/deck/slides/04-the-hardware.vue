@@ -18,7 +18,7 @@
 
 <script>
 export default {
-  name: '07_the_hardware',
+  name: '04_the_hardware',
   meta: {
     classes: 'gallery centered',
     section: 'What was built',

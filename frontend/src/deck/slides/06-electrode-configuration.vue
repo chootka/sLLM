@@ -12,7 +12,7 @@ recording begins.</p>
 
 <script>
 export default {
-  name: '05_electrode_configuration',
+  name: '06_electrode_configuration',
   meta: {
     classes: 'split',
     section: 'What was built',
