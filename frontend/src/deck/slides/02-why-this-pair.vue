@@ -1,6 +1,6 @@
 <template>
 <div class="content">
-<h2>Why this pair</h2>
+<h2>Why these two?</h2>
 <p class="lead">Neither system has a part inside it that is in charge.</p>
 <ul>
 <li><b>Physarum</b> is one cell with no nervous system. Different parts of it contract
