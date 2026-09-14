@@ -45,7 +45,7 @@ the sound and light. When it is off, nothing is passed through.
 
 The reason for the switch is that the rhythm on its own cannot be trusted. If
 you take *any* recording -- including pure noise -- and keep only the part
-wiggling between 90 and 200 seconds, what comes out looks like a clean
+wiggling between 70 and 150 seconds, what comes out looks like a clean
 oscillation. It always does. That is a property of the filter, not of the
 recording. The blank run demonstrates this directly: its filtered phase
 advances at 2.05 minutes, looking exactly like a signal, while the switch
@@ -86,7 +86,7 @@ Per-sample noise, same windows:
 | ch1 | 0.283 mV | 0.037 mV |
 | ch2 | 0.189 mV | 0.060 mV |
 
-Consequence: **absolute amplitude in the 90-200 s band goes DOWN when the
+Consequence: **absolute amplitude in the 70-150 s band goes DOWN when the
 organism connects** (ch1: 1.20 -> 0.87 mV). Band amplitude measures noise here,
 not signal. Any separator built on absolute amplitude fails. This was tested
 and discarded.
@@ -141,7 +141,7 @@ windows from the step 7 blank, pooled across all three channels.
 - PSD computed over 45-1800 s
 - local background = median log10 PSD over +-0.6 octave in period
 - excess = log10 PSD - background, in dex
-- take the largest excess falling in the 90-200 s band
+- take the largest excess falling in the 70-150 s band
 
 This is the run 6 estimator unchanged, computed on a sliding window instead of
 a fixed one.
@@ -175,7 +175,7 @@ stretch.
 
 ### Step 5 -- phase and envelope
 
-Band-limited analytic signal: FFT, zero everything outside 90-200 s and all
+Band-limited analytic signal: FFT, zero everything outside 70-150 s and all
 negative frequencies, double the survivors, inverse FFT. Angle = phase,
 magnitude = envelope.
 
@@ -211,6 +211,29 @@ binary decision. `phase_rad` and `amp_mv` are only meaningful while `gate` = 1.
 the 3600 s window fill: the statistic cannot respond until the window contains
 post-bridge data.
 
+### Band change 2026-09-12: 90-200 -> 70-150 s
+
+Current dish: tube reported bridging ref to ch0, gate 0.0% at (90,200).
+Reported peak period pinned at 90.0 s, the band's lower edge. Periodogram of
+the raw ch0 trace puts the line at 84-88 s, below the band.
+
+Bands re-run through the full gate on the step 7 blank, run 6, and the live
+record (09-11 + 09-12, 41.6 h):
+
+| band | blank ch0/ch1/ch2 | run 6 ch1 | live ch0 | live ch1/ch2 |
+|---|---|---|---|---|
+| (90,200) | 0.0 / 0.0 / 0.0 % | 38.6 h | 0.0% | 0.0 / 0.0 % |
+| (60,200) | 6.0 / 0.0 / 0.0 % | 38.6 h | 6.0% | 0.0 / 2.6 % |
+| (45,200) | 6.0 / 0.0 / 0.0 % | 38.6 h | 9.1% | 2.7 / 4.5 % |
+| (70,150) | 0.0 / 0.0 / 0.0 % | 38.6 h | 2.9%, one 1.2 h run | 0.0 / 0.0 % |
+
+(60,200) and (45,200) put a 1.6 h false positive on blank ch0. (70,150) holds
+the blank at 0.0% on all three, leaves run 6 ch1 at 38.6 h, and gates only ch0
+in the live dish. Run 6 ch2 splits 2 runs -> 3 runs, max unchanged at 28.7 h.
+
+Live ch0 gates 2.9% of 41.6 h against run 6 ch1's 59.8%. Not a colonisation
+signature.
+
 ### Consequences
 
 1. **Bridge time is recoverable from the electrodes, but lagged by about one
@@ -226,7 +249,7 @@ post-bridge data.
 ## Limits -- state these in any writeup
 
 1. **The gate detects electrode connection, not biology.** It fires when a
-   conductive path exists between electrode and reference and a 90-200 s line
+   conductive path exists between electrode and reference and a 70-150 s line
    stands above background. Organism-driven ion transport and interface
    electrochemistry at a colonised electrode both produce this. The chain does
    not separate them; nothing recorded to date does. A stimulus-response test

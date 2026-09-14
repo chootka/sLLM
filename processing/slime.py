@@ -4,9 +4,11 @@ Shared by scripts/slime_signal.py (offline CLI) and api/app.py (dashboard), so
 both run identical code. Method and rationale: documentation/signal_processing.md
 
 The organism connecting an electrode drops that channel's noise by 1-2 orders
-of magnitude. That drop, plus a 90-200 s line standing above the local spectral
+of magnitude. That drop, plus a 70-150 s line standing above the local spectral
 background, is the gate. Validated 2026-08-27 at 0% false positives over 11.5 h
-x 3 channels of blank.
+x 3 channels of blank; band widened 90-200 -> 70-150 on 2026-09-12 and
+re-validated on the same blank (0.0% all three) and on run 6 (ch1 38.6 h,
+unchanged).
 """
 
 import numpy as np
@@ -17,7 +19,7 @@ WIN, STEP = 3600, 60
 HOLD = 1800         # s of continuous failure before the gate shuts again
 MIN_RUN = 3600      # s; shorter gated runs are discarded as spurious
 TAU = 600           # high-pass cutoff, seconds
-BAND = (90, 200)    # seconds
+BAND = (70, 150)    # seconds
 
 # Lead-in a caller must supply before the window it actually wants.
 #
@@ -81,7 +83,7 @@ def _bg_index(win):
 
 
 def dex_one(x, ok, per, idx, band, w, sw2):
-    """Largest 90-200 s peak above local background, in dex, for one window."""
+    """Largest 70-150 s peak above local background, in dex, for one window."""
     d, q = _dex_many(x[None, :], ok, per, idx, band, w, sw2)
     return float(d[0]), float(q[0])
 
