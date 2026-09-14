@@ -20,8 +20,8 @@ only</li>
 <ul>
 <li>Couldn&rsquo;t use light as a lever as frequently as needed because it triggered
 sporangia</li>
-<li>Limited electrode configurations</li>
-<li>Need more time to run entrainment loops</li>
+<li>Slime starved itself, rejecting the oats</li>
+<li>Despite maintaining humidity, agar blobs drying up too soon</li>
 </ul>
 </div>
 <div class="content">
